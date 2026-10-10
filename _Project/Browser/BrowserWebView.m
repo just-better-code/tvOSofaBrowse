@@ -618,7 +618,7 @@ static void BrowserWriteWebsiteDiagnostic(NSDictionary *entry) {
     if (![body isKindOfClass:NSDictionary.class]) return;
     NSMutableDictionary *entry = [NSMutableDictionary dictionary];
     for (NSString *key in @[@"event", @"origin", @"episode", @"season", @"seconds",
-                            @"storageCount", @"storageError", @"key", @"length"]) {
+                            @"storageCount", @"storageError", @"length"]) {
         id value = body[key];
         if ([value isKindOfClass:NSString.class]) entry[key] = [value substringToIndex:MIN([value length], 160)];
         else if ([value isKindOfClass:NSNumber.class]) entry[key] = value;
@@ -627,24 +627,39 @@ static void BrowserWriteWebsiteDiagnostic(NSDictionary *entry) {
 }
 @end
 
-static NSString *BrowserWebsiteDiagnosticsScript(void) {
-    return @"(function(){"
-        "function send(e){try{e.origin=location.origin;window.webkit.messageHandlers.browserWebsiteDiagnostics.postMessage(e)}catch(x){}}"
-        "try{send({event:'document',storageCount:localStorage.length})}catch(e){send({event:'document',storageError:String(e)})}"
-        "try{var get=Storage.prototype.getItem,set=Storage.prototype.setItem;"
-        "Storage.prototype.getItem=function(k){try{var v=get.call(this,k);send({event:'storage-get',key:String(k),length:v===null?0:v.length});return v}catch(e){send({event:'storage-get',key:String(k),storageError:String(e)});throw e}};"
-        "Storage.prototype.setItem=function(k,v){try{var r=set.call(this,k,v);send({event:'storage-set',key:String(k),length:String(v).length});return r}catch(e){send({event:'storage-set',key:String(k),storageError:String(e)});throw e}}"
-        "}catch(e){send({event:'storage-hook',storageError:String(e)})}"
-        "var last='';function state(){try{var text=document.body?document.body.innerText:'';"
+static NSString *BrowserWebsiteDiagnosticsScript(NSString *token, BOOL enabled) {
+    NSString *source = @"/* BrowserWebsiteDiagnostics */"
+        "(function(){"
+        "var token=TOKEN, enabled=false, timer=null, last='', originalGet=null, originalSet=null, hookedGet=null, hookedSet=null;"
+        "function send(e){if(!enabled)return;try{e.origin=location.origin;window.webkit.messageHandlers.browserWebsiteDiagnostics.postMessage(e)}catch(x){}}"
+        "function state(){if(!enabled)return;try{var text=document.body?document.body.innerText:'';"
         "var episode=text.match(/Серія\\s*\\d+/),season=text.match(/Сезон\\s*\\d+/),video=document.querySelector('video');"
         "if(!episode&&!video)return;var e={event:'player',episode:episode?episode[0]:'',season:season?season[0]:''};"
         "if(video)e.seconds=Math.floor(video.currentTime/15)*15;var key=JSON.stringify(e);if(key!==last){last=key;send(e)}}catch(x){}}"
-        "setInterval(state,2000);"
-        "addEventListener('message',function(e){try{var d=e.data&&e.data.payload&&e.data.payload.data;"
-        "if(!d||typeof d!=='object')return;var v={event:'player-info'};"
-        "if(typeof d.e==='string')v.episode=d.e;if(typeof d.s==='string')v.season=d.s;if(typeof d.t==='number')v.seconds=d.t;"
-        "if(v.episode||v.season||typeof v.seconds==='number')send(v)}catch(x){}});"
+        "function playerMessage(e){try{var d=e.data&&e.data.payload&&e.data.payload.data;if(!d||typeof d!=='object')return;"
+        "var v={event:'player-info'};if(typeof d.e==='string')v.episode=d.e;if(typeof d.s==='string')v.season=d.s;"
+        "if(typeof d.t==='number')v.seconds=d.t;if(v.episode||v.season||typeof v.seconds==='number')send(v)}catch(x){}}"
+        "function setEnabled(value){value=!!value;if(enabled===value)return;enabled=value;"
+        "if(enabled){last='';try{send({event:'document',storageCount:localStorage.length})}catch(e){send({event:'document',storageError:String(e.name||'Error')})}"
+        "try{var get=Storage.prototype.getItem,set=Storage.prototype.setItem;originalGet=get;originalSet=set;"
+        "hookedGet=function(k){try{var v=get.call(this,k);send({event:'storage-get',length:v===null?0:v.length});return v}catch(e){send({event:'storage-get',storageError:String(e.name||'Error')});throw e}};"
+        "hookedSet=function(k,v){try{var r=set.call(this,k,v);send({event:'storage-set',length:String(v).length});return r}catch(e){send({event:'storage-set',storageError:String(e.name||'Error')});throw e}};"
+        "Storage.prototype.getItem=hookedGet;Storage.prototype.setItem=hookedSet;"
+        "}catch(e){send({event:'storage-hook',storageError:String(e.name||'Error')})}"
+        "timer=setInterval(state,2000);addEventListener('message',playerMessage);"
+        "}else{if(timer!==null)clearInterval(timer);timer=null;removeEventListener('message',playerMessage);"
+        "try{if(Storage.prototype.getItem===hookedGet)Storage.prototype.getItem=originalGet;if(Storage.prototype.setItem===hookedSet)Storage.prototype.setItem=originalSet}catch(x){}}"
+        "}"
+        "function broadcast(value){setEnabled(value);for(var i=0;i<frames.length;i++){try{frames[i].postMessage({browserDiagnostics:token,enabled:enabled},'*')}catch(x){}}}"
+        "addEventListener('message',function(e){var d=e.data;if(!d||d.browserDiagnostics!==token)return;"
+        "if(d.request&&window===window.top){try{e.source.postMessage({browserDiagnostics:token,enabled:enabled},'*')}catch(x){};return}"
+        "if(window!==window.top&&(e.source===window.top||e.source===window.parent)&&typeof d.enabled==='boolean')broadcast(d.enabled);"
+        "});"
+        "if(window===window.top){window[token]=broadcast;broadcast(INITIAL)}"
+        "else{try{window.top.postMessage({browserDiagnostics:token,request:true},'*')}catch(x){}}"
         "})();";
+    source = [source stringByReplacingOccurrencesOfString:@"TOKEN" withString:[NSString stringWithFormat:@"\"%@\"", token]];
+    return [source stringByReplacingOccurrencesOfString:@"INITIAL" withString:enabled ? @"true" : @"false"];
 }
 
 // tvOS denies WebKit's default Library/WebKit directory. Use one shared
@@ -686,7 +701,7 @@ static id BrowserPersistentWebsiteDataStore(void) {
     return store;
 }
 
-static void BrowserInstallUserScripts(id configuration) {
+static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToken) {
     if (configuration == nil) {
         return;
     }
@@ -724,7 +739,7 @@ static void BrowserInstallUserScripts(id configuration) {
         dispatch_once(&handlerToken, ^{ handler = [BrowserWebsiteDiagnosticsHandler new]; });
         ((void (*)(id, SEL, id, id))objc_msgSend)(userContentController, addHandler, handler, @"browserWebsiteDiagnostics");
         id diagnosticScript = ((id (*)(id, SEL))objc_msgSend)((id)userScriptClass, @selector(alloc));
-        diagnosticScript = ((id (*)(id, SEL, id, NSInteger, BOOL))objc_msgSend)(diagnosticScript, userScriptInitializer, BrowserWebsiteDiagnosticsScript(), 0, NO);
+        diagnosticScript = ((id (*)(id, SEL, id, NSInteger, BOOL))objc_msgSend)(diagnosticScript, userScriptInitializer, BrowserWebsiteDiagnosticsScript(diagnosticToken, BrowserPreferencesStore.websiteLoggingEnabled), 0, NO);
         if (diagnosticScript) ((void (*)(id, SEL, id))objc_msgSend)(userContentController, addUserScriptSelector, diagnosticScript);
     }
 
@@ -1194,6 +1209,7 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 @property (nonatomic, copy) NSString *userAgent;
 @property (nonatomic) BOOL loading;
 @property (nonatomic, strong) id userContentController;
+@property (nonatomic, copy) NSString *diagnosticToken;
 @property (nonatomic, strong) NSArray *appliedAdBlockRuleLists;
 @property (nonatomic, readwrite) BOOL adBlockEnabled;
 @property (nonatomic, readwrite, copy) NSString *adBlockStatus;
@@ -1298,7 +1314,8 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     if (dataStore && [configuration respondsToSelector:dataStoreSetter])
         ((void (*)(id, SEL, id))objc_msgSend)(configuration, dataStoreSetter, dataStore);
     BrowserConfigurePrivateMediaPreferences(configuration);
-    BrowserInstallUserScripts(configuration);
+    self.diagnosticToken = [@"browserDiagnostics_" stringByAppendingString:NSUUID.UUID.UUIDString];
+    BrowserInstallUserScripts(configuration, self.diagnosticToken);
     SEL userContentControllerSelector = NSSelectorFromString(@"userContentController");
     if ([configuration respondsToSelector:userContentControllerSelector]) {
         self.userContentController = ((id (*)(id, SEL))objc_msgSend)(configuration, userContentControllerSelector);
@@ -1333,7 +1350,49 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     [self setUserAgent:userAgent];
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(adBlockRulesDidUpdate:)
                                                  name:kBrowserAdBlockUpdateNotification object:nil];
+    [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(websiteDiagnosticsDidChange:)
+                                                 name:BrowserDebugEnabledDidChangeNotification object:nil];
     [self setAdBlockEnabled:[[NSUserDefaults standardUserDefaults] boolForKey:kBrowserAdBlockEnabledDefaultsKey]];
+}
+
+
+- (void)websiteDiagnosticsDidChange:(NSNotification *)notification {
+    (void)notification;
+    if (!NSThread.isMainThread) {
+        __weak typeof(self) weakSelf = self;
+        dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf websiteDiagnosticsDidChange:nil]; });
+        return;
+    }
+    BOOL enabled = BrowserPreferencesStore.websiteLoggingEnabled;
+    // Replace only the diagnostics bootstrap for future documents; retain every other script.
+    SEL scriptsSelector = NSSelectorFromString(@"userScripts");
+    SEL removeSelector = NSSelectorFromString(@"removeAllUserScripts");
+    SEL addSelector = NSSelectorFromString(@"addUserScript:");
+    id controller = self.userContentController;
+    if ([controller respondsToSelector:scriptsSelector] && [controller respondsToSelector:removeSelector] &&
+        [controller respondsToSelector:addSelector]) {
+        NSArray *scripts = [((id (*)(id, SEL))objc_msgSend)(controller, scriptsSelector) copy];
+        NSMutableArray *updated = [NSMutableArray array];
+        for (id script in scripts) {
+            NSString *source = [script valueForKey:@"source"];
+            if ([source hasPrefix:@"/* BrowserWebsiteDiagnostics */"]) {
+                SEL initializer = NSSelectorFromString(@"initWithSource:injectionTime:forMainFrameOnly:");
+                id replacement = ((id (*)(id, SEL))objc_msgSend)((id)[script class], @selector(alloc));
+                replacement = ((id (*)(id, SEL, id, NSInteger, BOOL))objc_msgSend)(replacement, initializer,
+                    BrowserWebsiteDiagnosticsScript(self.diagnosticToken, enabled), 0, NO);
+                if (replacement == nil) return;
+                [updated addObject:replacement];
+            } else {
+                [updated addObject:script];
+            }
+        }
+        ((void (*)(id, SEL))objc_msgSend)(controller, removeSelector);
+        for (id script in updated) ((void (*)(id, SEL, id))objc_msgSend)(controller, addSelector, script);
+    }
+    // Existing cross-origin frames receive the setting through the lightweight bootstrap.
+    NSString *script = [NSString stringWithFormat:@"if(typeof window['%@']==='function')window['%@'](%@);",
+        self.diagnosticToken, self.diagnosticToken, enabled ? @"true" : @"false"];
+    [self evaluateJavaScript:script completion:nil];
 }
 
 - (void)adBlockRulesDidUpdate:(NSNotification *)notification {
@@ -1477,6 +1536,7 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 
 - (void)dealloc {
     [NSNotificationCenter.defaultCenter removeObserver:self name:kBrowserAdBlockUpdateNotification object:nil];
+    [NSNotificationCenter.defaultCenter removeObserver:self name:BrowserDebugEnabledDidChangeNotification object:nil];
     [self.runtimeWebView removeObserver:self forKeyPath:@"URL" context:&kBrowserNavigationURLObservationContext];
     [self.runtimeWebView removeObserver:self forKeyPath:@"loading" context:&kBrowserNavigationURLObservationContext];
 }

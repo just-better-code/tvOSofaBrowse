@@ -1,6 +1,6 @@
 # User Guide — tvOSofaBrowse
 
-Current for **2.18.23**. Button names match the application.
+Current for **2.18.24**. Button names match the application.
 
 ## Quick start
 
@@ -168,7 +168,7 @@ Press Center on **Menu → Tools → Debug** to toggle diagnostics using its gre
 - The change takes effect immediately without reloading.
 - OFF stops new entries from these loggers; it does not delete old entries or silence all application logs.
 
-Website logging helps investigate storage and player behavior. It records localStorage key names and lengths, not localStorage or cookie values. Episode and season diagnostics depend on the information exposed by the player. **Recent Diagnostic Logs** shows the latest ten numeric entries from the shared diagnostic logger; **Background Probe** shows the last recorded background interval.
+Website logging helps investigate storage and player behavior. Turning Debug off stops website polling and storage interception in open pages and frames; turning it back on resumes collection without reloading. It records storage operation lengths and error names, without storage key names, storage values or cookie values. Episode and season diagnostics depend on the information exposed by the player. **Recent Diagnostic Logs** shows the latest ten numeric entries from the shared diagnostic logger; **Background Probe** shows the last recorded background interval.
 
 For local inspection, the application container contains `Library/Caches/BrowserWebsiteDiagnostics.log`. The rotated file has the `.previous` suffix. Debug also provides media diagnostics.
 
