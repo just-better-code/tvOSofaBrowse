@@ -2,6 +2,12 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.21.24 - 2026-10-11
+
+### Fixed
+
+- Clarify third-party choices as Block (Strict), Allow (Soft), Use Filters (Default) and Inherit, showing the effective filter mode when no parent override exists ([Ad Block controls](docs/USER_GUIDE.md)).
+
 ## 2.21.23 - 2026-10-11
 
 ### Added
