@@ -29,6 +29,8 @@ Open the visual quick guide through **Menu → Tools → User Guide**. **Show th
 
 On app-owned pages, arrows move selection and Center activates the focused item. Hold Center for its context actions; Play/Pause performs the page's shortcut. Website controls retain their own behavior. The pointer hides on inactivity; a new touchpad movement brings it back.
 
+Page clicks and text-field reads run asynchronously. A field dialog opens after its current value is available; results from an old page or inactive tab are ignored. Navigating away while a dialog is open prevents its Done/Submit actions from writing into another document.
+
 ### Back/Menu behavior
 
 - On an ordinary page, open the main menu.

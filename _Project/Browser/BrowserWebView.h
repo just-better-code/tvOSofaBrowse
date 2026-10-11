@@ -46,13 +46,12 @@ FOUNDATION_EXPORT NSString * const BrowserAdBlockSourceStatusDidChangeNotificati
 - (void)goBack;
 - (void)goForward;
 - (nullable NSDictionary *)navigationHistorySnapshot;
-- (nullable NSString *)stringByEvaluatingJavaScriptFromString:(NSString * _Nonnull)script;
 - (void)evaluateJavaScript:(NSString * _Nonnull)script
-               completion:(void (^ _Nonnull)(NSString * _Nullable result))completion;
+               completion:(void (^ _Nullable)(NSString * _Nullable result))completion;
 // Completion runs on the main queue; navigation invalidates pending results.
 @property (nonatomic, readonly) NSUInteger documentGeneration;
 - (void)evaluateJavaScript:(NSString *)script
-        completionHandler:(void (^)(NSString * _Nullable result, NSError * _Nullable error))completion;
+        completionHandler:(void (^ _Nullable)(NSString * _Nullable result, NSError * _Nullable error))completion;
 - (NSString * _Nonnull)runtimeMediaPreferenceReport;
 - (void)setUserAgent:(NSString * _Nullable)userAgent;
 - (void)pauseAllMediaPlayback;
@@ -71,10 +70,9 @@ FOUNDATION_EXPORT NSString * const BrowserAdBlockSourceStatusDidChangeNotificati
 - (NSString *)adBlockDiagnosticSummary;
 + (NSString *)adBlockUserFilters;
 
-+ (nullable NSData *)cookieDataRepresentation;
-+ (NSArray<NSHTTPCookie *> * _Nonnull)allCookies;
-+ (void)fetchCookiesWithCompletion:(void (^)(NSArray<NSHTTPCookie *> *cookies))completion;
-+ (void)restoreCookiesFromData:(NSData * _Nullable)cookieData;
++ (void)cookieDataRepresentationWithCompletion:(void (^)(NSData * _Nullable data))completion;
++ (void)fetchCookiesWithResult:(void (^)(NSArray<NSHTTPCookie *> * _Nullable cookies, NSError * _Nullable error))completion;
++ (void)restoreCookiesFromData:(NSData * _Nullable)cookieData completion:(void (^ _Nullable)(void))completion;
 + (void)clearCachedDataWithCompletion:(void (^ _Nullable)(void))completion;
 + (void)clearCachedDataForURL:(nullable NSURL *)URL completion:(void (^ _Nullable)(void))completion;
 + (void)clearCookiesWithCompletion:(void (^ _Nullable)(void))completion;

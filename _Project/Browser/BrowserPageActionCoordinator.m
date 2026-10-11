@@ -14,6 +14,7 @@ static UIColor *BrowserPageActionTextColor(void) {
 
 @interface BrowserPageActionCoordinator ()
 
+@property (nonatomic) NSUInteger selectionGeneration;
 @property (nonatomic, weak) id<BrowserPageActionCoordinatorHost> host;
 @property (nonatomic) BrowserDOMInteractionService *domInteractionService;
 @property (nonatomic) BrowserNavigationService *navigationService;
@@ -34,82 +35,51 @@ static UIColor *BrowserPageActionTextColor(void) {
     return self;
 }
 
-- (BOOL)handleTargetBlankLinkAtDOMPoint:(CGPoint)point webView:(BrowserWebView *)webView {
-    NSDictionary *linkInfo = [self.domInteractionService linkInfoAtDOMPoint:point webView:webView];
-    NSString *href = [linkInfo[@"href"] isKindOfClass:[NSString class]] ? linkInfo[@"href"] : @"";
-    NSString *target = [linkInfo[@"target"] isKindOfClass:[NSString class]] ? linkInfo[@"target"] : @"";
-
-    if (href.length == 0 || ![target isEqualToString:@"_blank"]) {
-        return NO;
-    }
-
-    NSURLRequest *request = [self.navigationService requestForURLString:href];
-    if (request == nil) {
-        return NO;
-    }
-
-    return [self.host browserPageActionCoordinatorCreateNewTabWithRequest:request];
-}
-
 - (void)presentEditableFieldPromptForFieldType:(NSString *)fieldType
                                          point:(CGPoint)point
                                        webView:(BrowserWebView *)webView {
-    NSString *fieldTitle = [self.domInteractionService evaluateEditableElementJavaScriptAtPoint:point
-                                                                                         webView:webView
-                                                                                            body:@"var target = browserEditableTarget();"
-                                                                                                 "if (!target) { return ''; }"
-                                                                                                 "return target.title || target.getAttribute('aria-label') || target.name || target.placeholder || '';"];
-    if ([fieldTitle isEqualToString:@""]) {
-        fieldTitle = fieldType;
-    }
-    NSString *placeholder = [self.domInteractionService evaluateEditableElementJavaScriptAtPoint:point
-                                                                                          webView:webView
-                                                                                             body:@"var target = browserEditableTarget();"
-                                                                                                  "if (!target) { return ''; }"
-                                                                                                  "return target.placeholder || target.getAttribute('aria-label') || '';"];
-    if ([placeholder isEqualToString:@""]) {
-        placeholder = [fieldTitle isEqualToString:fieldType] ? @"Text Input" : [NSString stringWithFormat:@"%@ Input", fieldTitle];
-    }
-    NSString *testedFormResponse = [self.domInteractionService evaluateEditableElementJavaScriptAtPoint:point
-                                                                                                 webView:webView
-                                                                                                    body:@"var target = browserEditableTarget();"
-                                                                                                         "return (target && target.form && target.form.hasAttribute('onsubmit')) ? 'true' : 'false';"];
-    UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"Input Text"
-                                                                             message:[fieldTitle capitalizedString]
-                                                                      preferredStyle:UIAlertControllerStyleAlert];
+    NSUInteger selection = self.selectionGeneration;
+    [self.domInteractionService evaluateEditableElementJavaScriptAtPoint:point webView:webView
+        body:@"var target=browserEditableTarget();if(!target)return '';return JSON.stringify({title:target.title||target.getAttribute('aria-label')||target.name||target.placeholder||'',placeholder:target.placeholder||target.getAttribute('aria-label')||'',value:typeof target.value!=='undefined'?target.value:(target.textContent||''),submit:!!(target.form&&target.form.hasAttribute('onsubmit'))});"
+        completion:^(NSString *result, NSError *error) {
+        if (selection != self.selectionGeneration || error || ![self.host browserPageActionCoordinatorCanSelectInWebView:webView]) return;
+        NSDictionary *metadata = result ? [NSJSONSerialization JSONObjectWithData:[result dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil] : nil;
+        if (![metadata isKindOfClass:NSDictionary.class]) return;
+        NSString *fieldTitle = [metadata[@"title"] length] ? metadata[@"title"] : fieldType;
+        NSString *placeholder = [metadata[@"placeholder"] length] ? metadata[@"placeholder"] : ([fieldTitle isEqualToString:fieldType] ? @"Text Input" : [NSString stringWithFormat:@"%@ Input",fieldTitle]);
+        UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"Input Text"
+                                                                                 message:[fieldTitle capitalizedString]
+                                                                          preferredStyle:UIAlertControllerStyleAlert];
 
-    __weak typeof(self) weakSelf = self;
-    [alertController addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        if ([fieldType isEqualToString:@"url"]) {
-            textField.keyboardType = UIKeyboardTypeURL;
-        } else if ([fieldType isEqualToString:@"email"]) {
-            textField.keyboardType = UIKeyboardTypeEmailAddress;
-        } else if ([fieldType isEqualToString:@"tel"] ||
-                   [fieldType isEqualToString:@"number"] ||
-                   [fieldType isEqualToString:@"date"] ||
-                   [fieldType isEqualToString:@"datetime"] ||
-                   [fieldType isEqualToString:@"datetime-local"]) {
-            textField.keyboardType = UIKeyboardTypeNumbersAndPunctuation;
-        } else {
-            textField.keyboardType = UIKeyboardTypeDefault;
-        }
-        textField.placeholder = [placeholder capitalizedString];
-        if ([fieldType isEqualToString:@"password"]) {
-            textField.secureTextEntry = YES;
-        }
-        textField.text = [weakSelf.domInteractionService evaluateEditableElementJavaScriptAtPoint:point
-                                                                                           webView:webView
-                                                                                              body:@"var target = browserEditableTarget();"
-                                                                                                   "if (!target) { return ''; }"
-                                                                                                   "if (typeof target.value !== 'undefined') { return target.value; }"
-                                                                                                   "return target.textContent || '';"];
-        textField.textColor = BrowserPageActionTextColor();
-        [textField setReturnKeyType:UIReturnKeyDone];
+        NSUInteger generation = webView.documentGeneration;
+        __weak typeof(self) weakSelf = self;
+        [alertController addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+            if ([fieldType isEqualToString:@"url"]) {
+                textField.keyboardType = UIKeyboardTypeURL;
+            } else if ([fieldType isEqualToString:@"email"]) {
+                textField.keyboardType = UIKeyboardTypeEmailAddress;
+            } else if ([fieldType isEqualToString:@"tel"] ||
+                       [fieldType isEqualToString:@"number"] ||
+                       [fieldType isEqualToString:@"date"] ||
+                       [fieldType isEqualToString:@"datetime"] ||
+                       [fieldType isEqualToString:@"datetime-local"]) {
+                textField.keyboardType = UIKeyboardTypeNumbersAndPunctuation;
+            } else {
+                textField.keyboardType = UIKeyboardTypeDefault;
+            }
+            textField.placeholder = [placeholder capitalizedString];
+            if ([fieldType isEqualToString:@"password"]) {
+                textField.secureTextEntry = YES;
+            }
+            textField.text = metadata[@"value"];
+            textField.textColor = BrowserPageActionTextColor();
+            [textField setReturnKeyType:UIReturnKeyDone];
     }];
 
     UIAlertAction *submitAction = [UIAlertAction actionWithTitle:@"Submit"
                                                            style:UIAlertActionStyleDefault
                                                          handler:^(__unused UIAlertAction *action) {
+        if (![weakSelf.host browserPageActionCoordinatorIsActiveWebView:webView] || webView.documentGeneration != generation) return;
         UITextField *inputTextField = alertController.textFields.firstObject;
         NSString *escapedText = [weakSelf.domInteractionService javaScriptEscapedString:inputTextField.text];
         [weakSelf.domInteractionService evaluateEditableElementJavaScriptAtPoint:point
@@ -123,11 +93,12 @@ static UIColor *BrowserPageActionTextColor(void) {
                                                                                       "target.dispatchEvent(new Event('change', { bubbles: true }));"
                                                                                   "}"
                                                                                   "if (target.form) { target.form.submit(); }"
-                                                                                  "return 'true';", escapedText, escapedText]];
+                                                                                  "return 'true';", escapedText, escapedText] completion:nil];
     }];
     UIAlertAction *doneAction = [UIAlertAction actionWithTitle:@"Done"
                                                          style:UIAlertActionStyleDefault
                                                        handler:^(__unused UIAlertAction *action) {
+        if (![weakSelf.host browserPageActionCoordinatorIsActiveWebView:webView] || webView.documentGeneration != generation) return;
         UITextField *inputTextField = alertController.textFields.firstObject;
         NSString *escapedText = [weakSelf.domInteractionService javaScriptEscapedString:inputTextField.text];
         [weakSelf.domInteractionService evaluateEditableElementJavaScriptAtPoint:point
@@ -140,10 +111,10 @@ static UIColor *BrowserPageActionTextColor(void) {
                                                                                       "target.dispatchEvent(new Event('input', { bubbles: true }));"
                                                                                       "target.dispatchEvent(new Event('change', { bubbles: true }));"
                                                                                   "}"
-                                                                                  "return 'true';", escapedText, escapedText]];
+                                                                                  "return 'true';", escapedText, escapedText] completion:nil];
     }];
     [alertController addAction:doneAction];
-    if ([testedFormResponse isEqualToString:@"true"]) {
+    if ([metadata[@"submit"] boolValue]) {
         [alertController addAction:submitAction];
     }
     [alertController addAction:[UIAlertAction actionWithTitle:nil style:UIAlertActionStyleCancel handler:nil]];
@@ -153,14 +124,19 @@ static UIColor *BrowserPageActionTextColor(void) {
     if ([[inputTextField.text stringByReplacingOccurrencesOfString:@" " withString:@""] isEqualToString:@""]) {
         [inputTextField becomeFirstResponder];
     }
+    }];
 }
 
 - (BOOL)handlePageSelectionAtDOMPoint:(CGPoint)point webView:(BrowserWebView *)webView {
-    if ([self handleTargetBlankLinkAtDOMPoint:point webView:webView]) {
-        return YES;
+    NSUInteger selection = ++self.selectionGeneration;
+    [self.domInteractionService linkInfoAtDOMPoint:point webView:webView completion:^(NSDictionary *linkInfo, NSError *error) {
+    if (selection != self.selectionGeneration || error || ![self.host browserPageActionCoordinatorCanSelectInWebView:webView]) return;
+    NSString *href = linkInfo[@"href"], *target = linkInfo[@"target"];
+    if ([target isEqualToString:@"_blank"] && href.length) {
+        NSURLRequest *request = [self.navigationService requestForURLString:href];
+        if (request && [self.host browserPageActionCoordinatorCreateNewTabWithRequest:request]) return;
     }
-
-    NSString *fieldType = [self.domInteractionService evaluateResolvedElementJavaScriptAtPoint:point
+    [self.domInteractionService evaluateResolvedElementJavaScriptAtPoint:point
                                                                                         webView:webView
                                                                                            body:@"function browserEditableTargetAtPoint() {"
                                                                                                 "var candidate = editableElement;"
@@ -179,7 +155,8 @@ static UIColor *BrowserPageActionTextColor(void) {
                                                                                                 "var type = (target.type || '').toLowerCase();"
                                                                                                 "if (tagName === 'textarea' || target.isContentEditable) { return 'text'; }"
                                                                                                 "if (tagName === 'input' && !type) { return 'text'; }"
-                                                                                                "return type;"];
+                                                                                                "return type;" completion:^(NSString *fieldType, NSError *error) {
+    if (selection != self.selectionGeneration || error || ![self.host browserPageActionCoordinatorCanSelectInWebView:webView]) return;
     [self.domInteractionService evaluateResolvedElementJavaScriptAtPoint:point
                                                                  webView:webView
                                                                     body:@"if (typeof window.__browserTVFrameAtPoint === 'function' && window.__browserTVFrameAtPoint(x, y) && typeof window.__browserTVFrameClick === 'function') {"
@@ -207,23 +184,27 @@ static UIColor *BrowserPageActionTextColor(void) {
                                                                          "dispatchPointerLikeEvent('mouseup', 'MouseEvent');"
                                                                          "if (typeof target.click === 'function') { target.click(); }"
                                                                          "else { dispatchPointerLikeEvent('click', 'MouseEvent'); }"
-                                                                         "return 'true';"];
-    fieldType = fieldType.lowercaseString;
-    if ([fieldType isEqualToString:@"date"] ||
-        [fieldType isEqualToString:@"datetime"] ||
-        [fieldType isEqualToString:@"datetime-local"] ||
-        [fieldType isEqualToString:@"email"] ||
-        [fieldType isEqualToString:@"month"] ||
-        [fieldType isEqualToString:@"number"] ||
-        [fieldType isEqualToString:@"password"] ||
-        [fieldType isEqualToString:@"search"] ||
-        [fieldType isEqualToString:@"tel"] ||
-        [fieldType isEqualToString:@"text"] ||
-        [fieldType isEqualToString:@"time"] ||
-        [fieldType isEqualToString:@"url"] ||
-        [fieldType isEqualToString:@"week"]) {
-        [self presentEditableFieldPromptForFieldType:fieldType point:point webView:webView];
+                                                                         "return 'true';" completion:^(NSString *clickResult, NSError *clickError) {
+    if (selection != self.selectionGeneration || clickError || ![self.host browserPageActionCoordinatorCanSelectInWebView:webView]) return;
+    NSString *type = fieldType.lowercaseString;
+    if ([type isEqualToString:@"date"] ||
+        [type isEqualToString:@"datetime"] ||
+        [type isEqualToString:@"datetime-local"] ||
+        [type isEqualToString:@"email"] ||
+        [type isEqualToString:@"month"] ||
+        [type isEqualToString:@"number"] ||
+        [type isEqualToString:@"password"] ||
+        [type isEqualToString:@"search"] ||
+        [type isEqualToString:@"tel"] ||
+        [type isEqualToString:@"text"] ||
+        [type isEqualToString:@"time"] ||
+        [type isEqualToString:@"url"] ||
+        [type isEqualToString:@"week"]) {
+        [self presentEditableFieldPromptForFieldType:type point:point webView:webView];
     }
+    }];
+    }];
+    }];
     return YES;
 }
 

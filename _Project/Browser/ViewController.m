@@ -376,6 +376,14 @@ static UIColor *kTextColor(void) {
 
 #pragma mark - BrowserMenuCoordinatorHost
 
+- (BOOL)browserPageActionCoordinatorCanSelectInWebView:(BrowserWebView *)webView {
+    return self.webview == webView && !self.presentedViewController && !self.tabOverviewController.visible;
+}
+
+- (BOOL)browserPageActionCoordinatorIsActiveWebView:(BrowserWebView *)webView {
+    return self.webview == webView;
+}
+
 - (BrowserWebView *)browserWebView {
     return self.webview;
 }
@@ -903,7 +911,8 @@ static UIColor *kTextColor(void) {
                          completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
     };
     NSString *script = [NSString stringWithFormat:@"window.__browserTVVLCRequestIsCurrent && window.__browserTVVLCRequestIsCurrent.apply(null,%@)", sessionJSON];
-    [BrowserWebView fetchCookiesWithCompletion:^(NSArray<NSHTTPCookie *> *cookies) {
+    [BrowserWebView fetchCookiesWithResult:^(NSArray<NSHTTPCookie *> *cookies, NSError *cookieError) {
+        if (cookieError) { respond(@"rejected", 0, 0, NO); return; }
         BrowserWebView *currentView = weakWebView;
         if (!currentView || currentView.documentGeneration != generation) return;
         [currentView evaluateJavaScript:script completionHandler:^(NSString *result, NSError *error) {

@@ -19,6 +19,7 @@ static NSString * const kBackgroundProbeSummaryKey = @"BrowserBackgroundProbeSum
 static NSTimeInterval const kBackgroundProbeInterval = 5;
 
 @interface AppDelegate ()
+@property (nonatomic) NSUInteger cookieSaveGeneration;
 @property (nonatomic) BOOL torrentProcessingRegistered;
 @property (nonatomic) BOOL torrentRefreshRegistered;
 @property (nonatomic) BGProcessingTask *torrentProcessingTask;
@@ -47,17 +48,23 @@ static NSTimeInterval const kBackgroundProbeInterval = 5;
         return;
     }
 
-    [BrowserWebView restoreCookiesFromData:cookieData];
+    [BrowserWebView restoreCookiesFromData:cookieData completion:nil];
 }
 
 - (void)saveCookiesToDefaults {
-    NSData *cookieData = [BrowserWebView cookieDataRepresentation];
-    if (cookieData == nil) {
-        return;
-    }
-    
-    [[NSUserDefaults standardUserDefaults] setObject:cookieData forKey:@"ApplicationCookie"];
-    [[NSUserDefaults standardUserDefaults] synchronize];
+    NSUInteger generation = ++self.cookieSaveGeneration;
+    __block UIBackgroundTaskIdentifier task = UIBackgroundTaskInvalid;
+    void (^endTask)(void) = ^{
+        if (task != UIBackgroundTaskInvalid) {
+            [UIApplication.sharedApplication endBackgroundTask:task];
+            task = UIBackgroundTaskInvalid;
+        }
+    };
+    task = [UIApplication.sharedApplication beginBackgroundTaskWithName:@"Save browser cookies" expirationHandler:endTask];
+    [BrowserWebView cookieDataRepresentationWithCompletion:^(NSData *cookieData) {
+        if (cookieData && generation == self.cookieSaveGeneration) [[NSUserDefaults standardUserDefaults] setObject:cookieData forKey:@"ApplicationCookie"];
+        endTask();
+    }];
 }
 
 
@@ -386,7 +393,6 @@ static NSTimeInterval const kBackgroundProbeInterval = 5;
 
 - (void)applicationWillEnterForeground:(UIApplication *)application {
 	// Called as part of the transition from the background to the inactive state; here you can undo many of the changes made on entering the background.
-    [self restoreCookiesFromDefaults];
     [self finishTorrentProcessingTask:YES];
     [self finishTorrentRefreshTask:YES];
     [self endBackgroundProbe];
@@ -394,7 +400,6 @@ static NSTimeInterval const kBackgroundProbeInterval = 5;
 
 - (void)applicationDidBecomeActive:(UIApplication *)application {
 	// Restart any tasks that were paused (or not yet started) while the application was inactive. If the application was previously in the background, optionally refresh the user interface.
-    [self restoreCookiesFromDefaults];
 }
 
 - (void)applicationWillTerminate:(UIApplication *)application {

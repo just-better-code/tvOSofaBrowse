@@ -67,26 +67,38 @@ static void BrowserEnsureWebKitRuntimeLoaded(void) {
     });
 }
 
-static BOOL BrowserPumpRunLoopUntil(BOOL *done) {
-    static BOOL isPumpingRunLoop = NO;
-    if (*done) {
-        return YES;
+// Components own their registration; replacing one never identifies another by source text.
+static char BrowserScriptRegistryKey;
+static dispatch_group_t BrowserCookieRestoreGroup;
+static void BrowserReplaceScriptComponent(id controller, NSString *name, NSArray *scripts) {
+    SEL remove = NSSelectorFromString(@"removeAllUserScripts"), add = NSSelectorFromString(@"addUserScript:");
+    if (![controller respondsToSelector:remove] || ![controller respondsToSelector:add]) return;
+    NSMutableDictionary *registry = objc_getAssociatedObject(controller, &BrowserScriptRegistryKey);
+    if (!registry) {
+        registry = [NSMutableDictionary dictionary];
+        objc_setAssociatedObject(controller, &BrowserScriptRegistryKey, registry, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    if (isPumpingRunLoop) {
-        return NO;
+    registry[name] = scripts ?: @[];
+    ((void (*)(id, SEL))objc_msgSend)(controller, remove);
+    for (NSString *component in @[@"diagnostics", @"interaction-media-fullscreen", @"ublock"]) {
+        for (id script in registry[component]) ((void (*)(id, SEL, id))objc_msgSend)(controller, add, script);
     }
-    isPumpingRunLoop = YES;
-    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:2.0];
-    while (!*done && [deadline timeIntervalSinceNow] > 0.0) {
-        @autoreleasepool {
-            [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
-        }
+}
+
+static id BrowserCreateUserScript(NSString *source, NSInteger injectionTime, BOOL mainFrameOnly, NSString *worldName) {
+    Class scriptClass = NSClassFromString(kBrowserUserScriptClassName);
+    SEL initializer = NSSelectorFromString(@"initWithSource:injectionTime:forMainFrameOnly:");
+    id script = ((id (*)(id, SEL))objc_msgSend)((id)scriptClass, @selector(alloc));
+    if (worldName) {
+        Class worldClass = NSClassFromString(@"WKContentWorld");
+        SEL worldSelector = NSSelectorFromString(@"worldWithName:");
+        initializer = NSSelectorFromString(@"initWithSource:injectionTime:forMainFrameOnly:inContentWorld:");
+        if (![worldClass respondsToSelector:worldSelector] || ![scriptClass instancesRespondToSelector:initializer]) return nil;
+        id world = ((id (*)(id, SEL, id))objc_msgSend)((id)worldClass, worldSelector, worldName);
+        return ((id (*)(id, SEL, id, NSInteger, BOOL, id))objc_msgSend)(script, initializer, source, injectionTime, mainFrameOnly, world);
     }
-    isPumpingRunLoop = NO;
-    if (!*done) {
-        BrowserLog(@"[WebKit] timed out waiting for a synchronous callback");
-    }
-    return *done;
+    if (![scriptClass instancesRespondToSelector:initializer]) return nil;
+    return ((id (*)(id, SEL, id, NSInteger, BOOL))objc_msgSend)(script, initializer, source, injectionTime, mainFrameOnly);
 }
 
 static NSString *BrowserStringFromJavaScriptResult(id result) {
@@ -848,16 +860,14 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
         static dispatch_once_t handlerToken;
         dispatch_once(&handlerToken, ^{ handler = [BrowserWebsiteDiagnosticsHandler new]; });
         ((void (*)(id, SEL, id, id))objc_msgSend)(userContentController, addHandler, handler, @"browserWebsiteDiagnostics");
-        id diagnosticScript = ((id (*)(id, SEL))objc_msgSend)((id)userScriptClass, @selector(alloc));
-        diagnosticScript = ((id (*)(id, SEL, id, NSInteger, BOOL))objc_msgSend)(diagnosticScript, userScriptInitializer, BrowserWebsiteDiagnosticsScript(diagnosticToken, BrowserPreferencesStore.websiteLoggingEnabled), 0, NO);
-        if (diagnosticScript) ((void (*)(id, SEL, id))objc_msgSend)(userContentController, addUserScriptSelector, diagnosticScript);
+        id diagnosticScript = BrowserCreateUserScript(BrowserWebsiteDiagnosticsScript(diagnosticToken, BrowserPreferencesStore.websiteLoggingEnabled), 0, NO, nil);
+        if (diagnosticScript) BrowserReplaceScriptComponent(userContentController, @"diagnostics", @[diagnosticScript]);
     }
 
     NSString *frameClickSecret = [NSUUID UUID].UUIDString;
-    id frameClickScript = ((id (*)(id, SEL))objc_msgSend)((id)userScriptClass, @selector(alloc));
-    frameClickScript = ((id (*)(id, SEL, id, NSInteger, BOOL))objc_msgSend)(frameClickScript, userScriptInitializer, BrowserFrameClickBridgeScript(frameClickSecret, diagnosticToken), 0, NO);
+    id frameClickScript = BrowserCreateUserScript(BrowserFrameClickBridgeScript(frameClickSecret, diagnosticToken), 0, NO, nil);
     if (frameClickScript != nil) {
-        ((void (*)(id, SEL, id))objc_msgSend)(userContentController, addUserScriptSelector, frameClickScript);
+        BrowserReplaceScriptComponent(userContentController, @"interaction-media-fullscreen", @[frameClickScript]);
     }
 }
 
@@ -1644,31 +1654,8 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 #if DEBUG
     BrowserSetBooleanSelectorIfAvailable(self.runtimeWebView, @"setInspectable:", enabled);
 #endif
-    // Replace only the diagnostics bootstrap for future documents; retain every other script.
-    SEL scriptsSelector = NSSelectorFromString(@"userScripts");
-    SEL removeSelector = NSSelectorFromString(@"removeAllUserScripts");
-    SEL addSelector = NSSelectorFromString(@"addUserScript:");
-    id controller = self.userContentController;
-    if ([controller respondsToSelector:scriptsSelector] && [controller respondsToSelector:removeSelector] &&
-        [controller respondsToSelector:addSelector]) {
-        NSArray *scripts = [((id (*)(id, SEL))objc_msgSend)(controller, scriptsSelector) copy];
-        NSMutableArray *updated = [NSMutableArray array];
-        for (id script in scripts) {
-            NSString *source = [script valueForKey:@"source"];
-            if ([source hasPrefix:@"/* BrowserWebsiteDiagnostics */"]) {
-                SEL initializer = NSSelectorFromString(@"initWithSource:injectionTime:forMainFrameOnly:");
-                id replacement = ((id (*)(id, SEL))objc_msgSend)((id)[script class], @selector(alloc));
-                replacement = ((id (*)(id, SEL, id, NSInteger, BOOL))objc_msgSend)(replacement, initializer,
-                    BrowserWebsiteDiagnosticsScript(self.diagnosticToken, enabled), 0, NO);
-                if (replacement == nil) return;
-                [updated addObject:replacement];
-            } else {
-                [updated addObject:script];
-            }
-        }
-        ((void (*)(id, SEL))objc_msgSend)(controller, removeSelector);
-        for (id script in updated) ((void (*)(id, SEL, id))objc_msgSend)(controller, addSelector, script);
-    }
+    id diagnostics = BrowserCreateUserScript(BrowserWebsiteDiagnosticsScript(self.diagnosticToken, enabled), 0, NO, nil);
+    if (diagnostics) BrowserReplaceScriptComponent(self.userContentController, @"diagnostics", @[diagnostics]);
     [self replaceUBlockScripts:sBrowserUBlockRuntime forURL:self.adBlockPolicyURL enabled:self.adBlockEffectiveEnabled];
     // Existing cross-origin frames receive the setting through the lightweight bootstrap.
     NSString *script = [NSString stringWithFormat:@"if(typeof window['%@']==='function')window['%@'](%@);",
@@ -1706,18 +1693,13 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     self.installedUBlockIdentity = nil;
     self.adBlockDocumentToken = NSUUID.UUID.UUIDString;
     self.adBlockEvents = [NSMutableArray array];
-    SEL listSelector = NSSelectorFromString(@"userScripts"), removeSelector = NSSelectorFromString(@"removeAllUserScripts"), addSelector = NSSelectorFromString(@"addUserScript:");
     id controller = self.userContentController;
-    if (![controller respondsToSelector:listSelector] || ![controller respondsToSelector:removeSelector] || ![controller respondsToSelector:addSelector]) return;
-    NSArray *scripts = [((id (*)(id, SEL))objc_msgSend)(controller, listSelector) copy];
+    if (!controller) return;
     NSMutableArray *retained = [NSMutableArray array];
-    for (id script in scripts) if (![[script valueForKey:@"source"] hasPrefix:@"/* BrowserUBlock"]) [retained addObject:script];
     NSDictionary *markerData = @{@"identity":identity};
     NSString *markerJSON = [[NSString alloc] initWithData:[NSJSONSerialization dataWithJSONObject:markerData options:0 error:nil] encoding:NSUTF8StringEncoding];
     NSString *markerSource = [NSString stringWithFormat:@"/* BrowserUBlockPolicy */(function(){const policy=%@;addEventListener('pageshow',function(){try{webkit.messageHandlers.browserUBlock.postMessage({event:'document-policy',identity:policy.identity,host:location.hostname.toLowerCase().replace(/\\.$/,'')})}catch(e){}})})();", markerJSON];
-    Class markerClass = NSClassFromString(kBrowserUserScriptClassName);
-    id marker = ((id (*)(id, SEL))objc_msgSend)((id)markerClass, @selector(alloc));
-    marker = ((id (*)(id, SEL, id, NSInteger, BOOL))objc_msgSend)(marker, NSSelectorFromString(@"initWithSource:injectionTime:forMainFrameOnly:"), markerSource, 0, YES);
+    id marker = BrowserCreateUserScript(markerSource, 0, YES, nil);
     if (marker) [retained addObject:marker];
     self.adBlockIsolatedAvailable = NO;
     self.adBlockRuntimeAvailable = runtime != nil;
@@ -1743,14 +1725,11 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
             if (isolated && isolatedWorld == nil) { BrowserLog(@"[AdBlock] isolated-world injection unavailable"); continue; }
             NSString *source = [runtime[@"scripts"][world] stringByReplacingOccurrencesOfString:@"__BROWSER_CONFIG__" withString:JSON];
             if (source.length == 0) continue;
-            id script = ((id (*)(id, SEL))objc_msgSend)((id)scriptClass, @selector(alloc));
-            if (isolated) script = ((id (*)(id, SEL, id, NSInteger, BOOL, id))objc_msgSend)(script, isolatedInitializer, source, 0, NO, isolatedWorld);
-            else script = ((id (*)(id, SEL, id, NSInteger, BOOL))objc_msgSend)(script, NSSelectorFromString(@"initWithSource:injectionTime:forMainFrameOnly:"), source, 0, NO);
+            id script = BrowserCreateUserScript(source, 0, NO, isolated ? @"BrowserUBlock" : nil);
             if (script) { [retained addObject:script]; if (isolated) self.adBlockIsolatedAvailable = YES; }
         }
     }
-    ((void (*)(id, SEL))objc_msgSend)(controller, removeSelector);
-    for (id script in retained) ((void (*)(id, SEL, id))objc_msgSend)(controller, addSelector, script);
+    BrowserReplaceScriptComponent(controller, @"ublock", retained);
     self.installedUBlockIdentity = identity;
 }
 
@@ -1983,8 +1962,17 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     self.lastRequest = request;
     self.loading = YES;
     [self applyDomainZoomForURL:request.URL];
-    SEL selector = NSSelectorFromString(@"loadRequest:");
-    if ([self.runtimeWebView respondsToSelector:selector]) ((id (*)(id, SEL, id))objc_msgSend)(self.runtimeWebView, selector, request);
+    NSUInteger generation = self.documentGeneration;
+    __weak typeof(self) weakSelf = self;
+    void (^load)(void) = ^{
+        BrowserWebView *owner = weakSelf;
+        if (!owner || generation != owner.documentGeneration) return;
+        SEL selector = NSSelectorFromString(@"loadRequest:");
+        if ([owner.runtimeWebView respondsToSelector:selector]) ((id (*)(id, SEL, id))objc_msgSend)(owner.runtimeWebView, selector, request);
+    };
+    if (BrowserCookieRestoreGroup && dispatch_group_wait(BrowserCookieRestoreGroup, DISPATCH_TIME_NOW) != 0)
+        dispatch_group_notify(BrowserCookieRestoreGroup, dispatch_get_main_queue(), load);
+    else load();
 }
 
 - (void)loadHTMLString:(NSString *)HTMLString {
@@ -2035,48 +2023,10 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     }
 }
 
-- (NSString *)stringByEvaluatingJavaScriptFromString:(NSString *)script {
-    if (script.length == 0 || self.runtimeWebView == nil) {
-        return nil;
-    }
-
-    SEL selector = NSSelectorFromString(@"evaluateJavaScript:completionHandler:");
-    if (![self.runtimeWebView respondsToSelector:selector]) {
-        return nil;
-    }
-
-    __block id evaluationResult = nil;
-    __block NSError *evaluationError = nil;
-    __block BOOL finished = NO;
-    ((void (*)(id, SEL, id, id))objc_msgSend)(self.runtimeWebView, selector, script, ^(id result, NSError *error) {
-        evaluationResult = result;
-        evaluationError = error;
-        finished = YES;
-    });
-    if (!BrowserPumpRunLoopUntil(&finished)) {
-        return nil;
-    }
-
-    if (evaluationError != nil) {
-        return nil;
-    }
-    return BrowserStringFromJavaScriptResult(evaluationResult);
-}
-
 - (void)evaluateJavaScript:(NSString *)script completion:(void (^)(NSString *result))completion {
-    SEL selector = NSSelectorFromString(@"evaluateJavaScript:completionHandler:");
-    if (script.length == 0 || self.runtimeWebView == nil || ![self.runtimeWebView respondsToSelector:selector]) {
-        if (completion != nil) {
-            completion(nil);
-        }
-        return;
-    }
-
-    ((void (*)(id, SEL, id, id))objc_msgSend)(self.runtimeWebView, selector, script, ^(id result, NSError *error) {
-        if (completion != nil) {
-            completion(error == nil ? BrowserStringFromJavaScriptResult(result) : nil);
-        }
-    });
+    [self evaluateJavaScript:script completionHandler:^(NSString *result, NSError *error) {
+        if (completion) completion(error ? nil : result);
+    }];
 }
 
 - (void)evaluateJavaScript:(NSString *)script
@@ -2606,73 +2556,66 @@ windowFeatures:(id)windowFeatures {
 }
 
 // Async access includes HttpOnly cookies without exposing them to page JavaScript.
-+ (void)fetchCookiesWithCompletion:(void (^)(NSArray<NSHTTPCookie *> *))completion {
++ (void)fetchCookiesWithResult:(void (^)(NSArray<NSHTTPCookie *> * _Nullable, NSError * _Nullable))completion {
+    if (!NSThread.isMainThread) {
+        dispatch_async(dispatch_get_main_queue(), ^{ [self fetchCookiesWithResult:completion]; });
+        return;
+    }
     id store = [self defaultCookieStore];
     SEL selector = NSSelectorFromString(@"getAllCookies:");
-    void (^deliver)(NSArray *) = ^(NSArray *cookies) {
-        dispatch_async(dispatch_get_main_queue(), ^{ completion(cookies ?: @[]); });
+    __block BOOL finished = NO;
+    void (^deliver)(NSArray *, NSError *) = ^(NSArray *cookies, NSError *error) {
+        if (finished) return;
+        finished = YES;
+        if (completion) completion(cookies, error);
     };
     if (store && [store respondsToSelector:selector]) {
-        ((void (*)(id, SEL, id))objc_msgSend)(store, selector, deliver);
-    } else deliver(NSHTTPCookieStorage.sharedHTTPCookieStorage.cookies);
-}
-
-+ (NSArray<NSHTTPCookie *> *)allCookies {
-    id cookieStore = [self defaultCookieStore];
-    SEL selector = NSSelectorFromString(@"getAllCookies:");
-    if (cookieStore == nil || ![cookieStore respondsToSelector:selector]) {
-        return NSHTTPCookieStorage.sharedHTTPCookieStorage.cookies ?: @[];
-    }
-
-    __block NSArray<NSHTTPCookie *> *cookies = nil;
-    __block BOOL finished = NO;
-    ((void (*)(id, SEL, id))objc_msgSend)(cookieStore, selector, ^(NSArray<NSHTTPCookie *> *fetchedCookies) {
-        cookies = fetchedCookies;
-        finished = YES;
-    });
-    if (!BrowserPumpRunLoopUntil(&finished)) {
-        return NSHTTPCookieStorage.sharedHTTPCookieStorage.cookies ?: @[];
-    }
-    return cookies ?: @[];
-}
-
-+ (NSData *)cookieDataRepresentation {
-    NSArray<NSHTTPCookie *> *cookies = [self allCookies];
-    NSError *error = nil;
-    NSData *cookieData = [NSKeyedArchiver archivedDataWithRootObject:cookies requiringSecureCoding:NO error:&error];
-    return error == nil ? cookieData : nil;
-}
-
-+ (void)restoreCookiesFromData:(NSData *)cookieData {
-    if (cookieData.length == 0) {
-        return;
-    }
-
-    NSError *error = nil;
-    NSSet *allowedClasses = [NSSet setWithObjects:[NSArray class], [NSHTTPCookie class], nil];
-    NSArray<NSHTTPCookie *> *cookies = [NSKeyedUnarchiver unarchivedObjectOfClasses:allowedClasses fromData:cookieData error:&error];
-    if (![cookies isKindOfClass:[NSArray class]]) {
-        return;
-    }
-
-    id cookieStore = [self defaultCookieStore];
-    SEL selector = NSSelectorFromString(@"setCookie:completionHandler:");
-    if (cookieStore == nil || ![cookieStore respondsToSelector:selector]) {
-        for (NSHTTPCookie *cookie in cookies) {
-            [NSHTTPCookieStorage.sharedHTTPCookieStorage setCookie:cookie];
-        }
-        return;
-    }
-
-    __block NSInteger remainingCount = cookies.count;
-    __block BOOL finished = cookies.count == 0;
-    for (NSHTTPCookie *cookie in cookies) {
-        ((void (*)(id, SEL, id, id))objc_msgSend)(cookieStore, selector, cookie, ^{
-            remainingCount -= 1;
-            finished = remainingCount == 0;
+        ((void (*)(id, SEL, id))objc_msgSend)(store, selector, ^(NSArray *cookies) {
+            dispatch_async(dispatch_get_main_queue(), ^{ deliver(cookies ?: @[], nil); });
         });
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            deliver(nil, [NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorTimedOut userInfo:nil]);
+        });
+    } else deliver(NSHTTPCookieStorage.sharedHTTPCookieStorage.cookies ?: @[], nil);
+}
+
++ (void)cookieDataRepresentationWithCompletion:(void (^)(NSData *))completion {
+    [self fetchCookiesWithResult:^(NSArray *cookies, NSError *fetchError) {
+        if (fetchError) { completion(nil); return; }
+        NSError *error = nil;
+        NSData *data = [NSKeyedArchiver archivedDataWithRootObject:cookies requiringSecureCoding:NO error:&error];
+        completion(error ? nil : data);
+    }];
+}
+
++ (void)restoreCookiesFromData:(NSData *)cookieData completion:(void (^)(void))completion {
+    NSError *error = nil;
+    NSSet *classes = [NSSet setWithObjects:NSArray.class, NSHTTPCookie.class, nil];
+    NSArray *cookies = cookieData.length ? [NSKeyedUnarchiver unarchivedObjectOfClasses:classes fromData:cookieData error:&error] : nil;
+    if (![cookies isKindOfClass:NSArray.class]) { if (completion) completion(); return; }
+    if (!BrowserCookieRestoreGroup) BrowserCookieRestoreGroup = dispatch_group_create();
+    dispatch_group_t batch = dispatch_group_create();
+    dispatch_group_enter(BrowserCookieRestoreGroup);
+    id store = [self defaultCookieStore];
+    SEL selector = NSSelectorFromString(@"setCookie:completionHandler:");
+    for (NSHTTPCookie *cookie in cookies) {
+        if (store && [store respondsToSelector:selector]) {
+            dispatch_group_enter(batch);
+            ((void (*)(id, SEL, id, id))objc_msgSend)(store, selector, cookie, ^{ dispatch_group_leave(batch); });
+        } else [NSHTTPCookieStorage.sharedHTTPCookieStorage setCookie:cookie];
     }
-    BrowserPumpRunLoopUntil(&finished);
+    __block BOOL delivered = NO;
+    void (^finish)(void) = ^{
+        if (delivered) return;
+        delivered = YES;
+        dispatch_group_leave(BrowserCookieRestoreGroup);
+        if (completion) completion();
+    };
+    dispatch_group_notify(batch, dispatch_get_main_queue(), finish);
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        if (!delivered) BrowserLog(@"[WebKit] cookie restore completion timed out; pending writes continue");
+        finish();
+    });
 }
 
 + (NSSet<NSString *> *)allWebsiteDataTypes {

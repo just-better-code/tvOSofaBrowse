@@ -10,6 +10,8 @@ NS_ASSUME_NONNULL_BEGIN
 @protocol BrowserPageActionCoordinatorHost <NSObject>
 
 - (void)browserPageActionCoordinatorPresentViewController:(UIViewController *)viewController;
+- (BOOL)browserPageActionCoordinatorCanSelectInWebView:(BrowserWebView *)webView;
+- (BOOL)browserPageActionCoordinatorIsActiveWebView:(BrowserWebView *)webView;
 - (BOOL)browserPageActionCoordinatorCreateNewTabWithRequest:(NSURLRequest *)request;
 
 @end

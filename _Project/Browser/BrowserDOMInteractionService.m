@@ -15,18 +15,6 @@ static NSString * const kEditableElementSelector = @"input, textarea, select, [c
         return point;
     }
 
-    NSInteger displayWidth = [[webView stringByEvaluatingJavaScriptFromString:@"window.innerWidth"] integerValue];
-    if (displayWidth <= 0) {
-        return point;
-    }
-
-    CGFloat scale = CGRectGetWidth([webView frame]) / (CGFloat)displayWidth;
-    if (scale <= 0.0) {
-        return point;
-    }
-
-    point.x /= scale;
-    point.y /= scale;
     return point;
 }
 
@@ -89,20 +77,23 @@ static NSString * const kEditableElementSelector = @"input, textarea, select, [c
     return script;
 }
 
-- (NSString *)evaluateResolvedElementJavaScriptAtPoint:(CGPoint)point
+- (void)evaluateResolvedElementJavaScriptAtPoint:(CGPoint)point
                                                 webView:(BrowserWebView *)webView
-                                                   body:(NSString *)body {
+                                                   body:(NSString *)body
+                                              completion:(void (^)(NSString *, NSError *))completion {
     if (webView == nil) {
-        return @"";
+        if (completion) completion(nil, [NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorCancelled userInfo:nil]);
+        return;
     }
 
-    NSString *script = [self resolvedElementJavaScriptAtPoint:point viewportWidth:0.0 body:body];
-    return [webView stringByEvaluatingJavaScriptFromString:script] ?: @"";
+    NSString *script = [self resolvedElementJavaScriptAtPoint:point viewportWidth:CGRectGetWidth(webView.bounds) body:body];
+    [webView evaluateJavaScript:script completionHandler:completion];
 }
 
-- (NSString *)evaluateEditableElementJavaScriptAtPoint:(CGPoint)point
+- (void)evaluateEditableElementJavaScriptAtPoint:(CGPoint)point
                                                 webView:(BrowserWebView *)webView
-                                                   body:(NSString *)body {
+                                                   body:(NSString *)body
+                                              completion:(void (^)(NSString *, NSError *))completion {
     NSString *wrappedBody = [NSString stringWithFormat:
                              @"function browserIsEditableCandidate(element) {"
                                  "if (!element) { return false; }"
@@ -136,7 +127,7 @@ static NSString * const kEditableElementSelector = @"input, textarea, select, [c
                              "}"
                              "%@",
                              body];
-    return [self evaluateResolvedElementJavaScriptAtPoint:point webView:webView body:wrappedBody];
+    [self evaluateResolvedElementJavaScriptAtPoint:point webView:webView body:wrappedBody completion:completion];
 }
 
 - (void)evaluateHoverStateAtCursorPoint:(CGPoint)point
@@ -178,9 +169,10 @@ static NSString * const kEditableElementSelector = @"input, textarea, select, [c
     return escapedString;
 }
 
-- (NSDictionary *)linkInfoAtDOMPoint:(CGPoint)point
-                              webView:(BrowserWebView *)webView {
-    NSString *result = [self evaluateResolvedElementJavaScriptAtPoint:point
+- (void)linkInfoAtDOMPoint:(CGPoint)point
+                              webView:(BrowserWebView *)webView
+                   completion:(void (^)(NSDictionary *, NSError *))completion {
+     [self evaluateResolvedElementJavaScriptAtPoint:point
                                                                webView:webView
                                                                   body:@"function browserAbsoluteURL(url) {"
                                                                        "if (!url) { return ''; }"
@@ -202,8 +194,9 @@ static NSString * const kEditableElementSelector = @"input, textarea, select, [c
                                                                        "return JSON.stringify({"
                                                                            "href: browserAbsoluteURL(href),"
                                                                            "target: String(target || '').toLowerCase()"
-                                                                       "});"];
-    return [self JSONObjectFromJavaScriptString:result];
+                                                                       "});" completion:^(NSString *result, NSError *error) {
+        completion([self JSONObjectFromJavaScriptString:result], error);
+    }];
 }
 
 - (NSDictionary *)JSONObjectFromJavaScriptString:(NSString *)string {

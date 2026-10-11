@@ -2,6 +2,13 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.22.0 - 2026-10-11
+
+### Changed
+
+- Replace synchronous page-control and cookie waits with asynchronous operations that discard obsolete page results ([User Guide](docs/USER_GUIDE.md)).
+- Register browser scripts by component so diagnostic and Ad Block updates preserve interaction and player scripts ([BrowserWebView](_Project/Browser/BrowserWebView.m)).
+
 ## 2.21.7 - 2026-10-11
 
 ### Changed
