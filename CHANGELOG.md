@@ -2,6 +2,20 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.21.21 - 2026-10-11
+
+### Added
+
+- Choose Block Third-party, Allow Third-party or Use Filters per site and its subdomains, or Follow Parent, with a visible saved mode and preparation state ([Ad Block controls](docs/USER_GUIDE.md)).
+
+### Removed
+
+- Remove the bundled Hraimo-specific blocking and hiding rules while preserving downloaded lists and previously saved My Filters ([Ad Block controls](docs/USER_GUIDE.md)).
+
+### Fixed
+
+- Reuse converted filter lists when preparing a new third-party mode to avoid repeating source conversion ([Native adapter](_Project/Browser/BrowserWebView.m)).
+
 ## 2.21.20 - 2026-10-11
 
 ### Added

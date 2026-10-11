@@ -26,11 +26,11 @@
 		A1B49A582D6828D4001D58A1 /* BrowserSessionStore.m in Sources */ = {isa = PBXBuildFile; fileRef = A1B49A572D6828D4001D58A1 /* BrowserSessionStore.m */; };
 		A1B49A5D2D69F100001D58A1 /* WebCoreNSURLSessionTaskTransactionMetrics+AddPrivacyStance.m in Sources */ = {isa = PBXBuildFile; fileRef = A1B49A5C2D69F100001D58A1 /* WebCoreNSURLSessionTaskTransactionMetrics+AddPrivacyStance.m */; };
 		A1B49A632D6A3800001D58A1 /* BrowserWebView.m in Sources */ = {isa = PBXBuildFile; fileRef = A1B49A622D6A3800001D58A1 /* BrowserWebView.m */; };
-		ADBB00000000000000000001 /* AdBlockCustomRules.json in Resources */ = {isa = PBXBuildFile; fileRef = ADBB00000000000000000002 /* AdBlockCustomRules.json */; };
 		ADBB00000000000000000003 /* BrowserAdBlockConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADBB00000000000000000004 /* BrowserAdBlockConverter.swift */; };
 		ADBB00000000000000000005 /* ContentBlockerConverter in Frameworks */ = {isa = PBXBuildFile; productRef = ADBB00000000000000000006 /* ContentBlockerConverter */; };
 		A1B49A682D6AD500001D58A1 /* UIApplication+BrowserSelectPressForwarding.m in Sources */ = {isa = PBXBuildFile; fileRef = A1B49A672D6AD500001D58A1 /* UIApplication+BrowserSelectPressForwarding.m */; };
 		A1B49A842D6D2000001D58A1 /* BrowserDOMInteractionService.m in Sources */ = {isa = PBXBuildFile; fileRef = A1B49A832D6D2000001D58A1 /* BrowserDOMInteractionService.m */; };
+		ADBF00000000000000000006 /* BrowserAdBlockPolicy.m in Sources */ = {isa = PBXBuildFile; fileRef = ADBE00000000000000000006; };
 		A1B49A892D700000001D58A1 /* BrowserPreferencesStore.m in Sources */ = {isa = PBXBuildFile; fileRef = A1B49A882D700000001D58A1 /* BrowserPreferencesStore.m */; };
 		A1B49A8C2D700010001D58A1 /* BrowserTabCoordinator.m in Sources */ = {isa = PBXBuildFile; fileRef = A1B49A8B2D700010001D58A1 /* BrowserTabCoordinator.m */; };
 		A1B49A8F2D700020001D58A1 /* BrowserTabOverviewController.m in Sources */ = {isa = PBXBuildFile; fileRef = A1B49A8E2D700020001D58A1 /* BrowserTabOverviewController.m */; };
@@ -110,12 +110,13 @@
 		A1B49A572D6828D4001D58A1 /* BrowserSessionStore.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BrowserSessionStore.m; sourceTree = "<group>"; };
 		A1B49A5C2D69F100001D58A1 /* WebCoreNSURLSessionTaskTransactionMetrics+AddPrivacyStance.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "WebCoreNSURLSessionTaskTransactionMetrics+AddPrivacyStance.m"; sourceTree = "<group>"; };
 		A1B49A622D6A3800001D58A1 /* BrowserWebView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BrowserWebView.m; sourceTree = "<group>"; };
-		ADBB00000000000000000002 /* AdBlockCustomRules.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = AdBlockCustomRules.json; sourceTree = "<group>"; };
 		ADBB00000000000000000004 /* BrowserAdBlockConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserAdBlockConverter.swift; sourceTree = "<group>"; };
 		A1B49A642D6A3900001D58A1 /* BrowserWebView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BrowserWebView.h; sourceTree = "<group>"; };
 		A1B49A672D6AD500001D58A1 /* UIApplication+BrowserSelectPressForwarding.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "UIApplication+BrowserSelectPressForwarding.m"; sourceTree = "<group>"; };
 		A1B49A822D6D2000001D58A1 /* BrowserDOMInteractionService.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BrowserDOMInteractionService.h; sourceTree = "<group>"; };
 		A1B49A832D6D2000001D58A1 /* BrowserDOMInteractionService.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BrowserDOMInteractionService.m; sourceTree = "<group>"; };
+		ADBE00000000000000000006 /* BrowserAdBlockPolicy.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BrowserAdBlockPolicy.m; sourceTree = "<group>"; };
+		ADBE00000000000000000007 /* BrowserAdBlockPolicy.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BrowserAdBlockPolicy.h; sourceTree = "<group>"; };
 		A1B49A872D700000001D58A1 /* BrowserPreferencesStore.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BrowserPreferencesStore.h; sourceTree = "<group>"; };
 		A1B49A882D700000001D58A1 /* BrowserPreferencesStore.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BrowserPreferencesStore.m; sourceTree = "<group>"; };
 		A1B49A8A2D700010001D58A1 /* BrowserTabCoordinator.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BrowserTabCoordinator.h; sourceTree = "<group>"; };
@@ -288,6 +289,8 @@
 				A1B49A4D2D680900001D58A1 /* BrowserNavigationService.m */,
 				A1B49A9F2D700080001D58A1 /* BrowserHistoryStore.h */,
 				A1B49AA02D700080001D58A1 /* BrowserHistoryStore.m */,
+				ADBE00000000000000000006 /* BrowserAdBlockPolicy.m */,
+				ADBE00000000000000000007 /* BrowserAdBlockPolicy.h */,
 				A1B49A872D700000001D58A1 /* BrowserPreferencesStore.h */,
 				A1B49A882D700000001D58A1 /* BrowserPreferencesStore.m */,
 				A1B49A562D6828D4001D58A1 /* BrowserSessionStore.h */,
@@ -321,7 +324,6 @@
 		A1B49A7F2D6D0000001D58A1 /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				ADBB00000000000000000002 /* AdBlockCustomRules.json */,
 				ADBC00000000000000000007 /* UAssets-LICENSE */,
 				ADBC00000000000000000006 /* LICENSE.txt */,
 				ADBC00000000000000000005 /* UBlockFilters.txt */,
@@ -484,7 +486,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				F51920261011000000000005 /* BrowserFullscreenMediaBridge.js in Resources */,
-				ADBB00000000000000000001 /* AdBlockCustomRules.json in Resources */,
 				ADBD00000000000000000007 /* UAssets-LICENSE in Resources */,
 				ADBD00000000000000000006 /* LICENSE.txt in Resources */,
 				ADBD00000000000000000005 /* UBlockFilters.txt in Resources */,
@@ -555,6 +556,7 @@
 				F51920261011000000000004 /* BrowserFullscreenMediaControlsController.m in Sources */,
 				A1B49A842D6D2000001D58A1 /* BrowserDOMInteractionService.m in Sources */,
 				A1B49A4E2D680900001D58A1 /* BrowserNavigationService.m in Sources */,
+				ADBF00000000000000000006 /* BrowserAdBlockPolicy.m in Sources */,
 				A1B49A892D700000001D58A1 /* BrowserPreferencesStore.m in Sources */,
 				A1B49A582D6828D4001D58A1 /* BrowserSessionStore.m in Sources */,
 				A1B49A682D6AD500001D58A1 /* UIApplication+BrowserSelectPressForwarding.m in Sources */,
@@ -712,7 +714,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.21.20;
+				MARKETING_VERSION = 2.21.21;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
 			PRODUCT_NAME = "$(TARGET_NAME)";
 			SCAN_ALL_SOURCE_FILES_FOR_INCLUDES = NO;
@@ -744,7 +746,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.21.20;
+				MARKETING_VERSION = 2.21.21;
 			PRODUCT_NAME = "$(TARGET_NAME)";
 			SCAN_ALL_SOURCE_FILES_FOR_INCLUDES = NO;
 			SWIFT_VERSION = 5.0;

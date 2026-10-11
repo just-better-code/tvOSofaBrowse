@@ -1091,7 +1091,8 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
     cell.accessoryTitleConstraint.active = showsToggle;
     cell.fullWidthTitleConstraint.active = !showsToggle;
     if (!showsToggle) {
-        cell.optionLabel.text = source[@"title"];
+        NSString *detail = [source[@"showsDetail"] boolValue] && self.rowDetailProvider ? self.rowDetailProvider(source[@"id"]) : @"";
+        cell.optionLabel.text = detail.length ? [NSString stringWithFormat:@"%@ · %@", source[@"title"], detail] : source[@"title"];
         cell.detailLabel.text = @"";
         cell.accessibilityLabel = cell.optionLabel.text;
         [cell refreshAppearance];
@@ -1716,6 +1717,7 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
 - (void)presentAdBlockSettings {
     __weak typeof(self) weakSelf = self;
     __block __weak BrowserOptionsViewController *weakSettings;
+    NSString *policyHost = [self.host.browserWebView.request.URL.host.lowercaseString stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"."]];
     BrowserOptionsViewController *settings =
         [[BrowserOptionsViewController alloc] initWithEnabledProvider:^BOOL {
             return weakSelf.preferencesStore.adBlockEnabled;
@@ -1726,6 +1728,22 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
             strongSelf.preferencesStore.adBlockEnabled = enabled;
             [strongSelf.host browserSetAdBlockEnabled:enabled];
         } activateRow:^(NSString *identifier) {
+            if ([identifier isEqualToString:@"dynamic-policy"]) {
+                NSString *selected = [BrowserWebView dynamicAdBlockPolicyForHost:policyHost];
+                NSString *effective = [BrowserWebView effectiveDynamicAdBlockPolicyForHost:policyHost];
+                NSDictionary *effectiveTitles = @{@"standard":@"Filter lists", @"block":@"Block third-party requests", @"allow":@"Allow third-party requests", @"noop":@"Filter lists"};
+                NSString *message = [NSString stringWithFormat:@"%@ and its subdomains.\nSaved: %@%@.\nThird-party requests load content from other websites. Block stops all of them; Allow lets them through; Use Filters applies the filter lists. Follow Parent removes this site's choice. Changes reload the page when ready.", policyHost, effectiveTitles[effective], [selected isEqual:@"inherit"] ? @" (inherited)" : @""];
+                UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Third-party Requests"
+                    message:message preferredStyle:UIAlertControllerStyleAlert];
+                NSDictionary *titles = @{@"inherit":@"Follow Parent", @"block":@"Block Third-party", @"allow":@"Allow Third-party", @"noop":@"Use Filters"};
+                for (NSString *policy in @[@"inherit", @"block", @"allow", @"noop"]) {
+                    [alert addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"%@%@", [selected isEqual:policy] ? @"✓ " : @"", titles[policy]] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+                        [BrowserWebView setDynamicAdBlockPolicy:policy forHost:policyHost];
+                    }]];
+                }
+                [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+                [weakSettings dismissViewControllerAnimated:YES completion:^{ [weakSelf.host browserPresentViewController:alert]; }]; return;
+            }
             if ([identifier isEqualToString:@"coverage"]) {
                 UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Ad Block Coverage" message:[weakSelf.host.browserWebView adBlockDiagnosticSummary] preferredStyle:UIAlertControllerStyleAlert];
                 [alert addAction:[UIAlertAction actionWithTitle:@"Done" style:UIAlertActionStyleCancel handler:nil]];
@@ -1751,12 +1769,19 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
         row[@"title"] = [source[@"title"] stringByReplacingOccurrencesOfString:@"AdGuard " withString:@""];
         [rows addObject:row];
     }
+    if (policyHost.length) [rows addObject:@{@"id":@"dynamic-policy", @"title":@"Third-party Requests", @"action":@"yes", @"showsDetail":@YES}];
     [rows addObject:@{@"id":@"coverage", @"title":@"Coverage and Diagnostics", @"action":@"yes"}];
     settings.rows = rows;
     settings.rowEnabledProvider = ^BOOL(NSString *identifier) {
         return [BrowserWebView adBlockSourceEnabled:identifier];
     };
     settings.rowDetailProvider = ^NSString *(NSString *identifier) {
+        if ([identifier isEqual:@"dynamic-policy"]) {
+            NSString *policy = [BrowserWebView dynamicAdBlockPolicyForHost:policyHost];
+            NSDictionary *titles = @{@"standard":@"Use Filters", @"block":@"Block", @"allow":@"Allow", @"noop":@"Use Filters"};
+            NSString *effective = [BrowserWebView effectiveDynamicAdBlockPolicyForHost:policyHost];
+            return [NSString stringWithFormat:@"%@%@%@", titles[effective], [policy isEqual:@"inherit"] ? @" · Inherited" : @"", weakSelf.host.browserWebView.adBlockPolicyPreparing ? @" · Preparing" : @""];
+        }
         return [BrowserWebView adBlockSourceStatus:identifier];
     };
     settings.secondaryActionTitle = @"Update Filters Now";

@@ -29,3 +29,15 @@ assert.equal(match('', '', {url:'https://site.example/keep?utm_source=ad'}).modi
 assert.equal(match('', '', {url:'https://site.example/path?utm_source=ad',method:'POST'}).modifiedURL, undefined);
 assert.equal(match('', '', {url:'https://advert.example/ad?utm_source=ad'}).modifiedURL, undefined);
 console.log('Upstream query pruning preserves encoded/duplicate parameters and fragments, honors exceptions and skips POST/blocked requests.');
+
+const sitePolicies = 'site.example * 3p block\nchild.site.example * 3p noop\nallow.site.example * 3p allow';
+assert.equal(match(sitePolicies).action, 1);
+assert.equal(match(sitePolicies, '', {topURL:'https://allow.site.example/'}).action, 2);
+assert.equal(match(sitePolicies, '', {topURL:'https://child.site.example/'}).engine, 'static');
+assert.equal(match(sitePolicies, '', {topURL:'https://child.site.example/'}).action, 1);
+assert.equal(match(sitePolicies, '', {url:'https://clean.example/resource'}).action, 1);
+assert.equal(match(sitePolicies, '', {topURL:'https://allow.site.example/',url:'https://clean.example/resource'}).action, 2);
+assert.equal(match(sitePolicies, '', {topURL:'https://child.site.example/',url:'https://clean.example/resource'}).action, 0);
+assert.equal(match(sitePolicies, '', {url:'https://site.example/first-party'}).action, 0);
+assert.equal(match(sitePolicies, '', {topURL:'https://site.example.evil.net/',url:'https://clean.example/resource'}).action, 0);
+console.log('Site policy upstream decisions pass ancestor block, specific allow/noop, static fallback, first-party and hostname boundaries.');
