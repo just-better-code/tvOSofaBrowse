@@ -25,3 +25,15 @@ assert.equal(vm.runInContext('let invoked=false;fuckAdBlock.onNotDetected(()=>in
 const bundled=compile(fs.readFileSync(root+'UBlockFilters.txt','utf8'),true);
 assert.equal(bundled.rejected['scriptlet-name'],undefined);
 console.log('All pinned scriptlet code parses; legacy names/aliases, trust gates, anti-adblock stubs and bundled name coverage pass.');
+
+const capability=compile('example.com##^script\nexample.com##^responseheader(refresh)\nexample.com##+js(nonexistent-fixture)\nexample.com##^:not(');
+assert.equal(capability.rejected['response-body'],1);
+assert.equal(capability.rejected['response-header'],1);
+assert.equal(capability.rejected['scriptlet-name'],1);
+assert.equal(capability.rejected.syntax,1);
+assert.equal(capability.records.length,0);
+assert.equal(bundled.rejected['response-body'],130);
+assert.equal(bundled.rejected['response-header'],6);
+assert.equal(bundled.rejected.syntax,1);
+assert.equal(bundled.stats.fixture.unsupported,137);
+console.log('Valid HTML/header delivery limitations are distinguished from malformed syntax; bundled rejection totals remain unchanged.');

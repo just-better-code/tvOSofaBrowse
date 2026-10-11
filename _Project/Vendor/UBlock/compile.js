@@ -20,7 +20,7 @@ globalThis.browserCompileUBlock = function(lists, library) {
         resources.set(entry.name, entry);
         for (const alias of entry.aliases) aliases.set(alias, entry.name);
     }
-    const parser = new AstFilterParser({ nativeCssHas: false });
+    const parser = new AstFilterParser({ nativeCssHas: false, canFilterResponseBody: true });
     const records = [], stats = {}, rejected = {};
     for (const list of lists) {
         const counts = { cosmetic:0, scriptlet:0, unsupported:0, network:0 };
@@ -36,6 +36,10 @@ globalThis.browserCompileUBlock = function(lists, library) {
             if (!parser.isExtendedFilter()) continue;
             const reject = reason => { counts.unsupported++; rejected[reason] = (rejected[reason] || 0) + 1; };
             if (parser.hasError() || parser.isUnsupported()) { reject('syntax'); continue; }
+            // Parse HTML syntax independently of host delivery capability, so a
+            // valid response rule is not misreported as a malformed list line.
+            if (parser.isHtmlFilter()) { reject('response-body'); continue; }
+            if (parser.isResponseheaderFilter()) { reject('response-header'); continue; }
             const domains = parser.hasOptions() ? Array.from(parser.getExtFilterDomainIterator(), d => ({host:d.hn, exclude:d.not})) : [];
             const record = { domains, source:list.id, line:lineNumber, exception:parser.isException() };
             if (parser.isScriptletFilter()) {

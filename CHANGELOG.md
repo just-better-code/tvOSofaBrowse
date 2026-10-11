@@ -2,6 +2,12 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.21.22 - 2026-10-11
+
+### Fixed
+
+- Distinguish valid HTML and response-header filters awaiting delivery support from malformed filter syntax in Ad Block coverage ([Diagnostics](docs/USER_GUIDE.md)).
+
 ## 2.21.21 - 2026-10-11
 
 ### Added
