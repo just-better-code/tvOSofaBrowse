@@ -1,8 +1,9 @@
 /* tvOSofaBrowse fetch/XHR adapter. No request body, headers or response leave the page. */
-(function () {
+(function installNetworkRequests(config, transport) {
     'use strict';
-    const config = __BROWSER_CONFIG__;
-    const handler = window.webkit && window.webkit.messageHandlers.browserNetwork;
+    const window = globalThis, document = window.document;
+    const baseURL = config.baseURL || window.location.href;
+    const handler = transport || (window.webkit && window.webkit.messageHandlers.browserNetwork);
     if (!handler || window.__browserNetworkRequestsInstalled) return;
     const apply = Reflect.apply, NativeRequest = window.Request, NativeFetch = window.fetch;
     const nativeSetTimeout = window.setTimeout.bind(window), nativeClearTimeout = window.clearTimeout.bind(window);
@@ -157,7 +158,7 @@
                     const state = { pending: false, nativeSent: false, virtualReady: null,
                         async: args.length < 3 || args[2] === undefined ? true : Boolean(args[2]),
                         method: args[0], url: '', configuredTimeout: apply(timeout.get, this, []) };
-                    try { state.url = new URL(args[1], document.baseURI).href; } catch (_) {}
+                    try { state.url = new URL(args[1], document ? document.baseURI : baseURL).href; } catch (_) {}
                     states.set(this, state);
                     try { apply(nativeOpen, this, args); }
                     catch (error) { if (current(this, state)) { if (previous) states.set(this, previous); else states.delete(this); } throw error; }
@@ -250,12 +251,16 @@
             catch (_) { for (const name of names) { try { Object.defineProperty(proto, name, descriptors[name]); } catch (_) {} } }
         }
     }
-    window.addEventListener('pagehide', () => {
-        alive = false; epoch++;
-        for (const cancel of Array.from(pending)) cancel();
-    });
-    window.addEventListener('pageshow', () => { alive = true; });
+    const lifecycle = {
+        suspend() { alive = false; epoch++; for (const cancel of Array.from(pending)) cancel(); },
+        resume() { alive = true; }
+    };
+    if (document) {
+        window.addEventListener('pagehide', lifecycle.suspend);
+        window.addEventListener('pageshow', lifecycle.resume);
+    }
     try {
         Promise.resolve(handler.postMessage({ token: config.token, kind: 'ready', fetch: fetchInstalled, xhr: xhrInstalled })).catch(() => {});
     } catch (_) {}
-})();
+    return lifecycle;
+})(__BROWSER_CONFIG__);
