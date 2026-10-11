@@ -258,9 +258,130 @@
             catch (_) { for (const name of names) { try { Object.defineProperty(proto, name, descriptors[name]); } catch (_) {} } }
         }
     }
+    // Only classic dedicated workers made from Blob URLs created in this realm.
+    // Do not refetch HTTP entries or change module/shared/service-worker identity.
+    const workers = new Set();
+    if (document && typeof window.Worker === 'function' && typeof window.MessageChannel === 'function' &&
+        typeof window.URL.createObjectURL === 'function' && window.crypto &&
+        typeof window.crypto.randomUUID === 'function') {
+        const blobs = new Map(), NativeWorker = window.Worker;
+        const create = window.URL.createObjectURL, revoke = window.URL.revokeObjectURL;
+        const workerPost = NativeWorker.prototype.postMessage, workerTerminate = NativeWorker.prototype.terminate;
+        function bootstrap(install, settings, secret) {
+            const requests = new Map();
+            const delay = setTimeout.bind(globalThis), clearDelay = clearTimeout.bind(globalThis);
+            let port, sequence = 0;
+            const transport = { postMessage(message) {
+                return new Promise((resolve, reject) => {
+                    const id = ++sequence;
+                    const timer = delay(() => { requests.delete(id); reject(new Error('Worker bridge timeout')); }, 350);
+                    const packet = { id, message };
+                    requests.set(id, { resolve, reject, timer, packet });
+                    if (port) port.postMessage(packet);
+                });
+            } };
+            const lifecycle = install(settings, transport);
+            function connect(event) {
+                if (!event.data || event.data.__browserWorker !== secret || !event.ports[0]) return;
+                event.stopImmediatePropagation();
+                removeEventListener('message', connect);
+                port = event.ports[0];
+                port.onmessage = event => {
+                    const data = event.data;
+                    if (data.control === 'suspend') { lifecycle.suspend(); return; }
+                    if (data.control === 'resume') { lifecycle.resume(); return; }
+                    const request = requests.get(data.id);
+                    if (!request) return;
+                    requests.delete(data.id); clearDelay(request.timer); request.resolve(data.result);
+                };
+                for (const request of requests.values()) port.postMessage(request.packet);
+            }
+            addEventListener('message', connect);
+        }
+        function close(record) {
+            workers.delete(record); record.closed = true;
+            record.port.close(); nativeClearTimeout(record.timer);
+            for (const url of record.urls) apply(revoke, window.URL, [url]);
+        }
+        try {
+            window.URL.createObjectURL = function (value) {
+                const url = apply(create, this, [value]);
+                if (value instanceof window.Blob) blobs.set(url, value);
+                return url;
+            };
+            window.URL.revokeObjectURL = function (url) {
+                // Native conversion may throw; retain tracking when it does.
+                const key = String(url); apply(revoke, this, [key]); blobs.delete(key);
+            };
+            window.Worker = new Proxy(NativeWorker, { construct(target, args, newTarget) {
+                if (args.length === 0) return Reflect.construct(target, args, newTarget);
+                const input = String(args[0]), options = args[1], blob = blobs.get(input);
+                if (!blob || !/^(?:text|application)\/javascript$/i.test(blob.type) ||
+                    (options != null && typeof options !== 'object' && typeof options !== 'function')) {
+                    report('worker-bypass');
+                    return Reflect.construct(target, [input, options], newTarget);
+                }
+                // Snapshot dictionary getters once, in WebIDL member order.
+                const settings = options == null ? {} : {
+                    credentials: options.credentials, name: options.name, type: options.type
+                };
+                if (settings.type !== undefined && settings.type !== 'classic') {
+                    report('worker-bypass');
+                    return Reflect.construct(target, [input, settings], newTarget);
+                }
+                const secret = window.crypto.randomUUID();
+                const workerConfig = { token: config.token, baseURL: input };
+                const entryURL = apply(create, window.URL, [blob]);
+                const prefix = '(' + bootstrap.toString() + ')(' + installNetworkRequests.toString() + ',' +
+                    JSON.stringify(workerConfig) + ',' + JSON.stringify(secret) + ');\nimportScripts(' + JSON.stringify(entryURL) + ');';
+                const url = apply(create, window.URL, [new window.Blob([prefix], { type: 'text/javascript' })]);
+                let worker;
+                try { worker = Reflect.construct(target, [url, settings], newTarget); }
+                catch (error) {
+                    apply(revoke, window.URL, [url]); apply(revoke, window.URL, [entryURL]); report('worker-bypass');
+                    return Reflect.construct(target, [input, settings], newTarget);
+                }
+                const channel = new window.MessageChannel();
+                const record = { worker, port: channel.port1, urls: [url, entryURL], closed: false };
+                workers.add(record);
+                // The worker keeps its own decision deadlines. Never relay credentials/bodies.
+                record.port.onmessage = event => {
+                    const packet = event.data, message = packet && packet.message;
+                    if (!message || record.closed) return;
+                    if (message.kind === 'ready') {
+                        report('worker-ready');
+                        nativeClearTimeout(record.timer); for (const owned of record.urls) apply(revoke, window.URL, [owned]);
+                    }
+                    let reply;
+                    try { reply = alive ? handler.postMessage(message) : { cancel: true }; }
+                    catch (_) { reply = { action: 0 }; }
+                    Promise.resolve(reply).then(result => {
+                        if (!record.closed) record.port.postMessage({ id: packet.id, result });
+                    }, () => {
+                        if (!record.closed) record.port.postMessage({ id: packet.id, result: { action: 0 } });
+                    });
+                };
+                record.timer = nativeSetTimeout(() => {
+                    report('worker-unready');
+                }, 1000);
+                try { apply(workerPost, worker, [{ __browserWorker: secret }, [channel.port2]]); }
+                catch (_) { channel.port2.close(); close(record); report('worker-unready'); }
+                return worker;
+            } });
+            Object.defineProperty(NativeWorker.prototype, 'terminate', {
+                ...Object.getOwnPropertyDescriptor(NativeWorker.prototype, 'terminate'),
+                value: function (...args) {
+                    const result = apply(workerTerminate, this, args);
+                    for (const record of workers) if (record.worker === this) close(record);
+                    return result;
+                }
+            });
+        } catch (_) { report('worker-bypass'); }
+    }
     const lifecycle = {
-        suspend() { alive = false; epoch++; for (const cancel of Array.from(pending)) cancel(); },
-        resume() { alive = true; }
+        suspend() { alive = false; epoch++; for (const cancel of Array.from(pending)) cancel();
+            for (const record of workers) record.port.postMessage({ control: 'suspend' }); },
+        resume() { alive = true; for (const record of workers) record.port.postMessage({ control: 'resume' }); }
     };
     if (document) {
         window.addEventListener('pagehide', lifecycle.suspend);

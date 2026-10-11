@@ -2,6 +2,12 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.21.15 - 2026-10-11
+
+### Added
+
+- Apply uBlock fetch and asynchronous XHR decisions inside supported classic Blob workers and report worker readiness and bypasses in diagnostics ([Ad Block coverage](docs/USER_GUIDE.md#browser-menu), [Request adapter](_Project/Vendor/UBlock/UBlockRequests.js)).
+
 ## 2.21.14 - 2026-10-11
 
 ### Fixed
