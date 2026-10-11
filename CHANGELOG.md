@@ -2,6 +2,12 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.24.0 - 2026-10-11
+
+### Added
+
+- Apply uBlock network decisions to page fetch requests through an asynchronous WebKit reply bridge ([User Guide](docs/USER_GUIDE.md), [Network adapter](_Project/Vendor/UBlock/README.md)).
+
 ## 2.23.1 - 2026-10-11
 
 ### Added

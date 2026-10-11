@@ -90,7 +90,7 @@ static void BrowserReplaceScriptComponent(id controller, NSString *name, NSArray
     }
     registry[name] = scripts ?: @[];
     ((void (*)(id, SEL))objc_msgSend)(controller, remove);
-    for (NSString *component in @[@"diagnostics", @"interaction-media-fullscreen", @"ublock"]) {
+    for (NSString *component in @[@"diagnostics", @"interaction-media-fullscreen", @"network-requests", @"ublock"]) {
         for (id script in registry[component]) ((void (*)(id, SEL, id))objc_msgSend)(controller, add, script);
     }
 }
@@ -1394,6 +1394,11 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 - (void)userContentController:(id)controller didReceiveScriptMessage:(id)message;
 @end
 
+@interface BrowserNetworkRequestHandler : NSObject
+@property (nonatomic, weak) BrowserWebView *owner;
+- (void)userContentController:(id)controller didReceiveScriptMessage:(id)message replyHandler:(void (^)(id, NSString *))reply;
+@end
+
 @interface BrowserWebView ()
 
 @property (nullable, nonatomic, strong) id runtimeWebView;
@@ -1410,6 +1415,11 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 @property (nonatomic, readwrite) BOOL adBlockEnabled;
 @property (nonatomic, readwrite, copy) NSString *adBlockStatus;
 @property (nonatomic, strong) BrowserUBlockHandler *uBlockHandler;
+@property (nonatomic, strong) BrowserNetworkRequestHandler *networkRequestHandler;
+@property (nonatomic) BOOL networkReplyAvailable;
+@property (nonatomic) BOOL networkFetchObserved;
+@property (nonatomic) BOOL networkXHRObserved;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSNumber *> *networkRequestCounts;
 @property (nonatomic) NSUInteger adBlockPolicyGeneration;
 @property (nonatomic, copy) NSString *adBlockDocumentToken;
 @property (nonatomic, strong) NSURL *adBlockPolicyURL;
@@ -1435,6 +1445,86 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
         return;
     }
     [self.owner recordUBlockMessage:body];
+}
+@end
+
+@implementation BrowserNetworkRequestHandler
+- (void)userContentController:(id)controller didReceiveScriptMessage:(id)message replyHandler:(void (^)(id, NSString *))reply {
+    (void)controller;
+    BrowserWebView *owner = self.owner;
+    NSDictionary *body = BrowserObjectResultForGetter(message, @"body");
+    if (!owner || ![body isKindOfClass:NSDictionary.class] || ![body[@"token"] isKindOfClass:NSString.class] ||
+        ![body[@"token"] isEqual:owner.adBlockDocumentToken]) { reply(@{@"cancel":@YES}, nil); return; }
+    NSString *kind = body[@"kind"];
+    if ([kind isEqual:@"ready"]) {
+        owner.networkFetchObserved |= [body[@"fetch"] isKindOfClass:NSNumber.class] && [body[@"fetch"] boolValue];
+        owner.networkXHRObserved |= [body[@"xhr"] isKindOfClass:NSNumber.class] && [body[@"xhr"] boolValue];
+        if (BrowserPreferencesStore.websiteLoggingEnabled)
+            BrowserLog(@"[AdBlock] requests installed fetch=%d xhr=%d", owner.networkFetchObserved, owner.networkXHRObserved);
+        reply(@{@"action":@0}, nil); return;
+    }
+    if ([kind isEqual:@"event"]) {
+        NSString *event = body[@"event"];
+        if ([@[@"fetch-blocked", @"xhr-blocked", @"fallback", @"cancelled", @"sync-bypass"] containsObject:event]) {
+            NSUInteger count = [owner.networkRequestCounts[event] unsignedIntegerValue];
+            owner.networkRequestCounts[event] = @(MIN(count + 1, 1000000));
+        }
+        reply(@{@"action":@0}, nil); return;
+    }
+    NSString *URLString = body[@"url"], *method = body[@"method"], *api = body[@"api"];
+    if (![kind isEqual:@"match"] || ![URLString isKindOfClass:NSString.class] || URLString.length > 16384 ||
+        ![method isKindOfClass:NSString.class] || method.length > 32 || ![@[@"fetch", @"xhr"] containsObject:api]) {
+        reply(@{@"action":@0}, nil); return;
+    }
+    NSURL *URL = [NSURL URLWithString:URLString];
+    if (!URL.host.length || ![@[@"http", @"https"] containsObject:URL.scheme.lowercaseString] || !owner.adBlockEffectiveEnabled) {
+        reply(@{@"action":@0}, nil); return;
+    }
+    id frame = BrowserObjectResultForGetter(message, @"frameInfo");
+    NSURLRequest *frameRequest = BrowserObjectResultForGetter(frame, @"request");
+    // Origin and top context come from WebKit/the owner, never from page-supplied metadata.
+    NSURL *origin = frameRequest.URL;
+    if (!origin) { reply(@{@"action":@0}, nil); return; }
+    if ([origin.absoluteString isEqual:@"about:blank"]) {
+        id security = BrowserObjectResultForGetter(frame, @"securityOrigin");
+        NSString *scheme = BrowserObjectResultForGetter(security, @"protocol");
+        NSString *host = BrowserObjectResultForGetter(security, @"host");
+        if ([@[@"http", @"https"] containsObject:scheme] && host.length) {
+            NSURLComponents *components = [NSURLComponents new]; components.scheme = scheme; components.host = host;
+            SEL portSelector = NSSelectorFromString(@"port");
+            if ([security respondsToSelector:portSelector]) {
+                NSInteger port = ((NSInteger (*)(id, SEL))objc_msgSend)(security, portSelector);
+                if (port > 0) components.port = @(port);
+            }
+            origin = components.URL ?: origin;
+        }
+    }
+    NSDictionary *details = @{@"url":URLString, @"originURL":origin.absoluteString ?: @"", @"topURL":owner.request.URL.absoluteString ?: @"",
+        @"type":@"xmlhttprequest", @"method":method};
+    NSUInteger generation = owner.documentGeneration, policy = owner.adBlockPolicyGeneration;
+    NSString *token = owner.adBlockDocumentToken;
+    NSString *key = [api stringByAppendingString:@"-decisions"];
+    owner.networkRequestCounts[key] = @(MIN([owner.networkRequestCounts[key] unsignedIntegerValue] + 1, 1000000));
+    __block BOOL finished = NO;
+    __weak BrowserWebView *weakOwner = owner;
+    void (^finish)(NSDictionary *) = ^(NSDictionary *decision) {
+        if (finished) return; finished = YES;
+        BrowserWebView *current = weakOwner;
+        if (!current || current.documentGeneration != generation || current.adBlockPolicyGeneration != policy ||
+            ![token isEqual:current.adBlockDocumentToken]) { reply(@{@"cancel":@YES}, nil); return; }
+        NSInteger action = current.adBlockEffectiveEnabled ? [decision[@"action"] integerValue] : 0;
+        reply(@{@"action":@(action)}, nil);
+    };
+    [BrowserNetworkFilterEngine matchRequest:details
+        hostRules:[NSUserDefaults.standardUserDefaults stringForKey:@"AdBlockDynamicHostRules"] ?: @""
+        urlRules:[NSUserDefaults.standardUserDefaults stringForKey:@"AdBlockDynamicURLRules"] ?: @"" completion:finish];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC / 4), dispatch_get_main_queue(), ^{
+        if (!finished) {
+            BrowserWebView *current = weakOwner;
+            current.networkRequestCounts[@"fallback"] = @(MIN([current.networkRequestCounts[@"fallback"] unsignedIntegerValue] + 1, 1000000));
+            finish(@{@"action":@0});
+        }
+    });
 }
 @end
 
@@ -1472,7 +1562,7 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     for (NSDictionary *count in sBrowserUBlockStatistics.allValues) {
         scripts += [count[@"scriptlet"] unsignedIntegerValue]; cosmetics += [count[@"cosmetic"] unsignedIntegerValue]; unsupported += [count[@"unsupported"] unsignedIntegerValue];
     }
-    return [NSString stringWithFormat:@"Network core: %@ · %lu filters. Navigation decisions only; resource interception remains partial.\nWebKit: %@ · Advanced runtime: %@ · Isolated world: %@\nCompiled: %lu scriptlet rules, %lu cosmetic rules, %lu unsupported advanced rules.\nDebug observations: %lu / 128. Network request decisions are not observed by this buffer.", sBrowserNetworkSummary[@"available"] ? ([sBrowserNetworkSummary[@"available"] boolValue] ? @"available" : @"unavailable") : @"preparing", (unsigned long)[sBrowserNetworkSummary[@"count"] unsignedIntegerValue], self.adBlockStatus ?: @"off", self.adBlockRuntimeAvailable ? @"available" : @"inactive", self.adBlockIsolatedAvailable ? @"available" : @"inactive", (unsigned long)scripts, (unsigned long)cosmetics, (unsigned long)unsupported, (unsigned long)self.adBlockEvents.count];
+    return [NSString stringWithFormat:@"Network core: %@ · %lu filters. Navigation + page API adapters; resource interception remains partial.\nReply bridge: %@ · fetch observed: %@ · XHR observed: %@.\nPage decisions: %lu fetch, %lu XHR; applied blocks: %lu fetch, %lu XHR; fallback: %lu; sync XHR bypass: %lu.\nWebKit: %@ · Advanced runtime: %@ · Isolated world: %@\nCompiled: %lu scriptlet rules, %lu cosmetic rules, %lu unsupported advanced rules.\nDebug observations: %lu / 128. Network request decisions are not observed by this buffer.", sBrowserNetworkSummary[@"available"] ? ([sBrowserNetworkSummary[@"available"] boolValue] ? @"available" : @"unavailable") : @"preparing", (unsigned long)[sBrowserNetworkSummary[@"count"] unsignedIntegerValue], self.networkReplyAvailable ? @"available" : @"unavailable", self.networkFetchObserved ? @"yes" : @"no", self.networkXHRObserved ? @"yes" : @"no", (unsigned long)[self.networkRequestCounts[@"fetch-decisions"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"xhr-decisions"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"fetch-blocked"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"xhr-blocked"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"fallback"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"sync-bypass"] unsignedIntegerValue], self.adBlockStatus ?: @"off", self.adBlockRuntimeAvailable ? @"available" : @"inactive", self.adBlockIsolatedAvailable ? @"available" : @"inactive", (unsigned long)scripts, (unsigned long)cosmetics, (unsigned long)unsupported, (unsigned long)self.adBlockEvents.count];
 }
 
 - (void)didMoveToWindow {
@@ -1633,6 +1723,19 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
         self.userContentController = ((id (*)(id, SEL))objc_msgSend)(configuration, userContentControllerSelector);
     }
 
+    self.networkRequestHandler = [BrowserNetworkRequestHandler new]; self.networkRequestHandler.owner = self;
+    Class worldClass = NSClassFromString(@"WKContentWorld");
+    SEL pageWorldSelector = NSSelectorFromString(@"pageWorld");
+    SEL replySelector = NSSelectorFromString(@"addScriptMessageHandlerWithReply:contentWorld:name:");
+    if ([worldClass respondsToSelector:pageWorldSelector] && [self.userContentController respondsToSelector:replySelector]) {
+        id pageWorld = ((id (*)(id, SEL))objc_msgSend)((id)worldClass, pageWorldSelector);
+        if (pageWorld) {
+            ((void (*)(id, SEL, id, id, id))objc_msgSend)(self.userContentController, replySelector, self.networkRequestHandler, pageWorld, @"browserNetwork");
+            self.networkReplyAvailable = YES;
+        }
+    }
+    BrowserLog(@"[AdBlock] network reply bridge=%d", self.networkReplyAvailable);
+
     self.uBlockHandler = [BrowserUBlockHandler new]; self.uBlockHandler.owner = self;
     SEL uBlockHandlerSelector = NSSelectorFromString(@"addScriptMessageHandler:name:");
     if ([self.userContentController respondsToSelector:uBlockHandlerSelector])
@@ -1726,6 +1829,8 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     self.installedUBlockIdentity = nil;
     self.adBlockDocumentToken = NSUUID.UUID.UUIDString;
     self.adBlockEvents = [NSMutableArray array];
+    self.networkRequestCounts = [NSMutableDictionary dictionary];
+    self.networkFetchObserved = NO; self.networkXHRObserved = NO;
     id controller = self.userContentController;
     if (!controller) return;
     NSMutableArray *retained = [NSMutableArray array];
@@ -1734,6 +1839,18 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     NSString *markerSource = [NSString stringWithFormat:@"/* BrowserUBlockPolicy */(function(){const policy=%@;addEventListener('pageshow',function(){try{webkit.messageHandlers.browserUBlock.postMessage({event:'document-policy',identity:policy.identity,host:location.hostname.toLowerCase().replace(/\\.$/,'')})}catch(e){}})})();", markerJSON];
     id marker = BrowserCreateUserScript(markerSource, 0, YES, nil);
     if (marker) [retained addObject:marker];
+    NSMutableArray *requestScripts = [NSMutableArray array];
+    if (enabled && self.networkReplyAvailable) {
+        NSString *path = [NSBundle.mainBundle pathForResource:@"UBlockRequests" ofType:@"js"];
+        NSString *source = path ? [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:nil] : nil;
+        NSData *data = [NSJSONSerialization dataWithJSONObject:@{@"token":self.adBlockDocumentToken} options:0 error:nil];
+        NSString *JSON = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+        if (source.length && JSON.length) {
+            id script = BrowserCreateUserScript([source stringByReplacingOccurrencesOfString:@"__BROWSER_CONFIG__" withString:JSON], 0, NO, nil);
+            if (script) [requestScripts addObject:script];
+        }
+    }
+    BrowserReplaceScriptComponent(controller, @"network-requests", requestScripts);
     self.adBlockIsolatedAvailable = NO;
     self.adBlockRuntimeAvailable = runtime != nil;
     if (enabled && runtime) {

@@ -66,6 +66,7 @@
 		ADBD00000000000000000007 /* UAssets-LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = ADBC00000000000000000007 /* UAssets-LICENSE */; };
 		ADBF00000000000000000001 /* UBlockNetwork.js in Resources */ = {isa = PBXBuildFile; fileRef = ADBE00000000000000000001; };
 		ADBF00000000000000000002 /* PublicSuffixList.dat in Resources */ = {isa = PBXBuildFile; fileRef = ADBE00000000000000000002; };
+		ADBF00000000000000000003 /* UBlockRequests.js in Resources */ = {isa = PBXBuildFile; fileRef = ADBE00000000000000000003; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -171,6 +172,7 @@
 		ADBC00000000000000000007 /* UAssets-LICENSE */ = {isa = PBXFileReference; lastKnownFileType = text; name = "UAssets-LICENSE"; path = "../Vendor/UBlock/UAssets-LICENSE"; sourceTree = "<group>"; };
 		ADBE00000000000000000001 /* UBlockNetwork.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "UBlockNetwork.js"; path = "../Vendor/UBlock/UBlockNetwork.js"; sourceTree = "<group>"; };
 		ADBE00000000000000000002 /* PublicSuffixList.dat */ = {isa = PBXFileReference; lastKnownFileType = text; name = "PublicSuffixList.dat"; path = "../Vendor/UBlock/PublicSuffixList.dat"; sourceTree = "<group>"; };
+		ADBE00000000000000000003 /* UBlockRequests.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "UBlockRequests.js"; path = "../Vendor/UBlock/UBlockRequests.js"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -325,6 +327,7 @@
 				ADBC00000000000000000003 /* UBlockRuntime.js */,
 				ADBE00000000000000000002 /* PublicSuffixList.dat */,
 				ADBE00000000000000000001 /* UBlockNetwork.js */,
+				ADBE00000000000000000003 /* UBlockRequests.js */,
 				ADBC00000000000000000002 /* UBlockProcedural.js */,
 				ADBC00000000000000000001 /* UBlockScriptlets.json */,
 				ADBC00000000000000000000 /* UBlockParser.js */,
@@ -486,6 +489,7 @@
 				ADBD00000000000000000003 /* UBlockRuntime.js in Resources */,
 				ADBF00000000000000000002 /* PublicSuffixList.dat in Resources */,
 				ADBF00000000000000000001 /* UBlockNetwork.js in Resources */,
+				ADBF00000000000000000003 /* UBlockRequests.js in Resources */,
 				ADBD00000000000000000002 /* UBlockProcedural.js in Resources */,
 				ADBD00000000000000000001 /* UBlockScriptlets.json in Resources */,
 				ADBD00000000000000000000 /* UBlockParser.js in Resources */,
@@ -704,7 +708,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.23.1;
+				MARKETING_VERSION = 2.24.0;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
 			PRODUCT_NAME = "$(TARGET_NAME)";
 			SCAN_ALL_SOURCE_FILES_FOR_INCLUDES = NO;
@@ -736,7 +740,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.23.1;
+				MARKETING_VERSION = 2.24.0;
 			PRODUCT_NAME = "$(TARGET_NAME)";
 			SCAN_ALL_SOURCE_FILES_FOR_INCLUDES = NO;
 			SWIFT_VERSION = 5.0;
