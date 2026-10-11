@@ -737,6 +737,10 @@ static id BrowserPersistentWebsiteDataStore(void) {
     if (![body isKindOfClass:NSDictionary.class] || ![body[@"token"] isEqual:self.token]) return;
     if (![body[@"session"] isKindOfClass:NSString.class] || [body[@"session"] length] > 128) return;
     if ([body[@"vlcRequest"] boolValue]) {
+        // Iframes retain website playback and its existing fullscreen controls.
+        NSString *documentString = [body[@"documentURL"] isKindOfClass:NSString.class] ? body[@"documentURL"] : nil;
+        NSURL *documentURL = documentString.length > 0 && documentString.length <= 8192 ? [NSURL URLWithString:documentString] : nil;
+        if (![documentURL isEqual:request.URL]) return;
         NSString *URLString = [body[@"url"] isKindOfClass:NSString.class] ? body[@"url"] : nil;
         NSURL *URL = URLString.length > 0 && URLString.length <= 8192 ? [NSURL URLWithString:URLString] : nil;
         if (!URL.host.length || ![@[@"http", @"https"] containsObject:URL.scheme.lowercaseString]) return;
