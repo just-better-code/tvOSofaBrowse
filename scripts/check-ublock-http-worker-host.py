@@ -3,8 +3,11 @@
 
 This does not alter Browser or its website store. Synthetic responses test the transport,
 not real-server credentials, redirects, request attribution or production integration.
+Persistent mode uses only the disposable test app’s store, never Browser’s store.
 The test app is removed after the run. Logs/artifacts remain in ignored .data/.
 """
+import argparse
+import os
 import json
 import pathlib
 import platform
@@ -12,6 +15,9 @@ import plistlib
 import re
 import subprocess
 
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--persistent', action='store_true', help='Use only the isolated test app’s persistent WK store.')
+args = parser.parse_args()
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 IDENTIFIER = 'org.tvosofabrowse.workerhostprobe'
 ARTIFACT = ROOT / '.data' / 'worker-host-probe' / 'WorkerHostProbe.app'
@@ -39,16 +45,28 @@ run('xcrun', 'clang', '-target', f'{platform.machine()}-apple-tvos18.0-simulator
     str(ROOT / 'scripts/check-ublock-http-worker-host.m'), '-o', str(ARTIFACT / 'WorkerHostProbe'))
 run('xcrun', 'simctl', 'install', device, str(ARTIFACT))
 try:
-    result = subprocess.run(['xcrun', 'simctl', 'launch', '--terminate-running-process', '--console', device, IDENTIFIER],
-                            capture_output=True, text=True, timeout=35, check=False)
+    launch_env = os.environ.copy()
+    if args.persistent:
+        launch_env['SIMCTL_CHILD_WORKER_PROBE_PERSISTENT'] = '1'
+    log = ARTIFACT.parent / ('fixture-persistent.log' if args.persistent else 'fixture.log')
+    try:
+        result = subprocess.run(['xcrun', 'simctl', 'launch', '--terminate-running-process', '--console', device, IDENTIFIER],
+                                capture_output=True, text=True, timeout=35, check=False, env=launch_env)
+    except subprocess.TimeoutExpired as error:
+        def decoded(value):
+            return value.decode(errors='replace') if isinstance(value, bytes) else value or ''
+        log.write_text(decoded(error.stdout) + decoded(error.stderr))
+        raise SystemExit(f'Fixture timed out; no automatic retry. Inspect {log.relative_to(ROOT)}.')
     output = result.stdout + result.stderr
-    (ARTIFACT.parent / 'fixture.log').write_text(output)
+    log.write_text(output)
     match = re.search(r'\[WorkerHostProbe\] summary=(\{[^\n]+\})', output)
     if result.returncode != 0 or not match or json.loads(match.group(1)).get('passed') is not True:
-        raise SystemExit('Fixture failed; inspect ignored .data/worker-host-probe/fixture.log.')
-    print('Native HTTPS worker identity/import, fetch/XHR and shipped full-core blocking passed.')
+        raise SystemExit(f'Fixture failed; inspect ignored {log.relative_to(ROOT)}.')
+    print('Classic/module/nested HTTPS worker identity/import, fetch/XHR, response CSP, redirects, JS abort and full-core blocking passed.')
     print('Synthetic cookie observations:', json.dumps({key: json.loads(match.group(1)).get(key)
-          for key in ('documentCookie', 'responseCookie')}))
-    print('Production cookie, redirect, cancellation and tab/type attribution adapters remain pending.')
+          for key in ('documentCookie', 'responseCookie', 'storeDocumentCookie', 'storeResponseCookie')}))
+    summary = json.loads(match.group(1))
+    print('Transport cancellation:', summary.get('transportCancellation'))
+    print('Production cookie, transport cancellation, real-server redirects and tab/type attribution remain pending.')
 finally:
     run('xcrun', 'simctl', 'uninstall', device, IDENTIFIER, capture_output=True)
