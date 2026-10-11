@@ -2,6 +2,12 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.21.4 - 2026-10-11
+
+### Fixed
+
+- Preserve the requested page during Ad Block preparation and defer filter refreshes until navigation finishes to prevent reloading the initial blank document ([Browser navigation](_Project/Browser/BrowserWebView.m)).
+
 ## 2.21.3 - 2026-10-11
 
 ### Changed
