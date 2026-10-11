@@ -131,6 +131,16 @@ static UIColor *kTextColor(void) {
                                                object:nil];
 
     [self.tabCoordinator restoreInitialStateOrCreateFirstTab];
+#if DEBUG
+    // A launch-only URL lets local device tools open a requested page without altering saved settings.
+    NSString *launchURLString = NSProcessInfo.processInfo.environment[@"BROWSER_OPEN_URL"];
+    NSURL *launchURL = launchURLString.length ? [NSURL URLWithString:launchURLString] : nil;
+    if (launchURL.host.length && [@[@"http", @"https"] containsObject:launchURL.scheme.lowercaseString]) {
+        BOOL opened = [self.tabCoordinator createNewTabWithRequest:[NSURLRequest requestWithURL:launchURL]];
+        self.displayedHintsOnLaunch = opened;
+        BrowserLog(@"[DebugLaunch] openURLAccepted=%d", opened);
+    }
+#endif
     self.remoteInputController.magnifierEnabled = self.preferencesStore.cursorMagnifierEnabled;
 }
 
