@@ -19,7 +19,7 @@ Open the visual quick guide through **Menu → Tools → User Guide**. **Show th
 | --- | --- |
 | Move the pointer | Slide on the touchpad |
 | Click a link or button | Center |
-| Scroll a page | Up/Down; hold to accelerate |
+| Scroll a page | Up/Down; hold to accelerate; move the pointer beyond the top/bottom edge outside fullscreen |
 | Navigate tab history | Back/Forward in the six-button row below the address |
 | Open the tab overview | Double Left |
 | Close the focused overview tab | Double Up or Play/Pause |
@@ -28,6 +28,8 @@ Open the visual quick guide through **Menu → Tools → User Guide**. **Show th
 | Play/pause supported video | Play/Pause |
 
 On app-owned pages, arrows move selection and Center activates the focused item. Hold Center for its context actions; Play/Pause performs the page's shortcut. Website controls retain their own behavior. The pointer hides on inactivity; a new touchpad movement brings it back.
+
+When the pointer reaches the top or bottom of the visible page, continued outward touchpad movement scrolls vertically while the pointer stays at that edge. Move away from the edge to move the pointer again. Scrolling stops when movement stops; there is no touchpad inertia. Edge scrolling is disabled in fullscreen, native dialogs and New Tab.
 
 Page clicks and text-field reads run asynchronously. A field dialog opens after its current value is available; results from an old page or inactive tab are ignored. Navigating away while a dialog is open prevents its Done/Submit actions from writing into another document.
 

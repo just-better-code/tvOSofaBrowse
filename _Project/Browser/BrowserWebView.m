@@ -12,6 +12,10 @@
 + (void)matchRequest:(NSDictionary *)request hostRules:(NSString *)hostRules urlRules:(NSString *)urlRules completion:(void (^)(NSDictionary *))completion;
 @end
 
+@interface BrowserWebView (InputState)
+- (void)updatePageFullscreenActive:(BOOL)active;
+@end
+
 #import <dlfcn.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
@@ -379,7 +383,18 @@ static NSString *BrowserFrameClickBridgeScript(NSString *secret, NSString *nativ
                 "var lastActiveFrame = null;"
                 "var nativeToken = '%@';"
                 "%@"
+                "var nativeVideoFullscreen = false;"
+                "function reportPageFullscreenState() {"
+                    "if (window !== window.top) { return; }"
+                    "try { webkit.messageHandlers.browserFullscreenMedia.postMessage({token:nativeToken,session:'fullscreen-scope',fullscreenState:!!(fullscreenTarget || fullscreenFrame || nativeVideoFullscreen || document.fullscreenElement || document.webkitFullscreenElement)}); } catch (error) {}"
+                "}"
+                "document.addEventListener('fullscreenchange',reportPageFullscreenState,true);"
+                "document.addEventListener('webkitfullscreenchange',reportPageFullscreenState,true);"
+                "document.addEventListener('webkitbeginfullscreen',function(){nativeVideoFullscreen=true;reportPageFullscreenState();},true);"
+                "document.addEventListener('webkitendfullscreen',function(){nativeVideoFullscreen=false;reportPageFullscreenState();},true);"
+                "window.addEventListener('pageshow',reportPageFullscreenState);"
                 "function notifyFullscreenChange() {"
+                    "reportPageFullscreenState();"
                     "refreshFullscreenMedia();"
                     "try { document.dispatchEvent(new Event('fullscreenchange')); } catch (error) {}"
                     "try { document.dispatchEvent(new Event('webkitfullscreenchange')); } catch (error) {}"
@@ -762,7 +777,7 @@ static id BrowserPersistentWebsiteDataStore(void) {
 @implementation BrowserFullscreenMediaHandler
 - (void)userContentController:(id)controller didReceiveScriptMessage:(id)message {
     BrowserWebView *owner = self.owner;
-    if (!owner || owner.loading) return;
+    if (!owner) return;
     if (!owner.window) {
         [owner setFullscreenMediaControlsSuspended:YES];
         return;
@@ -774,6 +789,11 @@ static id BrowserPersistentWebsiteDataStore(void) {
     id body = [message valueForKey:@"body"];
     if (![body isKindOfClass:NSDictionary.class] || ![body[@"token"] isEqual:self.token]) return;
     if (![body[@"session"] isKindOfClass:NSString.class] || [body[@"session"] length] > 128) return;
+    if ([body[@"fullscreenState"] isKindOfClass:NSNumber.class]) {
+        [owner updatePageFullscreenActive:[body[@"fullscreenState"] boolValue]];
+        return;
+    }
+    if (owner.loading) return;
     if ([body[@"vlcRequest"] boolValue]) {
         // Only a direct video from the main document uses VLC. Iframes keep
         // the website player and its existing episode lifecycle.
@@ -1378,6 +1398,7 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 
 @property (nullable, nonatomic, strong) id runtimeWebView;
 @property (nonatomic, readwrite) NSUInteger documentGeneration;
+@property (nonatomic, readwrite) BOOL pageFullscreenActive;
 @property (nullable, nonatomic, strong) NSURLRequest *lastRequest;
 @property (nonatomic) BOOL adBlockRefreshAfterNavigation;
 @property (nullable, nonatomic, copy) NSString *lastTitle;
@@ -1418,6 +1439,8 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 @end
 
 @implementation BrowserWebView
+
+- (void)updatePageFullscreenActive:(BOOL)active { self.pageFullscreenActive = active; }
 
 - (void)handleUBlockPolicyMarker:(NSDictionary *)body {
     NSString *identity = body[@"identity"];
@@ -1986,6 +2009,7 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 }
 
 - (void)loadHTMLString:(NSString *)HTMLString {
+    self.pageFullscreenActive = NO;
     self.adBlockPolicyGeneration += 1;
     self.adBlockRefreshAfterNavigation = NO;
     self.documentGeneration += 1;
@@ -2379,6 +2403,7 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 }
 
 - (void)webView:(id)webView didStartProvisionalNavigation:(id)navigation {
+    self.pageFullscreenActive = NO;
     self.documentGeneration += 1;
     self.loading = YES;
     if ([self.delegate respondsToSelector:@selector(webViewDidStartLoad:)]) {

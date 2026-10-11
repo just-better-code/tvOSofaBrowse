@@ -647,6 +647,10 @@ static UIColor *kTextColor(void) {
     return self.presentedViewController;
 }
 
+- (BOOL)browserRemoteInputControllerPageFullscreenActive {
+    return self.webview.pageFullscreenActive || [self fullscreenMediaInputActive];
+}
+
 - (BOOL)browserRemoteInputControllerTabOverviewVisible {
     return self.tabOverviewController.visible;
 }

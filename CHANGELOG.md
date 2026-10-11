@@ -2,6 +2,12 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.23.1 - 2026-10-11
+
+### Added
+
+- Scroll pages when continued pointer movement reaches the top or bottom edge, except in fullscreen ([User Guide](docs/USER_GUIDE.md)).
+
 ## 2.23.0 - 2026-10-11
 
 ### Added

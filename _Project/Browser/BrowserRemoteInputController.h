@@ -8,6 +8,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (nullable UIScrollView *)browserRemoteInputControllerActiveScrollView;
 - (nullable UIViewController *)browserRemoteInputControllerPresentedViewController;
 - (BOOL)browserRemoteInputControllerTabOverviewVisible;
+- (BOOL)browserRemoteInputControllerPageFullscreenActive;
 - (BOOL)browserRemoteInputControllerTabOverviewContainsPoint:(CGPoint)point;
 - (BOOL)browserRemoteInputControllerHandleTabOverviewSelectionAtPoint:(CGPoint)point;
 - (void)browserRemoteInputControllerDismissTabOverview;
