@@ -45,8 +45,8 @@ static NSInteger const BrowserMediaIconTag = 891;
     self.timeLabel.textColor = UIColor.whiteColor;
     self.timeLabel.font = [UIFont monospacedDigitSystemFontOfSize:20 weight:UIFontWeightMedium];
     [panel addSubview:self.timeLabel];
-    NSArray *symbols = @[@"backward.end.fill", @"backward.end.alt.fill", @"backward.fill", @"arrowtriangle.left.fill", @"playpause.fill", @"arrowtriangle.right.fill", @"forward.fill", @"forward.end.fill", @"browser.end.fill", @"speaker.wave.2.fill"];
-    NSArray *labels = @[@"Previous media", @"Go to beginning", @"Back 10 seconds", @"Back 5 seconds", @"Pause", @"Forward 5 seconds", @"Forward 10 seconds", @"Next media", @"Go to end", @"Mute"];
+    NSArray *symbols = @[@"backward.end.fill", @"backward.end.alt.fill", @"backward.fill", @"arrowtriangle.left.fill", @"playpause.fill", @"arrowtriangle.right.fill", @"forward.fill", @"forward.end.fill", @"browser.end.fill", @"speaker.wave.2.fill", @"speaker.minus.fill", @"speaker.plus.fill"];
+    NSArray *labels = @[@"Previous media", @"Go to beginning", @"Back 10 seconds", @"Back 5 seconds", @"Pause", @"Forward 5 seconds", @"Forward 10 seconds", @"Next media", @"Go to end", @"Mute", @"Volume down", @"Volume up"];
     NSMutableArray *buttons = [NSMutableArray array];
     for (NSUInteger i = 0; i < symbols.count; i++) {
         UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -75,9 +75,13 @@ static NSInteger const BrowserMediaIconTag = 891;
         [buttons addObject:button];
     }
     self.buttons = buttons;
-    UIStackView *row = [[UIStackView alloc] initWithArrangedSubviews:@[buttons[0], buttons[2], buttons[3], buttons[1], buttons[4], buttons[8], buttons[5], buttons[6], buttons[9], buttons[7]]];
+    UIStackView *row = [[UIStackView alloc] initWithArrangedSubviews:@[buttons[0], buttons[2], buttons[3], buttons[1], buttons[4], buttons[8], buttons[5], buttons[6], buttons[7]]];
     row.translatesAutoresizingMaskIntoConstraints = NO; row.spacing = 10;
     row.alignment = UIStackViewAlignmentCenter; [panel addSubview:row];
+    UIStackView *volumeRow = [[UIStackView alloc] initWithArrangedSubviews:@[buttons[10], buttons[9], buttons[11]]];
+    volumeRow.translatesAutoresizingMaskIntoConstraints = NO;
+    volumeRow.spacing = 10; volumeRow.alignment = UIStackViewAlignmentCenter;
+    [panel addSubview:volumeRow];
     [self fillView:backdrop inView:panel];
     [NSLayoutConstraint activateConstraints:@[
         [panel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
@@ -88,6 +92,8 @@ static NSInteger const BrowserMediaIconTag = 891;
         [self.progress.topAnchor constraintEqualToAnchor:panel.topAnchor constant:20],
         [self.timeLabel.leadingAnchor constraintEqualToAnchor:self.progress.leadingAnchor],
         [self.timeLabel.topAnchor constraintEqualToAnchor:self.progress.bottomAnchor constant:10],
+        [volumeRow.leadingAnchor constraintEqualToAnchor:row.trailingAnchor constant:34],
+        [volumeRow.centerYAnchor constraintEqualToAnchor:row.centerYAnchor],
         [row.centerXAnchor constraintEqualToAnchor:panel.centerXAnchor],
         [row.topAnchor constraintEqualToAnchor:self.timeLabel.bottomAnchor constant:15.2], [row.heightAnchor constraintEqualToConstant:81.6]
     ]];
@@ -122,7 +128,13 @@ static NSInteger const BrowserMediaIconTag = 891;
     double current = [state[@"currentTime"] doubleValue], duration = [state[@"duration"] doubleValue];
     self.progress.progress = duration > 0 ? MIN(1, MAX(0, current / duration)) : 0;
     self.timeLabel.text = [NSString stringWithFormat:@"%@ / %@", [self timeText:current], duration > 0 ? [self timeText:duration] : @"--:--"];
-    NSArray *keys = @[@"active", @"canRestart", @"canSeekBack", @"canSeekBack", @"available", @"canSeekForward", @"canSeekForward", @"active", @"canEnd", @"canMute"];
+    if ([state[@"canVolume"] boolValue]) {
+        NSString *volume = [NSString stringWithFormat:@"%ld%%", (long)lround([state[@"volume"] doubleValue] * 100)];
+        self.timeLabel.text = [self.timeLabel.text stringByAppendingFormat:@"  •  Volume %@", volume];
+        self.buttons[10].accessibilityValue = volume;
+        self.buttons[11].accessibilityValue = volume;
+    }
+    NSArray *keys = @[@"active", @"canRestart", @"canSeekBack", @"canSeekBack", @"available", @"canSeekForward", @"canSeekForward", @"active", @"canEnd", @"canMute", @"canVolume", @"canVolume"];
     for (NSUInteger i = 0; i < self.buttons.count; i++) {
         self.buttons[i].enabled = [state[keys[i]] boolValue];
         self.buttons[i].alpha = self.buttons[i].enabled ? 1 : 0.35;
@@ -178,6 +190,7 @@ static NSInteger const BrowserMediaIconTag = 891;
     else if (button.tag == 7) self.sendCommand(@"next", 0);
     else if (button.tag == 8) { [self stopSeeking]; self.sendCommand(@"end", 0); }
     else if (button.tag == 9) self.sendCommand(@"mute", 0);
+    else if (button.tag == 10 || button.tag == 11) self.sendCommand(@"volume", button.tag == 10 ? -0.1 : 0.1);
     else self.sendCommand(@"seek", [self seekSeconds:button.tag]);
 }
 - (void)seekHeld:(UILongPressGestureRecognizer *)recognizer {

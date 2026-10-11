@@ -732,13 +732,15 @@ static id BrowserPersistentWebsiteDataStore(void) {
     if (![body isKindOfClass:NSDictionary.class] || ![body[@"token"] isEqual:self.token]) return;
     if (![body[@"session"] isKindOfClass:NSString.class] || [body[@"session"] length] > 128) return;
     NSMutableDictionary *state = [NSMutableDictionary dictionaryWithObject:body[@"session"] forKey:@"session"];
-    for (NSString *key in @[@"active", @"available", @"paused", @"canSeekBack", @"canSeekForward", @"canPrevious", @"canNext", @"canRestart", @"canEnd", @"muted", @"canMute"]) {
+    for (NSString *key in @[@"active", @"available", @"paused", @"canSeekBack", @"canSeekForward", @"canPrevious", @"canNext", @"canRestart", @"canEnd", @"muted", @"canMute", @"canVolume"]) {
         state[key] = @([body[key] isKindOfClass:NSNumber.class] && [body[key] boolValue]);
     }
     for (NSString *key in @[@"currentTime", @"duration"]) {
         double value = [body[key] isKindOfClass:NSNumber.class] ? [body[key] doubleValue] : 0;
         state[key] = @(isfinite(value) && value >= 0 && value < 1e12 ? value : 0);
     }
+    double volume = [body[@"volume"] isKindOfClass:NSNumber.class] ? [body[@"volume"] doubleValue] : 0;
+    state[@"volume"] = @(isfinite(volume) ? MIN(1, MAX(0, volume)) : 0);
     if ([owner.delegate respondsToSelector:@selector(webView:didUpdateFullscreenMediaState:)]) {
         [owner.delegate webView:owner didUpdateFullscreenMediaState:state];
     }
@@ -1397,6 +1399,12 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     }
 
     id configuration = ((id (*)(id, SEL))objc_msgSend)((id)configurationClass, @selector(new));
+    // Remote commands and episode transitions run outside a DOM user gesture.
+    // Do not make websites retry their next video with muted autoplay.
+    SEL mediaUserActionSelector = NSSelectorFromString(@"setMediaTypesRequiringUserActionForPlayback:");
+    if ([configuration respondsToSelector:mediaUserActionSelector]) {
+        ((void (*)(id, SEL, NSUInteger))objc_msgSend)(configuration, mediaUserActionSelector, 0);
+    }
     SEL allowsInlineMediaPlaybackSelector = NSSelectorFromString(@"setAllowsInlineMediaPlayback:");
     if (configuration != nil && [configuration respondsToSelector:allowsInlineMediaPlaybackSelector]) {
         ((void (*)(id, SEL, BOOL))objc_msgSend)(configuration, allowsInlineMediaPlaybackSelector, allowsInlineMediaPlayback);
@@ -1421,6 +1429,10 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     }
 
     self.runtimeWebView = webViewObject;
+#if DEBUG
+    // Allow Safari to inspect the authorized development build on TV.
+    BrowserSetBooleanSelectorIfAvailable(webViewObject, @"setInspectable:", YES);
+#endif
     [webViewObject addObserver:self forKeyPath:@"URL" options:0 context:&kBrowserNavigationURLObservationContext];
     [webViewObject addObserver:self forKeyPath:@"loading" options:0 context:&kBrowserNavigationURLObservationContext];
     UIView *runtimeView = (UIView *)webViewObject;

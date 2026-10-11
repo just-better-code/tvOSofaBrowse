@@ -149,6 +149,8 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     UIButton *forwardTen = [self controlButtonWithSymbol:@"forward.fill" label:@"Forward 10 seconds" action:@selector(seekForwardTenPressed)];
     UIButton *mute = [self controlButtonWithSymbol:@"speaker.wave.2.fill" label:@"Mute" action:@selector(mutePressed)];
     self.muteButton = mute;
+    UIButton *volumeDown = [self controlButtonWithSymbol:@"speaker.minus.fill" label:@"Volume down" action:@selector(volumeDownPressed)];
+    UIButton *volumeUp = [self controlButtonWithSymbol:@"speaker.plus.fill" label:@"Volume up" action:@selector(volumeUpPressed)];
     UIButton *next = [self controlButtonWithSymbol:@"forward.end.fill" label:@"Next file" action:@selector(nextFilePressed)];
     backTen.tag = -10;
     back.tag = -5;
@@ -159,7 +161,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     UIButton *subtitleTrack = [self trackButtonWithTitle:@"Subtitles: Unavailable" action:@selector(subtitleTrackPressed)];
     self.audioTrackButton = audioTrack;
     self.subtitleTrackButton = subtitleTrack;
-    NSArray<UIButton *> *mainButtons = @[previous, backTen, back, restart, play, forward, forwardTen, mute, next];
+    NSArray<UIButton *> *mainButtons = @[previous, backTen, back, restart, play, forward, forwardTen, volumeDown, mute, volumeUp, next];
     for (UIButton *button in mainButtons) {
         CGFloat diameter = (button == play || button == restart) ? 81.6 : 68;
         [button.widthAnchor constraintEqualToConstant:diameter].active = YES;
@@ -170,12 +172,17 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
         [button.heightAnchor constraintEqualToConstant:68].active = YES;
     }
     UIStackView *buttons = [[UIStackView alloc] initWithArrangedSubviews:
-        @[previous, backTen, back, restart, play, forward, forwardTen, mute, audioTrack, subtitleTrack, next]];
+        @[previous, backTen, back, restart, play, forward, forwardTen, audioTrack, subtitleTrack, next]];
     buttons.translatesAutoresizingMaskIntoConstraints = NO;
     buttons.axis = UILayoutConstraintAxisHorizontal;
     buttons.alignment = UIStackViewAlignmentCenter;
     buttons.spacing = 10;
     [controls addSubview:buttons];
+    UIStackView *volumeButtons = [[UIStackView alloc] initWithArrangedSubviews:@[volumeDown, mute, volumeUp]];
+    volumeButtons.translatesAutoresizingMaskIntoConstraints = NO;
+    volumeButtons.spacing = 10;
+    volumeButtons.alignment = UIStackViewAlignmentCenter;
+    [controls addSubview:volumeButtons];
     [NSLayoutConstraint activateConstraints:@[
         [controls.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [controls.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
@@ -190,6 +197,8 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
         [progress.topAnchor constraintEqualToAnchor:controls.topAnchor constant:20],
         [time.leadingAnchor constraintEqualToAnchor:progress.leadingAnchor],
         [time.topAnchor constraintEqualToAnchor:progress.bottomAnchor constant:10],
+        [volumeButtons.leadingAnchor constraintEqualToAnchor:buttons.trailingAnchor constant:34],
+        [volumeButtons.centerYAnchor constraintEqualToAnchor:buttons.centerYAnchor],
         [buttons.centerXAnchor constraintEqualToAnchor:controls.centerXAnchor],
         [buttons.topAnchor constraintEqualToAnchor:time.bottomAnchor constant:15.2],
         [buttons.heightAnchor constraintEqualToConstant:81.6],
@@ -584,6 +593,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     }
     self.timeLabel.text = [NSString stringWithFormat:@"%@ / %@", [self timeText:elapsed],
         duration > 0 ? [self timeText:duration] : @"--:--"];
+    self.timeLabel.text = [self.timeLabel.text stringByAppendingFormat:@"  •  Volume %d%%", self.vlcPlayer.audio.volume];
     self.progressView.progress = duration > 0 ? MIN(1.0, MAX(0.0, (double)elapsed / duration)) : 0;
     BOOL playing = self.vlcPlayer.isPlaying;
     UIImageView *playIcon = (UIImageView *)[self.playButton viewWithTag:kBrowserVLCControlIconTag];
@@ -648,6 +658,15 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     [self showControls];
     [self refreshProgress];
 }
+
+- (void)changeVolumeBy:(int)delta {
+    self.vlcPlayer.audio.volume = MAX(0, MIN(100, self.vlcPlayer.audio.volume + delta));
+    [self showControls];
+    [self refreshProgress];
+}
+
+- (void)volumeDownPressed { [self changeVolumeBy:-10]; }
+- (void)volumeUpPressed { [self changeVolumeBy:10]; }
 
 - (void)previousFilePressed { [self switchToAdjacentFileInDirection:-1]; }
 

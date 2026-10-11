@@ -2,6 +2,36 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.19.17 - 2026-10-11
+
+### Changed
+
+- Group mute between the volume buttons and separate audio controls from the independently centered main row by half a button width in iframe and VLC playback ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.19.16 - 2026-10-11
+
+### Changed
+
+- Place volume buttons in a separate group to the right of iframe and VLC controls while keeping the main row centered independently ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.19.15 - 2026-10-11
+
+### Added
+
+- Adjust player volume in 10% steps with quieter and louder buttons beside mute in fullscreen iframe and VLC controls, and show the current level on the panel ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.19.14 - 2026-10-11
+
+### Changed
+
+- Seek one second before the end with Go to End in fullscreen iframe playback controls ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.19.13 - 2026-10-11
+
+### Fixed
+
+- Allow web media to start without another website gesture so episode transitions can continue with sound instead of triggering a player’s muted autoplay fallback ([User Guide](docs/USER_GUIDE.md)).
+
 ## 2.19.12 - 2026-10-11
 
 ### Changed

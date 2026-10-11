@@ -682,7 +682,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.19.12;
+				MARKETING_VERSION = 2.19.17;
 			PRODUCT_NAME = "$(TARGET_NAME)";
 			SCAN_ALL_SOURCE_FILES_FOR_INCLUDES = NO;
 			SWIFT_VERSION = 5.0;
@@ -713,7 +713,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.19.12;
+				MARKETING_VERSION = 2.19.17;
 			PRODUCT_NAME = "$(TARGET_NAME)";
 			SCAN_ALL_SOURCE_FILES_FOR_INCLUDES = NO;
 			SWIFT_VERSION = 5.0;
