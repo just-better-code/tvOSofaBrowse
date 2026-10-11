@@ -1680,26 +1680,6 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
     return item;
 }
 
-- (void)presentAdBlockUserFilters {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"My Filters" message:@"Add a uBO network, cosmetic or +js filter. Rules are saved locally; unsupported syntax is counted in Coverage. Trusted scriptlets require a bundled trusted source." preferredStyle:UIAlertControllerStyleAlert];
-    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
-        field.placeholder = @"example.org##.advertisement";
-        field.autocorrectionType = UITextAutocorrectionTypeNo;
-        field.autocapitalizationType = UITextAutocapitalizationTypeNone;
-    }];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Add Filter" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-        NSString *rule = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-        if (!rule.length) return;
-        NSString *previous = BrowserWebView.adBlockUserFilters;
-        [BrowserWebView setAdBlockUserFilters:previous.length ? [previous stringByAppendingFormat:@"\n%@", rule] : rule];
-    }]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Clear My Filters" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
-        [BrowserWebView setAdBlockUserFilters:@""];
-    }]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-    [self.host browserPresentViewController:alert];
-}
-
 - (void)presentAdBlockSettings {
     __weak typeof(self) weakSelf = self;
     __block __weak BrowserOptionsViewController *weakSettings;
@@ -1717,9 +1697,6 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
                 BrowserWebView *view = weakSelf.host.browserWebView;
                 [view setAdBlockSiteEnabled:!view.adBlockSiteEnabled]; return;
             }
-            if ([identifier isEqualToString:@"edit-custom"]) {
-                [weakSettings dismissViewControllerAnimated:YES completion:^{ [weakSelf presentAdBlockUserFilters]; }]; return;
-            }
             if ([identifier isEqualToString:@"coverage"]) {
                 UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Ad Block Coverage" message:[weakSelf.host.browserWebView adBlockDiagnosticSummary] preferredStyle:UIAlertControllerStyleAlert];
                 [alert addAction:[UIAlertAction actionWithTitle:@"Done" style:UIAlertActionStyleCancel handler:nil]];
@@ -1733,11 +1710,11 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
     NSMutableArray *rows = [NSMutableArray array];
     if (self.host.browserWebView.request.URL.host.length) [rows addObject:@{@"id":@"site", @"title":@"This Site (including subdomains)"}];
     for (NSDictionary *source in BrowserWebView.adBlockSources) {
+        if ([source[@"id"] isEqualToString:@"custom"] && !BrowserWebView.adBlockUserFilters.length) continue;
         NSMutableDictionary *row = [source mutableCopy];
         row[@"title"] = [source[@"title"] stringByReplacingOccurrencesOfString:@"AdGuard " withString:@""];
         [rows addObject:row];
     }
-    [rows addObject:@{@"id":@"edit-custom", @"title":@"Edit My Filters", @"action":@"yes"}];
     [rows addObject:@{@"id":@"coverage", @"title":@"Coverage and Diagnostics", @"action":@"yes"}];
     settings.rows = rows;
     settings.rowEnabledProvider = ^BOOL(NSString *identifier) {

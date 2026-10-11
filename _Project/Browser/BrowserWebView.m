@@ -1529,13 +1529,6 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 + (NSString *)adBlockUserFilters {
     return [NSUserDefaults.standardUserDefaults stringForKey:kBrowserAdBlockUserFiltersKey] ?: @"";
 }
-+ (void)setAdBlockUserFilters:(NSString *)text {
-    if (text.length > 1000000) return;
-    [NSUserDefaults.standardUserDefaults setObject:text ?: @"" forKey:kBrowserAdBlockUserFiltersKey];
-    sBrowserAdBlockRulesGeneration++; sBrowserAdBlockCachedRuleLists = nil;
-    [NSNotificationCenter.defaultCenter postNotificationName:kBrowserAdBlockUpdateNotification object:nil];
-    [NSNotificationCenter.defaultCenter postNotificationName:BrowserAdBlockSourceStatusDidChangeNotification object:nil];
-}
 
 + (void)refreshAdBlockSources {
     BrowserCheckForAdBlockUpdate(YES);

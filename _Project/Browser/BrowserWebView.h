@@ -70,7 +70,6 @@ FOUNDATION_EXPORT NSString * const BrowserAdBlockSourceStatusDidChangeNotificati
 - (void)setAdBlockSiteEnabled:(BOOL)enabled;
 - (NSString *)adBlockDiagnosticSummary;
 + (NSString *)adBlockUserFilters;
-+ (void)setAdBlockUserFilters:(NSString *)text;
 
 + (nullable NSData *)cookieDataRepresentation;
 + (NSArray<NSHTTPCookie *> * _Nonnull)allCookies;

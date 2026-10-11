@@ -2,6 +2,12 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.21.5 - 2026-10-11
+
+### Removed
+
+- Remove manual custom-filter entry from Ad Block settings and hide the empty My Filters row to simplify remote-control use ([User Guide](docs/USER_GUIDE.md)).
+
 ## 2.21.4 - 2026-10-11
 
 ### Fixed
