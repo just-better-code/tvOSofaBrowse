@@ -1359,7 +1359,6 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 @property (nullable, nonatomic, strong) id runtimeWebView;
 @property (nonatomic, readwrite) NSUInteger documentGeneration;
 @property (nullable, nonatomic, strong) NSURLRequest *lastRequest;
-@property (nullable, nonatomic, strong) NSURLRequest *pendingRequest;
 @property (nonatomic) BOOL adBlockRefreshAfterNavigation;
 @property (nullable, nonatomic, copy) NSString *lastTitle;
 @property (nonatomic, copy) NSString *userAgent;
@@ -1793,25 +1792,50 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     });
 }
 
-- (void)setAdBlockEnabled:(BOOL)enabled {
-    _adBlockEnabled = enabled;
-    if (enabled) BrowserCheckForAdBlockUpdateIfNeeded();
-    // Rule preparation is part of navigation, even before WebKit reports loading.
-    // Do not invalidate its completion and then reload the previous blank document.
-    if (self.pendingRequest || self.loading) {
+// A page may start with the already installed protection while new lists compile.
+// Once preparation changes the policy, reload that document exactly once.
+- (void)reloadWithPreparedAdBlock {
+    // Reload only the requested page, never its previous about:blank document.
+    // Once WebKit has reached it, do not wait for every iframe/resource to finish.
+    if (![self.currentURL isEqual:self.adBlockPolicyURL]) {
         self.adBlockRefreshAfterNavigation = YES;
         return;
     }
-    NSURL *URL = self.request.URL;
-    if (![@[@"http", @"https"] containsObject:URL.scheme.lowercaseString]) return;
     self.adBlockRefreshAfterNavigation = NO;
+    [self reloadRuntimeWebView];
+}
+
+- (void)prepareAdBlockForNavigationURL:(NSURL *)URL {
+    NSString *previousIdentity = self.installedUBlockIdentity;
+    NSArray *previousRules = self.appliedAdBlockRuleLists;
+    __block BOOL returned = NO;
     __weak typeof(self) weakSelf = self;
     [self prepareAdBlockForURL:URL completion:^(BOOL ready) {
-        if (ready) [weakSelf reloadRuntimeWebView];
+        BrowserWebView *owner = weakSelf;
+        if (!ready || !owner || !returned) return;
+        BOOL sameScripts = previousIdentity == owner.installedUBlockIdentity ||
+            [previousIdentity isEqualToString:owner.installedUBlockIdentity];
+        BOOL sameRules = previousRules == owner.appliedAdBlockRuleLists ||
+            [previousRules isEqualToArray:owner.appliedAdBlockRuleLists];
+        if (!sameScripts || !sameRules) [owner reloadWithPreparedAdBlock];
+    }];
+    // Synchronous preparation finishes before WebKit starts this document.
+    returned = YES;
+}
+
+- (void)setAdBlockEnabled:(BOOL)enabled {
+    _adBlockEnabled = enabled;
+    if (enabled) BrowserCheckForAdBlockUpdateIfNeeded();
+    NSURL *URL = self.loading ? self.lastRequest.URL : self.request.URL;
+    if (![@[@"http", @"https"] containsObject:URL.scheme.lowercaseString]) return;
+    __weak typeof(self) weakSelf = self;
+    [self prepareAdBlockForURL:URL completion:^(BOOL ready) {
+        if (ready) [weakSelf reloadWithPreparedAdBlock];
     }];
 }
 
 - (void)reloadRuntimeWebView {
+    self.loading = YES;
     self.documentGeneration += 1;
     SEL selector = NSSelectorFromString(@"reload");
     if ([self.runtimeWebView respondsToSelector:selector]) ((void (*)(id, SEL))objc_msgSend)(self.runtimeWebView, selector);
@@ -1850,7 +1874,6 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 }
 
 - (NSURLRequest *)request {
-    if (self.pendingRequest) return self.pendingRequest;
     NSURL *currentURL = [self currentURL];
     if (currentURL != nil) {
         return [NSURLRequest requestWithURL:currentURL];
@@ -1954,23 +1977,18 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 
 - (void)loadRequest:(NSURLRequest *)request {
     if (!request || !self.runtimeWebView) return;
+    self.adBlockPolicyGeneration += 1;
+    self.adBlockRefreshAfterNavigation = NO;
     self.documentGeneration += 1;
     self.lastRequest = request;
-    self.pendingRequest = request;
+    self.loading = YES;
     [self applyDomainZoomForURL:request.URL];
-    __weak typeof(self) weakSelf = self;
-    [self prepareAdBlockForURL:request.URL completion:^(BOOL ready) {
-        BrowserWebView *owner = weakSelf;
-        if (!ready || !owner) return;
-        owner.pendingRequest = nil;
-        SEL selector = NSSelectorFromString(@"loadRequest:");
-        if ([owner.runtimeWebView respondsToSelector:selector]) ((id (*)(id, SEL, id))objc_msgSend)(owner.runtimeWebView, selector, request);
-    }];
+    SEL selector = NSSelectorFromString(@"loadRequest:");
+    if ([self.runtimeWebView respondsToSelector:selector]) ((id (*)(id, SEL, id))objc_msgSend)(self.runtimeWebView, selector, request);
 }
 
 - (void)loadHTMLString:(NSString *)HTMLString {
     self.adBlockPolicyGeneration += 1;
-    self.pendingRequest = nil;
     self.adBlockRefreshAfterNavigation = NO;
     self.documentGeneration += 1;
     if (self.runtimeWebView == nil || HTMLString.length == 0) {
@@ -1985,13 +2003,10 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 }
 
 - (void)reload {
-    if (self.pendingRequest) { [self loadRequest:self.pendingRequest]; return; }
-    __weak typeof(self) weakSelf = self;
-    [self prepareAdBlockForURL:self.request.URL completion:^(BOOL ready) { if (ready) [weakSelf reloadRuntimeWebView]; }];
+    [self reloadRuntimeWebView];
 }
 
 - (void)stopLoading {
-    self.pendingRequest = nil;
     self.adBlockRefreshAfterNavigation = NO;
     self.adBlockPolicyGeneration += 1;
     self.documentGeneration += 1;
@@ -2004,7 +2019,6 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 
 - (void)goBack {
     self.adBlockPolicyGeneration += 1;
-    self.pendingRequest = nil;
     self.documentGeneration += 1;
     SEL selector = NSSelectorFromString(@"goBack");
     if (self.runtimeWebView != nil && [self.runtimeWebView respondsToSelector:selector]) {
@@ -2014,7 +2028,6 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 
 - (void)goForward {
     self.adBlockPolicyGeneration += 1;
-    self.pendingRequest = nil;
     self.documentGeneration += 1;
     SEL selector = NSSelectorFromString(@"goForward");
     if (self.runtimeWebView != nil && [self.runtimeWebView respondsToSelector:selector]) {
@@ -2416,11 +2429,10 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 - (void)webView:(id)webView didCommitNavigation:(id)navigation {
     self.documentGeneration += 1;
     [self applyDomainZoomForURL:[self request].URL];
+    if (self.adBlockRefreshAfterNavigation) [self reloadWithPreparedAdBlock];
 }
 
 - (void)webView:(id)webView didFinishNavigation:(id)navigation {
-    // A previous document may finish while its replacement waits for filters.
-    if (self.pendingRequest) return;
     self.loading = NO;
     if (self.adBlockEnabled && [self.adBlockStatus isEqualToString:@"on"]) {
         BrowserCheckForAdBlockUpdateIfNeeded();
@@ -2435,11 +2447,10 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     if ([self.delegate respondsToSelector:@selector(webViewDidFinishLoad:)]) {
         [self.delegate webViewDidFinishLoad:self];
     }
-    if (self.adBlockRefreshAfterNavigation) [self setAdBlockEnabled:self.adBlockEnabled];
+    if (self.adBlockRefreshAfterNavigation) [self reloadWithPreparedAdBlock];
 }
 
 - (void)webView:(id)webView didFailNavigation:(id)navigation withError:(NSError *)error {
-    if (self.pendingRequest) return;
     self.loading = NO;
     self.adBlockRefreshAfterNavigation = NO;
     if ([self.delegate respondsToSelector:@selector(webView:didFailLoadWithError:)]) {
@@ -2448,7 +2459,6 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 }
 
 - (void)webView:(id)webView didFailProvisionalNavigation:(id)navigation withError:(NSError *)error {
-    if (self.pendingRequest) return;
     self.loading = NO;
     self.adBlockRefreshAfterNavigation = NO;
     if ([self.delegate respondsToSelector:@selector(webView:didFailLoadWithError:)]) {
@@ -2500,24 +2510,19 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
         }
     }
 
-    // A newly requested URL owns navigation while its filters are being prepared.
-    if (isMainFrameRequest && self.pendingRequest) {
-        if (decisionHandler) decisionHandler(0);
-        return;
-    }
     BOOL shouldAllow = YES;
     if ([self.delegate respondsToSelector:@selector(webView:shouldStartLoadWithRequest:navigationType:)]) {
         shouldAllow = [self.delegate webView:self shouldStartLoadWithRequest:request navigationType:navigationType];
     }
 
-    if (shouldAllow && isMainFrameRequest && request != nil && !self.pendingRequest) {
+    if (shouldAllow && isMainFrameRequest && request != nil) {
         self.lastRequest = request;
     }
 
     if (shouldAllow && isMainFrameRequest && request) {
+        self.adBlockRefreshAfterNavigation = NO;
         self.loading = YES;
-        [self prepareAdBlockForURL:request.URL completion:^(BOOL ready) { if (decisionHandler) decisionHandler(ready ? 1 : 0); }];
-        return;
+        [self prepareAdBlockForNavigationURL:request.URL];
     }
     if (decisionHandler) decisionHandler(shouldAllow ? 1 : 0);
 }
@@ -2529,7 +2534,6 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     if ([navigationResponse respondsToSelector:mainFrameSelector]) {
         isMainFrame = ((BOOL (*)(id, SEL))objc_msgSend)(navigationResponse, mainFrameSelector);
     }
-    if (isMainFrame && self.pendingRequest) { decisionHandler(0); return; }
     NSURLResponse *response = nil;
     SEL responseSelector = NSSelectorFromString(@"response");
     if ([navigationResponse respondsToSelector:responseSelector]) {
@@ -2540,9 +2544,10 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
         [self.delegate respondsToSelector:@selector(webView:shouldImportTorrentResponse:request:)]) {
         imported = [self.delegate webView:self shouldImportTorrentResponse:response request:self.lastRequest];
     }
-    if (!imported && isMainFrame && response.URL) {
-        [self prepareAdBlockForURL:response.URL completion:^(BOOL ready) { decisionHandler(ready ? 1 : 0); }];
-        return;
+    if (!imported && isMainFrame && response.URL && ![response.URL isEqual:self.adBlockPolicyURL]) {
+        // Redirects can change the site's policy; prepare it without holding the response.
+        self.lastRequest = [NSURLRequest requestWithURL:response.URL];
+        [self prepareAdBlockForNavigationURL:response.URL];
     }
     decisionHandler(imported ? 0 : 1);
 }

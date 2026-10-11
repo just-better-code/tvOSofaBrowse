@@ -2,6 +2,12 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.21.6 - 2026-10-11
+
+### Fixed
+
+- Open pages without waiting for filter compilation, then reload with the prepared Ad Block policy when it becomes available ([User Guide](docs/USER_GUIDE.md)).
+
 ## 2.21.5 - 2026-10-11
 
 ### Removed
