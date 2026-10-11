@@ -26,19 +26,17 @@ function directVideoSource(video) {
     return /^https?:$/.test(source.protocol) && source.hostname && source.href.length <= 8192 ? source.href : null;
 }
 window.__browserTVOpenControlledVideo = function(element) {
-    if (!element || element.tagName !== 'VIDEO' || !element.controls || !directVideoSource(element)) return false;
+    if (window !== window.top || !element || element.tagName !== 'VIDEO' || !element.controls || !directVideoSource(element)) return false;
     enterFullscreen(element);
     return true;
 };
 function publishVLCRequest(id, info) {
-    if (window !== window.top) {
-        window.parent.postMessage({browserTVVLCRequest: secret, id: id, info: info}, '*');
-    } else {
-        try { window.webkit.messageHandlers.browserFullscreenMedia.postMessage(
-            Object.assign({token: nativeToken, session: id, vlcRequest: true}, info)); } catch (error) {}
-    }
+    if (window !== window.top) return;
+    try { window.webkit.messageHandlers.browserFullscreenMedia.postMessage(
+        Object.assign({token:nativeToken,session:id,vlcRequest:true},info)); } catch(error) {}
 }
 function requestVLCFullscreen(element) {
+    if (window !== window.top) return;
     var videos = element.tagName === 'VIDEO' ? [element] : Array.prototype.slice.call(element.querySelectorAll('video'));
     var video = videos.find(function(v) { return !v.paused && !v.ended; }) || videos[0];
     if (!video) return;
@@ -59,10 +57,7 @@ window.__browserTVVLCRequestIsCurrent = function(id) {
 window.__browserTVVLCResponse = function(id, action, time, volume, muted) {
     var request = mediaVLCRequests[id];
     if (!request) return false;
-    if (request.frame) {
-        request.frame.postMessage({browserTVVLCResponse: secret, id: id, action: action,
-            time: time, volume: volume, muted: muted}, '*');
-    } else if (request.video && request.video.isConnected) {
+    if (request.video && request.video.isConnected) {
         var video = request.video;
         if (action === 'accepted') video.pause();
         if (action === 'closed' && (video.currentSrc || video.src) === request.url) {
@@ -77,19 +72,6 @@ window.__browserTVVLCResponse = function(id, action, time, volume, muted) {
     else delete mediaVLCRequests[id];
     return true;
 };
-window.addEventListener('message', function(event) {
-    var data = event.data;
-    if (!data) return;
-    if (data.browserTVVLCRequest === secret) {
-        var frame = mediaFrame();
-        if (!frame || event.source !== frame.contentWindow || typeof data.id !== 'string' || data.id.length > 128 ||
-            !data.info || typeof data.info.url !== 'string' || data.info.url.length > 8192) return;
-        mediaVLCRequests[data.id] = {frame: event.source};
-        publishVLCRequest(data.id, data.info);
-    } else if (window !== window.top && event.source === window.parent && data.browserTVVLCResponse === secret) {
-        window.__browserTVVLCResponse(data.id, data.action, data.time, data.volume, data.muted);
-    }
-});
 document.addEventListener('loadedmetadata', function(event) {
     if (event.target && event.target.tagName === 'VIDEO') mediaVolumeVideos.delete(event.target);
 }, true);

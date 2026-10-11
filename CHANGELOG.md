@@ -2,6 +2,12 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.20.4 - 2026-10-11
+
+### Fixed
+
+- Keep iframe video in the website player with its existing fullscreen controls and episode lifecycle, reserving direct VLC playback for the main document ([User Guide](docs/USER_GUIDE.md)).
+
 ## 2.20.3 - 2026-10-11
 
 ### Fixed
