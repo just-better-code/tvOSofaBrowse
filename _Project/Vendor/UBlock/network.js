@@ -1,6 +1,6 @@
 // tvOSofaBrowse host adapter. Upstream engines remain unmodified.
 const firewall = new HostEngine(), urls = new URLEngine();
-let ready = false;
+let ready = false, installedHostRules, installedURLRules;
 globalThis.browserCompileNetwork = function(lists, cached, suffixes) {
     psl.parse(suffixes, punycode.toASCII);
     snfe.reset();
@@ -43,8 +43,9 @@ globalThis.browserCompileNetwork = function(lists, cached, suffixes) {
     return {compiled,stats,count:snfe.getFilterCount(),cached:!!cached};
 };
 globalThis.browserSetDynamicNetwork = function(hostRules, urlRules) {
-    firewall.fromString(hostRules || '');
-    urls.fromString(urlRules || '');
+    hostRules ||= ''; urlRules ||= '';
+    if (hostRules !== installedHostRules) { firewall.fromString(hostRules); installedHostRules = hostRules; }
+    if (urlRules !== installedURLRules) { urls.fromString(urlRules); installedURLRules = urlRules; }
 };
 globalThis.browserMatchNetwork = function(details) {
     if (!ready) return {action:0,engine:'unavailable'};

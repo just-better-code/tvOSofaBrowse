@@ -1571,12 +1571,37 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 #endif
 }
 
+// WebKit's action callback reports an applied content-rule action, unlike a
+// matcher prediction. Do not retain URL/query/credentials supplied by WebKit.
+- (void)_webView:(id)webView contentRuleListWithIdentifier:(NSString *)identifier performedAction:(id)action forURL:(NSURL *)URL {
+#if DEBUG
+    if (webView != self.runtimeWebView || !BrowserPreferencesStore.websiteLoggingEnabled ||
+        !self.adBlockEffectiveEnabled || ![identifier hasPrefix:kBrowserAdBlockRuleListIdentifier]) return;
+    NSMutableDictionary *event = [@{@"event":@"native-resource-action"} mutableCopy];
+    NSArray *properties = @[@"blockedLoad", @"blockedCookies", @"madeHTTPS", @"redirected", @"modifiedHeaders"];
+    for (NSString *property in properties) {
+        SEL selector = NSSelectorFromString(property);
+        if (![action respondsToSelector:selector]) continue;
+        BOOL applied = ((BOOL (*)(id, SEL))objc_msgSend)(action, selector);
+        event[property] = @(applied);
+        if (applied) {
+            NSString *key = [@"native-" stringByAppendingString:property];
+            self.networkRequestCounts[key] = @(MIN([self.networkRequestCounts[key] unsignedIntegerValue] + 1, 1000000));
+        }
+    }
+    self.networkRequestCounts[@"native-actions"] = @(MIN([self.networkRequestCounts[@"native-actions"] unsignedIntegerValue] + 1, 1000000));
+    if (self.adBlockEvents.count >= 128) [self.adBlockEvents removeObjectAtIndex:0];
+    [self.adBlockEvents addObject:event];
+    BrowserLog(@"[AdBlock] observed=%@", event);
+#endif
+}
+
 - (NSString *)adBlockDiagnosticSummary {
     NSUInteger scripts = 0, cosmetics = 0, unsupported = 0;
     for (NSDictionary *count in sBrowserUBlockStatistics.allValues) {
         scripts += [count[@"scriptlet"] unsignedIntegerValue]; cosmetics += [count[@"cosmetic"] unsignedIntegerValue]; unsupported += [count[@"unsupported"] unsignedIntegerValue];
     }
-    return [NSString stringWithFormat:@"Network core: %@ · %lu filters. Navigation + page/Blob-worker API adapters; resource interception remains partial.\nReply bridge: %@ · fetch observed: %@ · XHR observed: %@.\nPage/worker decisions: %lu fetch, %lu XHR; applied blocks: %lu fetch, %lu XHR; fallback: %lu; sync XHR bypass: %lu.\nBlob workers: %lu ready, %lu bypassed, %lu unready.\nWebKit: %@ · Advanced runtime: %@ · Isolated world: %@\nCompiled: %lu scriptlet rules, %lu cosmetic rules, %lu unsupported advanced rules.\nDebug observations: %lu / 128. Network request decisions are not observed by this buffer.", sBrowserNetworkSummary[@"available"] ? ([sBrowserNetworkSummary[@"available"] boolValue] ? @"available" : @"unavailable") : @"preparing", (unsigned long)[sBrowserNetworkSummary[@"count"] unsignedIntegerValue], self.networkReplyAvailable ? @"available" : @"unavailable", self.networkFetchObserved ? @"yes" : @"no", self.networkXHRObserved ? @"yes" : @"no", (unsigned long)[self.networkRequestCounts[@"fetch-decisions"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"xhr-decisions"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"fetch-blocked"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"xhr-blocked"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"fallback"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"sync-bypass"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"worker-ready"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"worker-bypass"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"worker-unready"] unsignedIntegerValue], self.adBlockStatus ?: @"off", self.adBlockRuntimeAvailable ? @"available" : @"inactive", self.adBlockIsolatedAvailable ? @"available" : @"inactive", (unsigned long)scripts, (unsigned long)cosmetics, (unsigned long)unsupported, (unsigned long)self.adBlockEvents.count];
+    return [NSString stringWithFormat:@"Network core: %@ · %lu filters. Navigation + page/Blob-worker API adapters; resource interception remains partial.\nReply bridge: %@ · fetch observed: %@ · XHR observed: %@.\nPage/worker decisions: %lu fetch, %lu XHR; applied blocks: %lu fetch, %lu XHR; fallback: %lu; sync XHR bypass: %lu.\nBlob workers: %lu ready, %lu bypassed, %lu unready.\nWebKit: %@ · Advanced runtime: %@ · Isolated world: %@\nCompiled: %lu scriptlet rules, %lu cosmetic rules, %lu unsupported advanced rules.\nDebug observations: %lu / 128. Native resource actions (Debug): %lu callbacks, %lu blocked loads, %lu blocked cookies, %lu HTTPS upgrades, %lu redirects, %lu header changes. Actions are observed; allowed traffic and request type/source line are not supplied by this callback.", sBrowserNetworkSummary[@"available"] ? ([sBrowserNetworkSummary[@"available"] boolValue] ? @"available" : @"unavailable") : @"preparing", (unsigned long)[sBrowserNetworkSummary[@"count"] unsignedIntegerValue], self.networkReplyAvailable ? @"available" : @"unavailable", self.networkFetchObserved ? @"yes" : @"no", self.networkXHRObserved ? @"yes" : @"no", (unsigned long)[self.networkRequestCounts[@"fetch-decisions"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"xhr-decisions"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"fetch-blocked"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"xhr-blocked"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"fallback"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"sync-bypass"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"worker-ready"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"worker-bypass"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"worker-unready"] unsignedIntegerValue], self.adBlockStatus ?: @"off", self.adBlockRuntimeAvailable ? @"available" : @"inactive", self.adBlockIsolatedAvailable ? @"available" : @"inactive", (unsigned long)scripts, (unsigned long)cosmetics, (unsigned long)unsupported, (unsigned long)self.adBlockEvents.count, (unsigned long)[self.networkRequestCounts[@"native-actions"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"native-blockedLoad"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"native-blockedCookies"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"native-madeHTTPS"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"native-redirected"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"native-modifiedHeaders"] unsignedIntegerValue]];
 }
 
 - (void)didMoveToWindow {

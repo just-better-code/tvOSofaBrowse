@@ -2,6 +2,16 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.21.18 - 2026-10-11
+
+### Added
+
+- Report applied native WebKit content-rule actions in the bounded Debug buffer and Ad Block coverage counters without retaining request URLs ([Native adapter](_Project/Browser/BrowserWebView.m)).
+
+### Fixed
+
+- Reuse unchanged dynamic network rules between request decisions to avoid repeatedly parsing the policy ([Network adapter](_Project/Vendor/UBlock/network.js)).
+
 ## 2.21.17 - 2026-10-11
 
 ### Added
