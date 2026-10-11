@@ -41,3 +41,22 @@ assert.equal(match(sitePolicies, '', {topURL:'https://child.site.example/',url:'
 assert.equal(match(sitePolicies, '', {url:'https://site.example/first-party'}).action, 0);
 assert.equal(match(sitePolicies, '', {topURL:'https://site.example.evil.net/',url:'https://clean.example/resource'}).action, 0);
 console.log('Site policy upstream decisions pass ancestor block, specific allow/noop, static fallback, first-party and hostname boundaries.');
+
+// A persisted ready engine must survive a fresh VM, including typed tries,
+// regular-expression buckets, exceptions and request modifiers.
+const snapshot = context.browserSerializeNetwork();
+const restored = vm.createContext({URL, TextDecoder, performance, setTimeout, clearTimeout, console});
+vm.runInContext(fs.readFileSync('_Project/Vendor/UBlock/UBlockNetwork.js', 'utf8'), restored);
+assert.equal(restored.browserRestoreNetwork(snapshot, 'com\norg\nnet\nexample\n').snapshot, true);
+assert.equal(restored.browserMatchNetwork(request).action, 1);
+assert.equal(restored.browserMatchNetwork({...request,url:'https://advert.example/allowed'}).action, 2);
+assert.equal(restored.browserMatchNetwork({...request,url:'https://site.example/?utm_source=ad&ok=1'}).modifiedURL,'https://site.example/?ok=1');
+restored.browserSetDynamicNetwork('site.example advert.example * allow','');
+assert.equal(restored.browserMatchNetwork(request).action,2);
+assert.equal(restored.browserRestoreNetwork('{broken', 'com\n'),undefined);
+assert.equal(restored.browserMatchNetwork(request).engine,'unavailable');
+assert.equal(restored.browserRestoreNetwork(snapshot.replace('"format":1','"format":999'),'com\n'),undefined);
+restored.browserCompileNetwork(list, built.compiled, 'com\norg\nnet\nexample\n');
+restored.browserSetDynamicNetwork('','');
+assert.equal(restored.browserMatchNetwork(request).action,1);
+console.log('Fresh-VM ready snapshots preserve blocking, exceptions, modifiers and dynamic policy; corrupt/versioned caches fall back safely.');

@@ -18924,4 +18924,48 @@ globalThis.browserMatchNetwork = function(details) {
     return result;
 };
 
+// Cache the ready upstream engine, including optimized tries, rather than
+// rebuilding it from compiled filter records on every process launch.
+const snapshotTypes = Object.assign(Object.create(null), { Int32Array, Uint32Array, Uint8Array });
+globalThis.browserSerializeNetwork = function() {
+    if (!ready) return '';
+    return JSON.stringify({format:1,engine:snfe.toSelfie()}, (_, value) => {
+        if (value instanceof Map) return {$browserType:'Map',data:Array.from(value)};
+        if (value instanceof Set) return {$browserType:'Set',data:Array.from(value)};
+        if (value instanceof RegExp) return {$browserType:'RegExp',source:value.source,flags:value.flags};
+        if (ArrayBuffer.isView(value)) {
+            const type = value.constructor.name;
+            if (!snapshotTypes[type]) throw new Error('Unsupported snapshot array');
+            return {$browserType:type,data:Array.from(value)};
+        }
+        return value;
+    });
+};
+globalThis.browserRestoreNetwork = function(snapshot, suffixes) {
+    ready = false;
+    try {
+        const cached = JSON.parse(snapshot, (_, value) => {
+            if (!value || typeof value !== 'object' || !value.$browserType) return value;
+            const type = value.$browserType;
+            if (type === 'RegExp') return new RegExp(value.source, value.flags);
+            if (!Array.isArray(value.data)) throw new Error('Invalid snapshot collection');
+            if (type === 'Map') return new Map(value.data);
+            if (type === 'Set') return new Set(value.data);
+            if (snapshotTypes[type]) return new snapshotTypes[type](value.data);
+            throw new Error('Invalid snapshot type');
+        });
+        if (cached.format !== 1 || !(cached.engine?.bitsToBucket instanceof Map)) return;
+        for (const bucket of cached.engine.bitsToBucket.values()) {
+            if (!(bucket instanceof Map)) return;
+        }
+        psl.parse(suffixes, punycode.toASCII);
+        if (snfe.fromSelfie(cached.engine) !== true) return;
+        ready = true;
+        return {count:snfe.getFilterCount(),cached:true,snapshot:true};
+    } catch (_) {
+        // A stale/corrupt snapshot is disposable. The host retries compiled
+        // records or the source lists in this same isolated candidate runtime.
+    }
+};
+
 })();

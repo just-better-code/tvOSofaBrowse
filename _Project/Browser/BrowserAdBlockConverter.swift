@@ -114,17 +114,24 @@ extension BrowserAdBlockConverter {
 
 // Full upstream network engines have their own context and serial worker. No page
 // contains this bundle, and a request decision never waits on the main thread.
+// Each candidate owns its JS VM, timers and serial queue. Building a replacement
+// never queues behind (or resets) the VM currently making network decisions.
+private final class BrowserNetworkRuntime {
+    let queue = DispatchQueue(label: "browser.ublock.network.runtime", qos: .userInitiated)
+    var context: JSContext?
+    var timerID = 0
+    var timers = [Int: JSValue]()
+}
+
 @objc(BrowserNetworkFilterEngine)
 final class BrowserNetworkFilterEngine: NSObject {
-    private static let worker = DispatchQueue(label: "browser.ublock.network", qos: .userInitiated)
-    private static var context: JSContext?
+    // Access these only on the main queue.
+    private static var installed: BrowserNetworkRuntime?
     private static var installedIdentity = ""
     private static var installedSummary: NSDictionary = [:]
-    private static var timerID = 0
-    private static var timers = [Int: JSValue]()
-    private static var ready = false // Accessed only on main queue.
+    private static var preparationGeneration = 0
 
-    private static func createContext() -> JSContext? {
+    private static func createContext(runtime: BrowserNetworkRuntime) -> JSContext? {
         guard let context = JSContext(),
               let url = Bundle.main.url(forResource: "UBlockNetwork", withExtension: "js"),
               let source = try? String(contentsOf: url, encoding: .utf8) else { return nil }
@@ -135,17 +142,18 @@ final class BrowserNetworkFilterEngine: NSObject {
         let decode: @convention(block) ([NSNumber]) -> String = { bytes in
             String(decoding: bytes.map { UInt8(truncating: $0) }, as: UTF8.self)
         }
-        let schedule: @convention(block) (JSValue, Double) -> Int = { callback, milliseconds in
-            timerID += 1
-            let id = timerID
-            timers[id] = callback
-            worker.asyncAfter(deadline: .now() + max(0.001, milliseconds / 1000)) {
-                guard let callback = timers.removeValue(forKey: id) else { return }
+        let schedule: @convention(block) (JSValue, Double) -> Int = { [weak runtime] callback, milliseconds in
+            guard let runtime else { return 0 }
+            runtime.timerID += 1
+            let id = runtime.timerID
+            runtime.timers[id] = callback
+            runtime.queue.asyncAfter(deadline: .now() + max(0.001, milliseconds / 1000)) { [weak runtime] in
+                guard let callback = runtime?.timers.removeValue(forKey: id) else { return }
                 callback.call(withArguments: [])
             }
             return id
         }
-        let cancel: @convention(block) (Int) -> Void = { timers.removeValue(forKey: $0) }
+        let cancel: @convention(block) (Int) -> Void = { [weak runtime] id in runtime?.timers.removeValue(forKey: id) }
         context.setObject(normalize, forKeyedSubscript: "browserNormalizeHostname" as NSString)
         context.setObject(decode, forKeyedSubscript: "browserDecodeBytes" as NSString)
         context.setObject(schedule, forKeyedSubscript: "setTimeout" as NSString)
@@ -153,74 +161,112 @@ final class BrowserNetworkFilterEngine: NSObject {
         context.evaluateScript("""
         globalThis.performance={now:()=>Date.now()};
         globalThis.TextDecoder=class {decode(bytes){return browserDecodeBytes(Array.from(bytes||[]));}};
-        // The parser needs hostname normalization only. URL-transform/redirect
-        // delivery requires a separate host adapter and is not enabled here.
         globalThis.URL=class {constructor(){this._hostname='';}get hostname(){return this._hostname;}set hostname(value){this._hostname=browserNormalizeHostname(value);}};
         """)
         context.evaluateScript(source)
-        if let exception = context.exception {
-            #if DEBUG
-            NSLog("[AdBlock] network bootstrap error: %@", exception.toString() ?? "unknown")
-            #endif
-            return nil
-        }
-        return context
+        return context.exception == nil ? context : nil
     }
 
     @objc(prepareLists:identity:completion:)
     static func prepare(lists: NSArray, identity: String, completion: @escaping (NSDictionary) -> Void) {
         dispatchPrecondition(condition: .onQueue(.main))
-        ready = false
-        worker.async {
-            if installedIdentity == identity, context != nil {
-                DispatchQueue.main.async { ready = true; completion(installedSummary) }
-                return
-            }
-            if context == nil { context = createContext() }
-            guard let context = context,
+        preparationGeneration += 1
+        let generation = preparationGeneration
+        if installedIdentity == identity, installed != nil {
+            completion(installedSummary)
+            return
+        }
+        let candidate = BrowserNetworkRuntime()
+        candidate.queue.async {
+            let started = Date()
+            guard let context = createContext(runtime: candidate),
                   let suffixURL = Bundle.main.url(forResource: "PublicSuffixList", withExtension: "dat"),
                   let suffixes = try? String(contentsOf: suffixURL, encoding: .utf8) else {
                 DispatchQueue.main.async { completion(["available": false, "error": 1]) }
                 return
             }
+            candidate.context = context
             let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
                 .appendingPathComponent("BrowserNetworkRules", isDirectory: true)
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let cacheURL = directory.appendingPathComponent("network-v2-\(identity).json")
-            let cache = (try? Data(contentsOf: cacheURL)).flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
-            context.exception = nil
-            var result = context.objectForKeyedSubscript("browserCompileNetwork")?.call(withArguments: [lists, cache?["compiled"] as? String ?? "", suffixes])
-            if context.exception != nil, cache != nil {
-                context.exception = nil
-                result = context.objectForKeyedSubscript("browserCompileNetwork")?.call(withArguments: [lists, "", suffixes])
+            let cacheURL = directory.appendingPathComponent("network-v3-\(identity).json")
+            func readCache(_ url: URL) -> [String: Any]? {
+                (try? Data(contentsOf: url)).flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
             }
-            guard context.exception == nil, var compiled = result?.toDictionary() as? [String: Any],
-                  let text = compiled.removeValue(forKey: "compiled") as? String else {
-                installedIdentity = ""
+            let cache = readCache(cacheURL) ?? readCache(directory.appendingPathComponent("network-v2-\(identity).json"))
+            var fingerprint: UInt64 = 14695981039346656037
+            let engineSource = Bundle.main.url(forResource: "UBlockNetwork", withExtension: "js").flatMap { try? Data(contentsOf: $0) } ?? Data()
+            for byte in engineSource + Data(suffixes.utf8) { fingerprint = (fingerprint ^ UInt64(byte)) &* 1099511628211 }
+            let engineFingerprint = String(fingerprint, radix: 16)
+            let compatibleCache = cache?["engineFingerprint"] as? String == engineFingerprint
+            var compiled: [String: Any]?
+            if compatibleCache, let snapshot = cache?["snapshot"] as? String {
+                compiled = context.objectForKeyedSubscript("browserRestoreNetwork")?.call(withArguments: [snapshot, suffixes])?.toDictionary() as? [String: Any]
+                if context.exception != nil { compiled = nil; context.exception = nil }
+            }
+            var text = compatibleCache ? (cache?["compiled"] as? String ?? "") : ""
+            if compiled == nil {
+                var result = context.objectForKeyedSubscript("browserCompileNetwork")?.call(withArguments: [lists, text, suffixes])
+                if context.exception != nil, !text.isEmpty {
+                    context.exception = nil
+                    result = context.objectForKeyedSubscript("browserCompileNetwork")?.call(withArguments: [lists, "", suffixes])
+                }
+                compiled = result?.toDictionary() as? [String: Any]
+                text = compiled?.removeValue(forKey: "compiled") as? String ?? ""
+            }
+            guard context.exception == nil, var summary = compiled else {
                 DispatchQueue.main.async { completion(["available": false, "error": 2]) }
                 return
             }
-            if compiled["cached"] as? Bool == true { compiled["stats"] = cache?["stats"] ?? [:] }
-            let persistent: [String: Any] = ["compiled": text, "stats": compiled["stats"] ?? [:]]
-            if let data = try? JSONSerialization.data(withJSONObject: persistent) { try? data.write(to: cacheURL, options: .atomic) }
-            compiled["available"] = true
-            installedIdentity = identity
-            installedSummary = compiled as NSDictionary
-            DispatchQueue.main.async { ready = true; completion(installedSummary) }
+            if summary["cached"] as? Bool == true { summary["stats"] = cache?["stats"] ?? [:] }
+            // Finish optimization/serialization on the candidate queue while the
+            // previous VM remains free to serve requests. Never publish a VM
+            // and then block its first decisions behind snapshot creation.
+            var persistent: [String: Any]?
+            if summary["snapshot"] as? Bool != true {
+                context.exception = nil
+                let snapshot = context.objectForKeyedSubscript("browserSerializeNetwork")?.call(withArguments: [])?.toString()
+                if context.exception == nil, let snapshot, !snapshot.isEmpty {
+                    persistent = ["snapshot": snapshot, "compiled": text, "stats": summary["stats"] ?? [:], "engineFingerprint": engineFingerprint]
+                }
+                context.exception = nil // Cache failure must not disable matching.
+            }
+            if let persistent, let data = try? JSONSerialization.data(withJSONObject: persistent) {
+                try? data.write(to: cacheURL, options: .atomic)
+            }
+            summary["available"] = true
+            summary["prepareMilliseconds"] = Int(Date().timeIntervalSince(started) * 1000)
+            let preparedSummary = summary as NSDictionary
+            DispatchQueue.main.async {
+                guard generation == preparationGeneration else {
+                    completion(["available": false, "superseded": true]); return
+                }
+                installed = candidate
+                installedIdentity = identity
+                installedSummary = preparedSummary
+                completion(preparedSummary)
+            }
         }
     }
 
     @objc(matchRequest:hostRules:urlRules:completion:)
     static func match(request: NSDictionary, hostRules: String, urlRules: String, completion: @escaping (NSDictionary) -> Void) {
         dispatchPrecondition(condition: .onQueue(.main))
-        guard ready else { completion(["action": 0, "engine": "preparing"]); return }
-        worker.async {
-            guard let context = context else { DispatchQueue.main.async { completion(["action": 0, "engine": "unavailable"]) }; return }
+        guard let runtime = installed else { completion(["action": 0, "engine": "preparing"]); return }
+        runtime.queue.async {
+            guard let context = runtime.context else { DispatchQueue.main.async { completion(["action": 0, "engine": "unavailable"]) }; return }
             context.exception = nil
             context.objectForKeyedSubscript("browserSetDynamicNetwork")?.call(withArguments: [hostRules, urlRules])
             let decision = context.objectForKeyedSubscript("browserMatchNetwork")?.call(withArguments: [request])?.toDictionary() as? [String: Any]
             let valid = context.exception == nil
-            DispatchQueue.main.async { completion(valid ? (decision ?? [:]) as NSDictionary : ["action": 0, "engine": "error"]) }
+            DispatchQueue.main.async {
+                // A decision queued on the previous VM must be reevaluated after
+                // the atomic swap, using the caller's current dynamic rules.
+                guard installed === runtime else {
+                    match(request: request, hostRules: hostRules, urlRules: urlRules, completion: completion); return
+                }
+                completion(valid ? (decision ?? [:]) as NSDictionary : ["action": 0, "engine": "error"])
+            }
         }
     }
 }

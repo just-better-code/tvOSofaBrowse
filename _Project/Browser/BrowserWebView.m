@@ -1303,8 +1303,13 @@ static void BrowserLoadUBlockRuntime(void (^completion)(NSDictionary *)) {
         if (text.length) [lists addObject:@{@"id":source[@"id"], @"text":text, @"trusted":@([source[@"id"] isEqualToString:@"ubo"])}];
     }
     [BrowserNetworkFilterEngine prepareLists:lists identity:identifier completion:^(NSDictionary *network) {
+    if (generation != sBrowserAdBlockRulesGeneration || ![identifier isEqualToString:BrowserAdBlockFilterIdentifier(YES)]) {
+        NSArray *callbacks = [sBrowserUBlockPendingCallbacks copy]; sBrowserUBlockPendingCallbacks = nil;
+        for (id callback in callbacks) BrowserLoadUBlockRuntime(callback);
+        return;
+    }
     sBrowserNetworkSummary = network;
-    BrowserLog(@"[AdBlock] network available=%d filters=%ld cached=%d error=%ld", [network[@"available"] boolValue], (long)[network[@"count"] integerValue], [network[@"cached"] boolValue], (long)[network[@"error"] integerValue]);
+    BrowserLog(@"[AdBlock] network available=%d filters=%ld cached=%d snapshot=%d prepare-ms=%ld error=%ld", [network[@"available"] boolValue], (long)[network[@"count"] integerValue], [network[@"cached"] boolValue], [network[@"snapshot"] boolValue], (long)[network[@"prepareMilliseconds"] integerValue], (long)[network[@"error"] integerValue]);
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         NSDictionary *compiled = [BrowserAdBlockConverter compileUBlockLists:lists];
         dispatch_async(dispatch_get_main_queue(), ^{

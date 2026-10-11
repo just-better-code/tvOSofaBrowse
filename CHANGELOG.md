@@ -21,7 +21,7 @@ This personal-use project's retrospective versions do not correspond to publishe
 
 ### Fixed
 
-- Open requested pages while filters prepare, apply cached protection early and reuse unchanged compiled and converted lists without returning to about:blank ([User Guide](docs/USER_GUIDE.md)).
+- Open requested pages while filters prepare, restore ready network-engine snapshots and cached WebKit rules, and retain active protection during background rebuilds without returning to about:blank ([User Guide](docs/USER_GUIDE.md)).
 - Prevent advanced-script stack overflows and discard obsolete network, worker and page-control results across navigation, tabs and history ([Browser runtime](_Project/Browser/BrowserWebView.m)).
 - Restore compatible cookie archives and keep asynchronous text dialogs attached to their original fields ([Browser runtime](_Project/Browser/BrowserWebView.m), [Page actions](_Project/Browser/BrowserPageActionCoordinator.m)).
 
