@@ -708,7 +708,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.21.15;
+				MARKETING_VERSION = 2.21.16;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
 			PRODUCT_NAME = "$(TARGET_NAME)";
 			SCAN_ALL_SOURCE_FILES_FOR_INCLUDES = NO;
@@ -740,7 +740,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.21.15;
+				MARKETING_VERSION = 2.21.16;
 			PRODUCT_NAME = "$(TARGET_NAME)";
 			SCAN_ALL_SOURCE_FILES_FOR_INCLUDES = NO;
 			SWIFT_VERSION = 5.0;

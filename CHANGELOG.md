@@ -2,6 +2,16 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.21.16 - 2026-10-11
+
+### Added
+
+- Extend uBlock fetch and asynchronous XHR filtering to supported module Blob workers and their nested Blob workers ([Request adapter](_Project/Vendor/UBlock/UBlockRequests.js)).
+
+### Fixed
+
+- Release worker bridges when their document leaves history caching or the worker closes, and count nested worker readiness once ([Request adapter](_Project/Vendor/UBlock/UBlockRequests.js)).
+
 ## 2.21.15 - 2026-10-11
 
 ### Added

@@ -1479,7 +1479,7 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     }
     if ([kind isEqual:@"event"]) {
         NSString *event = body[@"event"];
-        if ([@[@"fetch-blocked", @"xhr-blocked", @"fallback", @"cancelled", @"sync-bypass", @"worker-ready", @"worker-bypass", @"worker-unready"] containsObject:event]) {
+        if ([@[@"fetch-blocked", @"xhr-blocked", @"fallback", @"cancelled", @"sync-bypass", @"worker-ready", @"worker-bypass", @"worker-unready", @"worker-closed"] containsObject:event]) {
             NSUInteger count = [owner.networkRequestCounts[event] unsignedIntegerValue];
             owner.networkRequestCounts[event] = @(MIN(count + 1, 1000000));
         }

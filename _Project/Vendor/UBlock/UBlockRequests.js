@@ -258,15 +258,19 @@
             catch (_) { for (const name of names) { try { Object.defineProperty(proto, name, descriptors[name]); } catch (_) {} } }
         }
     }
-    // Only classic dedicated workers made from Blob URLs created in this realm.
-    // Do not refetch HTTP entries or change module/shared/service-worker identity.
+    // Dedicated workers made from JavaScript Blob URLs created in this realm.
+    // Do not refetch HTTP entries or change shared/service-worker identity.
     const workers = new Set();
-    if (document && typeof window.Worker === 'function' && typeof window.MessageChannel === 'function' &&
+    if ((document || transport) && typeof window.Worker === 'function' && typeof window.MessageChannel === 'function' &&
         typeof window.URL.createObjectURL === 'function' && window.crypto &&
         typeof window.crypto.randomUUID === 'function') {
         const blobs = new Map(), NativeWorker = window.Worker;
         const create = window.URL.createObjectURL, revoke = window.URL.revokeObjectURL;
         const workerPost = NativeWorker.prototype.postMessage, workerTerminate = NativeWorker.prototype.terminate;
+        const originals = [
+            [window, 'Worker'], [window.URL, 'createObjectURL'], [window.URL, 'revokeObjectURL'],
+            [NativeWorker.prototype, 'terminate']
+        ].map(([target, name]) => [target, name, Object.getOwnPropertyDescriptor(target, name)]);
         function bootstrap(install, settings, secret) {
             const requests = new Map();
             const delay = setTimeout.bind(globalThis), clearDelay = clearTimeout.bind(globalThis);
@@ -281,6 +285,14 @@
                 });
             } };
             const lifecycle = install(settings, transport);
+            const nativeClose = globalThis.close;
+            if (typeof nativeClose === 'function') {
+                globalThis.close = function () {
+                    lifecycle.dispose();
+                    if (port) port.postMessage({ control: 'closed' });
+                    return Reflect.apply(nativeClose, globalThis, []);
+                };
+            }
             function connect(event) {
                 if (!event.data || event.data.__browserWorker !== secret || !event.ports[0]) return;
                 event.stopImmediatePropagation();
@@ -325,7 +337,7 @@
                 const settings = options == null ? {} : {
                     credentials: options.credentials, name: options.name, type: options.type
                 };
-                if (settings.type !== undefined && settings.type !== 'classic') {
+                if (settings.type !== undefined && settings.type !== 'classic' && settings.type !== 'module') {
                     report('worker-bypass');
                     return Reflect.construct(target, [input, settings], newTarget);
                 }
@@ -333,24 +345,40 @@
                 const workerConfig = { token: config.token, baseURL: input };
                 const entryURL = apply(create, window.URL, [blob]);
                 const prefix = '(' + bootstrap.toString() + ')(' + installNetworkRequests.toString() + ',' +
-                    JSON.stringify(workerConfig) + ',' + JSON.stringify(secret) + ');\nimportScripts(' + JSON.stringify(entryURL) + ');';
-                const url = apply(create, window.URL, [new window.Blob([prefix], { type: 'text/javascript' })]);
+                    JSON.stringify(workerConfig) + ',' + JSON.stringify(secret) + ');';
+                const ownedURLs = [entryURL];
+                let entry = prefix + '\nimportScripts(' + JSON.stringify(entryURL) + ');';
+                if (settings.type === 'module') {
+                    // Evaluate the synchronous setup dependency first, then the site's
+                    // original module graph. Do not turn a module into a classic script
+                    // or add an asynchronous loader before site message listeners.
+                    const setupURL = apply(create, window.URL, [new window.Blob([prefix], { type: 'text/javascript' })]);
+                    ownedURLs.push(setupURL);
+                    entry = 'import ' + JSON.stringify(setupURL) + ';\nimport ' + JSON.stringify(entryURL) + ';';
+                }
+                const url = apply(create, window.URL, [new window.Blob([entry], { type: 'text/javascript' })]);
+                ownedURLs.push(url);
                 let worker;
                 try { worker = Reflect.construct(target, [url, settings], newTarget); }
                 catch (error) {
-                    apply(revoke, window.URL, [url]); apply(revoke, window.URL, [entryURL]); report('worker-bypass');
+                    for (const owned of ownedURLs) apply(revoke, window.URL, [owned]); report('worker-bypass');
                     return Reflect.construct(target, [input, settings], newTarget);
                 }
                 const channel = new window.MessageChannel();
-                const record = { worker, port: channel.port1, urls: [url, entryURL], closed: false };
+                const record = { worker, port: channel.port1, urls: ownedURLs, closed: false };
+                record.close = () => close(record);
                 workers.add(record);
                 // The worker keeps its own decision deadlines. Never relay credentials/bodies.
                 record.port.onmessage = event => {
                     const packet = event.data, message = packet && packet.message;
-                    if (!message || record.closed) return;
+                    if (record.closed) return;
+                    if (packet && packet.control === 'closed') { close(record); report('worker-closed'); return; }
+                    if (!message) return;
                     if (message.kind === 'ready') {
                         report('worker-ready');
                         nativeClearTimeout(record.timer); for (const owned of record.urls) apply(revoke, window.URL, [owned]);
+                        record.port.postMessage({ id: packet.id, result: { action: 0 } });
+                        return; // Do not count descendant readiness again at every relay hop.
                     }
                     let reply;
                     try { reply = alive ? handler.postMessage(message) : { cancel: true }; }
@@ -376,15 +404,23 @@
                     return result;
                 }
             });
-        } catch (_) { report('worker-bypass'); }
+        } catch (_) {
+            for (const [target, name, descriptor] of originals) {
+                try { if (descriptor) Object.defineProperty(target, name, descriptor); else delete target[name]; } catch (_) {}
+            }
+            report('worker-bypass');
+        }
     }
     const lifecycle = {
         suspend() { alive = false; epoch++; for (const cancel of Array.from(pending)) cancel();
             for (const record of workers) record.port.postMessage({ control: 'suspend' }); },
-        resume() { alive = true; for (const record of workers) record.port.postMessage({ control: 'resume' }); }
+        resume() { alive = true; for (const record of workers) record.port.postMessage({ control: 'resume' }); },
+        dispose() { this.suspend(); for (const record of Array.from(workers)) record.close(); }
     };
     if (document) {
-        window.addEventListener('pagehide', lifecycle.suspend);
+        window.addEventListener('pagehide', event => {
+            if (event.persisted) lifecycle.suspend(); else lifecycle.dispose();
+        });
         window.addEventListener('pageshow', lifecycle.resume);
     }
     try {
