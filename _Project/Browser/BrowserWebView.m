@@ -2765,8 +2765,9 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
             decisionHandler(0);
             if (mainFrame) {
                 owner.loading = NO;
-                if ([owner.delegate respondsToSelector:@selector(webView:didBlockNavigationToURL:)]) {
-                    [owner.delegate webView:owner didBlockNavigationToURL:request.URL];
+                if ([owner.delegate respondsToSelector:@selector(webView:didBlockNavigationToURL:rule:)]) {
+                    NSString *rule = [result[@"rule"] isKindOfClass:NSString.class] ? result[@"rule"] : nil;
+                    [owner.delegate webView:owner didBlockNavigationToURL:request.URL rule:rule];
                 }
             }
             return;

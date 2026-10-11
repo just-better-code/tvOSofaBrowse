@@ -12,7 +12,7 @@ This personal-use project's retrospective versions do not correspond to publishe
 ### Added
 
 - Apply pinned uBlock scriptlets, procedural cosmetics and full static/dynamic matching to navigation, page fetch/XHR and supported classic, module and nested Blob workers, including scoped exceptions and fetch query pruning ([Ad Block coverage](docs/USER_GUIDE.md), [uBO components](_Project/Vendor/UBlock/README.md)).
-- Choose Block (Strict), Allow (Soft), Use Filters (Default) or Inherit per site, show blocked-navigation explanations, and report bounded coverage and unsupported-filter reasons ([Ad Block controls](docs/USER_GUIDE.md)).
+- Choose Block (Strict), Allow (Soft), Use Filters (Default) or Inherit per site, show the matching rule in blocked-navigation explanations, and report bounded coverage and unsupported-filter reasons ([Ad Block controls](docs/USER_GUIDE.md)).
 - Scroll at the pointer's top or bottom edge outside fullscreen and add Go to End to VLC playback ([User Guide](docs/USER_GUIDE.md)).
 
 ### Removed

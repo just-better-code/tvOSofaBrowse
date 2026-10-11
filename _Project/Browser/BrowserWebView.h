@@ -12,7 +12,7 @@ FOUNDATION_EXPORT NSString * const BrowserAdBlockSourceStatusDidChangeNotificati
 - (BOOL)webView:(id _Nonnull)webView shouldImportTorrentResponse:(NSURLResponse * _Nonnull)response request:(NSURLRequest * _Nullable)request;
 - (void)webView:(id)webView didUpdateFullscreenMediaState:(NSDictionary *)state;
 - (void)webView:(id)webView didRequestVLCPlayback:(NSDictionary *)info;
-- (void)webView:(id)webView didBlockNavigationToURL:(NSURL *)URL;
+- (void)webView:(id)webView didBlockNavigationToURL:(NSURL *)URL rule:(nullable NSString *)rule;
 - (void)webViewDidStartLoad:(id _Nonnull)webView;
 - (void)webViewDidFinishLoad:(id _Nonnull)webView;
 - (void)webViewDidChangeNavigationHistory:(id _Nonnull)webView;

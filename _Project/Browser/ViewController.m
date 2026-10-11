@@ -980,12 +980,20 @@ static UIColor *kTextColor(void) {
     return YES;
 }
 
-- (void)webView:(id)webView didBlockNavigationToURL:(NSURL *)URL {
+- (void)webView:(id)webView didBlockNavigationToURL:(NSURL *)URL rule:(NSString *)rule {
     // Never present a delayed background-tab decision over the active page.
     if (webView != self.webview) return;
     NSString *host = URL.host ?: @"this website";
+    NSMutableString *message = [[NSString stringWithFormat:@"Ad Block stopped opening %@.", host] mutableCopy];
+    if (rule.length) {
+        // This is engine-provided filter text, not the visited URL. Keep long
+        // filters readable on TV and never write them to diagnostic logs.
+        NSString *displayRule = rule.length > 512 ? [[rule substringToIndex:512] stringByAppendingString:@"…"] : rule;
+        [message appendFormat:@"\n\nMatched rule:\n%@", displayRule];
+    }
+    [message appendString:@"\n\nYou can change Ad Block in the browser menu to open this website."];
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Page Blocked by Ad Block"
-        message:[NSString stringWithFormat:@"Ad Block stopped opening %@. This navigation was stopped. You can change Ad Block in the browser menu if you want to open this website.", host]
+        message:message
         preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Done" style:UIAlertActionStyleCancel handler:nil]];
     // Present over an app-owned menu if navigation was initiated there.

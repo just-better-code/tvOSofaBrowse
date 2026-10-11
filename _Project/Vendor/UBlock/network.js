@@ -55,15 +55,28 @@ globalThis.browserMatchNetwork = function(details) {
     const source = context.getTabHostname();
     let action = urls.evaluateZ(source, details.url, details.type);
     let engine = 'dynamic-url';
+    const explain = details.type === 'main_frame';
+    let logData = explain && action !== 0 ? urls.toLogData() : undefined;
     if (action === 0) {
         action = firewall.evaluateCellZY(source, context.getHostname(), details.type);
         engine = 'dynamic-host';
+        logData = explain && action !== 0 ? firewall.toLogData() : undefined;
     }
     if (action === 0 || action === 3) {
-        action = details.type === 'main_frame' ? shouldStrictBlock(context, false).result : snfe.matchRequest(context);
+        if (explain) {
+            // traffic.js returns the winning explicit/generic decision together
+            // with its log data. Reading snfe.toLogData() afterward can instead
+            // report the last probe, even when that probe lost precedence.
+            const strict = shouldStrictBlock(context, false);
+            action = strict.result;
+            logData = strict.logData;
+        } else {
+            action = snfe.matchRequest(context);
+        }
         engine = 'static';
     }
     const result = {action,engine};
+    if (action !== 0 && typeof logData?.raw === 'string') result.rule = logData.raw;
     // Query pruning is implemented entirely by the upstream matcher without the
     // host URL shim. Keep modifiers separate from a blocking/allowing decision.
     if (action !== 1 && /^(GET|HEAD)$/i.test(details.method || 'GET')) {
