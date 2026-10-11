@@ -2,6 +2,12 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.20.1 - 2026-10-11
+
+### Removed
+
+- Remove the separate native fullscreen web-video player and its Full Screen Player setting while retaining unified media controls and VLC torrent playback ([User Guide](docs/USER_GUIDE.md)).
+
 ## 2.20.0 - 2026-10-11
 
 ### Added

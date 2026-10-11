@@ -8,7 +8,6 @@
 @property (nonatomic) NSInteger activeTabIndex;
 @property (nonatomic) BOOL tabOverviewVisible;
 @property (nonatomic) NSUInteger textFontSize;
-@property (nonatomic) BOOL fullscreenVideoPlaybackEnabled;
 
 - (BrowserTabViewModel *)activeTab;
 - (BrowserTabViewModel *)addTab;

@@ -2,7 +2,6 @@
 
 #import "BrowserDOMInteractionService.h"
 #import "BrowserNavigationService.h"
-#import "BrowserVideoPlaybackCoordinator.h"
 #import "BrowserWebView.h"
 
 static UIColor *BrowserPageActionTextColor(void) {
@@ -18,7 +17,6 @@ static UIColor *BrowserPageActionTextColor(void) {
 @property (nonatomic, weak) id<BrowserPageActionCoordinatorHost> host;
 @property (nonatomic) BrowserDOMInteractionService *domInteractionService;
 @property (nonatomic) BrowserNavigationService *navigationService;
-@property (nonatomic) BrowserVideoPlaybackCoordinator *videoPlaybackCoordinator;
 
 @end
 
@@ -26,14 +24,12 @@ static UIColor *BrowserPageActionTextColor(void) {
 
 - (instancetype)initWithHost:(id<BrowserPageActionCoordinatorHost>)host
        domInteractionService:(BrowserDOMInteractionService *)domInteractionService
-           navigationService:(BrowserNavigationService *)navigationService
-    videoPlaybackCoordinator:(BrowserVideoPlaybackCoordinator *)videoPlaybackCoordinator {
+           navigationService:(BrowserNavigationService *)navigationService {
     self = [super init];
     if (self) {
         _host = host;
         _domInteractionService = domInteractionService;
         _navigationService = navigationService;
-        _videoPlaybackCoordinator = videoPlaybackCoordinator;
     }
     return self;
 }
@@ -160,9 +156,6 @@ static UIColor *BrowserPageActionTextColor(void) {
 }
 
 - (BOOL)handlePageSelectionAtDOMPoint:(CGPoint)point webView:(BrowserWebView *)webView {
-    if ([self.videoPlaybackCoordinator handleSelectPressForVideoAtCursor]) {
-        return YES;
-    }
     if ([self handleTargetBlankLinkAtDOMPoint:point webView:webView]) {
         return YES;
     }

@@ -14,7 +14,6 @@ static NSString * const kStartPageURL = @"about:blank";
         _tabs = [NSMutableArray array];
         _activeTabIndex = NSNotFound;
         _textFontSize = kDefaultTextFontSize;
-        _fullscreenVideoPlaybackEnabled = NO;
     }
     return self;
 }
@@ -100,8 +99,5 @@ static NSString * const kStartPageURL = @"about:blank";
     _textFontSize = textFontSize;
 }
 
-- (void)setFullscreenVideoPlaybackEnabled:(BOOL)fullscreenVideoPlaybackEnabled {
-    _fullscreenVideoPlaybackEnabled = fullscreenVideoPlaybackEnabled;
-}
 
 @end
