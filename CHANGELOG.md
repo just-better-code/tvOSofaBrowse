@@ -2,182 +2,28 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
-## 2.21.24 - 2026-10-11
-
-### Fixed
-
-- Clarify third-party choices as Block (Strict), Allow (Soft), Use Filters (Default) and Inherit, showing the effective filter mode when no parent override exists ([Ad Block controls](docs/USER_GUIDE.md)).
-
-## 2.21.23 - 2026-10-11
-
-### Added
-
-- Apply upstream strict-document blocking with hostname validation and show a native explanation when Ad Block stops opening a page ([Navigation adapter](_Project/Browser/BrowserWebView.m)).
-
-### Fixed
-
-- Label the default third-party policy explicitly and remove the long menu description while retaining the selected mode and preparation status ([Ad Block controls](docs/USER_GUIDE.md)).
-- Check the destination site's exception for main-page navigation and discard decisions from an obsolete policy generation ([Navigation adapter](_Project/Browser/BrowserWebView.m)).
-
-## 2.21.22 - 2026-10-11
-
-### Fixed
-
-- Distinguish valid HTML and response-header filters awaiting delivery support from malformed filter syntax in Ad Block coverage ([Diagnostics](docs/USER_GUIDE.md)).
-
-## 2.21.21 - 2026-10-11
-
-### Added
-
-- Choose Block Third-party, Allow Third-party or Use Filters per site and its subdomains, or Follow Parent, with a visible saved mode and preparation state ([Ad Block controls](docs/USER_GUIDE.md)).
-
-### Removed
-
-- Remove the bundled Hraimo-specific blocking and hiding rules while preserving downloaded lists and previously saved My Filters ([Ad Block controls](docs/USER_GUIDE.md)).
-
-### Fixed
-
-- Reuse converted filter lists when preparing a new third-party mode to avoid repeating source conversion ([Native adapter](_Project/Browser/BrowserWebView.m)).
-
-## 2.21.20 - 2026-10-11
-
-### Added
-
-- Support pinned legacy uBlock scriptlet surrogates and aliases, including anti-adblock and advertisement API stubs, while preserving trusted-source restrictions ([Pinned resources](_Project/Vendor/UBlock/src/web_accessible_resources), [Scriptlet builder](scripts/build-ublock-assets.mjs)).
-
-## 2.21.19 - 2026-10-11
-
-### Added
-
-- Apply upstream removeparam rules to GET and HEAD fetch requests in pages and supported Blob workers while preserving request options and remaining query parameters ([Request adapter](_Project/Vendor/UBlock/UBlockRequests.js)).
-
-## 2.21.18 - 2026-10-11
-
-### Added
-
-- Report applied native WebKit content-rule actions in the bounded Debug buffer and Ad Block coverage counters without retaining request URLs ([Native adapter](_Project/Browser/BrowserWebView.m)).
-
-### Fixed
-
-- Reuse unchanged dynamic network rules between request decisions to avoid repeatedly parsing the policy ([Network adapter](_Project/Vendor/UBlock/network.js)).
-
-## 2.21.17 - 2026-10-11
-
-### Added
-
-- Apply uBlock entity, regex, URL-path and ancestor-frame scriptlet scopes with Public Suffix List-aware entities and matching exclusions ([Domain adapter](_Project/Vendor/UBlock/domains.js)).
-
-## 2.21.16 - 2026-10-11
-
-### Added
-
-- Extend uBlock fetch and asynchronous XHR filtering to supported module Blob workers and their nested Blob workers ([Request adapter](_Project/Vendor/UBlock/UBlockRequests.js)).
-
-### Fixed
-
-- Release worker bridges when their document leaves history caching or the worker closes, and count nested worker readiness once ([Request adapter](_Project/Vendor/UBlock/UBlockRequests.js)).
-
-## 2.21.15 - 2026-10-11
-
-### Added
-
-- Apply uBlock fetch and asynchronous XHR decisions inside supported classic Blob workers and report worker readiness and bypasses in diagnostics ([Ad Block coverage](docs/USER_GUIDE.md#browser-menu), [Request adapter](_Project/Vendor/UBlock/UBlockRequests.js)).
-
-## 2.21.14 - 2026-10-11
-
-### Fixed
-
-- Restore saved cookies with the compatible archive decoder and reject malformed cookie archives before applying them ([BrowserWebView](_Project/Browser/BrowserWebView.m)).
-
-## 2.21.13 - 2026-10-11
-
-### Fixed
-
-- Discard delayed page-control results after switching tabs or revisiting the same URL through page history ([BrowserWebView](_Project/Browser/BrowserWebView.m)).
-- Keep text dialogs attached to their original field and prevent stale dialogs from editing replacement fields ([Page actions](_Project/Browser/BrowserPageActionCoordinator.m)).
-
-## 2.21.12 - 2026-10-11
-
-### Fixed
-
-- Prevent large advanced-filter scripts from overflowing the JavaScript stack on injection ([Filter converter](_Project/Browser/BrowserAdBlockConverter.swift)).
-- Apply cached WebKit protection before the full uBlock runtime finishes preparing and reuse unchanged bundled-filter caches across app deliveries ([User Guide](docs/USER_GUIDE.md)).
-- Restore the UNSENT state after canceling a filtered XHR and require a fresh open before sending again ([Request adapter](_Project/Vendor/UBlock/UBlockRequests.js)).
-
-## 2.21.11 - 2026-10-11
-
-### Added
-
-- Apply uBlock network decisions to page fetch and asynchronous XHR requests through a bounded WebKit reply bridge ([User Guide](docs/USER_GUIDE.md), [Network adapter](_Project/Vendor/UBlock/README.md)).
-
-## 2.21.10 - 2026-10-11
-
-### Added
-
-- Scroll pages when continued pointer movement reaches the top or bottom edge, except in fullscreen ([User Guide](docs/USER_GUIDE.md)).
-
-## 2.21.9 - 2026-10-11
-
-### Added
-
-- Compile full upstream uBlock static and dynamic network engines in the background and apply bounded navigation decisions to pages and frames ([User Guide](docs/USER_GUIDE.md), [Network adapter](_Project/Vendor/UBlock/README.md)).
-
-## 2.21.8 - 2026-10-11
-
-### Changed
-
-- Replace synchronous page-control and cookie waits with asynchronous operations that discard obsolete page results ([User Guide](docs/USER_GUIDE.md)).
-- Register browser scripts by component so diagnostic and Ad Block updates preserve interaction and player scripts ([BrowserWebView](_Project/Browser/BrowserWebView.m)).
-
-## 2.21.7 - 2026-10-11
-
-### Changed
-
-- Move the compact This Site toggle immediately left of Ad Block in the settings header ([User Guide](docs/USER_GUIDE.md)).
-
-## 2.21.6 - 2026-10-11
-
-### Fixed
-
-- Open pages without waiting for filter compilation, then reload with the prepared Ad Block policy when it becomes available ([User Guide](docs/USER_GUIDE.md)).
-
-## 2.21.5 - 2026-10-11
-
-### Removed
-
-- Remove manual custom-filter entry from Ad Block settings and hide the empty My Filters row to simplify remote-control use ([User Guide](docs/USER_GUIDE.md)).
-
-## 2.21.4 - 2026-10-11
-
-### Fixed
-
-- Preserve the requested page during Ad Block preparation and defer filter refreshes until navigation finishes to prevent reloading the initial blank document ([Browser navigation](_Project/Browser/BrowserWebView.m)).
-
-## 2.21.3 - 2026-10-11
-
-### Changed
-
-- Move VLC Audio and Subtitles selectors to the right edge of the playback panel ([User Guide](docs/USER_GUIDE.md)).
-
-### Added
-
-- Add Go to End beside Play/Pause in VLC to seek near the known media duration ([User Guide](docs/USER_GUIDE.md)).
-
-### Fixed
-
-- Keep iframe playback and episode navigation in the website player with its existing fullscreen controls ([User Guide](docs/USER_GUIDE.md)).
-
-## 2.21.2 - 2026-10-11
-
-### Fixed
-
-- Compile generic uBO cosmetic rules without querying an absent domain iterator, keeping the advanced filtering runtime available ([uBO components](_Project/Vendor/UBlock/README.md)).
-
 ## 2.21.0 - 2026-10-11
 
+### Changed
+
+- Replace synchronous JavaScript and cookie waits with asynchronous operations and managed script components that preserve browser and player controls ([User Guide](docs/USER_GUIDE.md)).
+- Place This Site beside Ad Block and move VLC Audio and Subtitles to the playback panel's right edge ([User Guide](docs/USER_GUIDE.md)).
+
 ### Added
 
-- Apply pinned full-uBO scriptlets and procedural cosmetic filters alongside WebKit protection, with a bundled uBlock list, remembered site exceptions, local custom filters and source-aware coverage diagnostics ([User Guide](docs/USER_GUIDE.md), [uBO components](_Project/Vendor/UBlock/README.md)).
+- Apply pinned uBlock scriptlets, procedural cosmetics and full static/dynamic matching to navigation, page fetch/XHR and supported classic, module and nested Blob workers, including scoped exceptions and fetch query pruning ([Ad Block coverage](docs/USER_GUIDE.md), [uBO components](_Project/Vendor/UBlock/README.md)).
+- Choose Block (Strict), Allow (Soft), Use Filters (Default) or Inherit per site, show blocked-navigation explanations, and report bounded coverage and unsupported-filter reasons ([Ad Block controls](docs/USER_GUIDE.md)).
+- Scroll at the pointer's top or bottom edge outside fullscreen and add Go to End to VLC playback ([User Guide](docs/USER_GUIDE.md)).
+
+### Removed
+
+- Remove manual filter entry and bundled Hraimo rules while retaining previously saved My Filters and downloaded lists ([Ad Block controls](docs/USER_GUIDE.md)).
+
+### Fixed
+
+- Open requested pages while filters prepare, apply cached protection early and reuse unchanged compiled and converted lists without returning to about:blank ([User Guide](docs/USER_GUIDE.md)).
+- Prevent advanced-script stack overflows and discard obsolete network, worker and page-control results across navigation, tabs and history ([Browser runtime](_Project/Browser/BrowserWebView.m)).
+- Restore compatible cookie archives and keep asynchronous text dialogs attached to their original fields ([Browser runtime](_Project/Browser/BrowserWebView.m), [Page actions](_Project/Browser/BrowserPageActionCoordinator.m)).
 
 ## 2.20.4 - 2026-10-11
 
