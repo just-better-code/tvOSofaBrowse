@@ -70,6 +70,17 @@
                         if (result.action === 1) {
                             report('fetch-blocked'); fail(new TypeError('Load failed')); return;
                         }
+                        if (typeof result.modifiedURL === 'string' && /^(GET|HEAD)$/i.test(request.method)) {
+                            try {
+                                const original = new URL(request.url), modified = new URL(result.modifiedURL);
+                                // Only query pruning is delivered here. Never turn a
+                                // modifier reply into a cross-origin/resource redirect.
+                                if (original.origin === modified.origin && original.pathname === modified.pathname && original.hash === modified.hash) {
+                                    request = new NativeRequest(modified.href, request);
+                                    report('fetch-modified');
+                                }
+                            } catch (_) { report('modifier-bypass'); }
+                        }
                         settled = true; cleanup();
                         try { resolve(apply(target, receiver, [request])); }
                         catch (error) { reject(error); }

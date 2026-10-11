@@ -1479,7 +1479,7 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     }
     if ([kind isEqual:@"event"]) {
         NSString *event = body[@"event"];
-        if ([@[@"fetch-blocked", @"xhr-blocked", @"fallback", @"cancelled", @"sync-bypass", @"worker-ready", @"worker-bypass", @"worker-unready", @"worker-closed"] containsObject:event]) {
+        if ([@[@"fetch-blocked", @"xhr-blocked", @"fallback", @"cancelled", @"sync-bypass", @"fetch-modified", @"modifier-bypass", @"worker-ready", @"worker-bypass", @"worker-unready", @"worker-closed"] containsObject:event]) {
             NSUInteger count = [owner.networkRequestCounts[event] unsignedIntegerValue];
             owner.networkRequestCounts[event] = @(MIN(count + 1, 1000000));
         }
@@ -1527,7 +1527,16 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
         if (!current || current.documentGeneration != generation || current.adBlockPolicyGeneration != policy ||
             ![token isEqual:current.adBlockDocumentToken]) { reply(@{@"cancel":@YES}, nil); return; }
         NSInteger action = current.adBlockEffectiveEnabled ? [decision[@"action"] integerValue] : 0;
-        reply(@{@"action":@(action)}, nil);
+        NSMutableDictionary *result = [@{@"action":@(action)} mutableCopy];
+        if ([api isEqual:@"fetch"] && action != 1 && [decision[@"modifiedURL"] isKindOfClass:NSString.class]) {
+            NSURLComponents *before = [NSURLComponents componentsWithURL:URL resolvingAgainstBaseURL:NO];
+            NSURLComponents *after = [NSURLComponents componentsWithString:decision[@"modifiedURL"]];
+            // Match the same resource with only a changed query; do not expose
+            // general redirects or echo unvalidated page-supplied context.
+            before.query = nil; after.query = nil;
+            if (after.URL && [before.URL isEqual:after.URL]) result[@"modifiedURL"] = decision[@"modifiedURL"];
+        }
+        reply(result, nil);
     };
     [BrowserNetworkFilterEngine matchRequest:details
         hostRules:[NSUserDefaults.standardUserDefaults stringForKey:@"AdBlockDynamicHostRules"] ?: @""

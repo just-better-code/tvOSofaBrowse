@@ -18788,7 +18788,14 @@ globalThis.browserMatchNetwork = function(details) {
         engine = 'dynamic-host';
     }
     if (action === 0 || action === 3) { action = snfe.matchRequest(context); engine = 'static'; }
-    return {action,engine};
+    const result = {action,engine};
+    // Query pruning is implemented entirely by the upstream matcher without the
+    // host URL shim. Keep modifiers separate from a blocking/allowing decision.
+    if (action !== 1 && /^(GET|HEAD)$/i.test(details.method || 'GET')) {
+        snfe.filterQuery(context);
+        if (context.redirectURL !== undefined) result.modifiedURL = context.redirectURL;
+    }
+    return result;
 };
 
 })();

@@ -2,6 +2,12 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.21.19 - 2026-10-11
+
+### Added
+
+- Apply upstream removeparam rules to GET and HEAD fetch requests in pages and supported Blob workers while preserving request options and remaining query parameters ([Request adapter](_Project/Vendor/UBlock/UBlockRequests.js)).
+
 ## 2.21.18 - 2026-10-11
 
 ### Added

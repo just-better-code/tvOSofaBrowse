@@ -19,12 +19,12 @@ class XHR extends EventTarget {
     set withCredentials(value) { this.credentials = Boolean(value); }
 }
 let decision = () => Promise.resolve({ action: 0 });
-let nativeFetches = 0;
+let nativeFetches = 0, lastFetch;
 const page = new EventTarget();
 const box = { Request, Response, Event, EventTarget, DOMException, URL, URLSearchParams,
     ArrayBuffer, Uint8Array, Blob, FormData, ProgressEvent: Event, performance, setTimeout, clearTimeout,
     document: { baseURI: 'https://example.org/' }, location: { href: 'https://example.org/' },
-    XMLHttpRequest: XHR, fetch: async () => { nativeFetches++; return new Response('ok'); },
+    XMLHttpRequest: XHR, fetch: async request => { lastFetch = request; nativeFetches++; return new Response('ok'); },
     addEventListener: page.addEventListener.bind(page),
     webkit: { messageHandlers: { browserNetwork: { postMessage: m => m.kind === 'match' ? decision(m) : Promise.resolve() } } }
 };
@@ -89,5 +89,20 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
         reply({action:0}); await tick(); assert.equal(nativeFetches,2);
         page.dispatchEvent(new Event('pageshow')); decision=()=>Promise.resolve({action:0});
         await box.fetch('https://example.org/'); assert.equal(nativeFetches,3);
+    });
+    await check('query modifier preserves GET options and rejects resource changes', async () => {
+        decision = () => Promise.resolve({action:0, modifiedURL:'https://example.org/path?tag=1#x'});
+        await box.fetch('https://example.org/path?tag=1&utm_source=ad#x', {headers:{'X-Fixture':'yes'}, credentials:'include',cache:'no-store',redirect:'manual'});
+        assert.equal(lastFetch.url, 'https://example.org/path?tag=1#x');
+        assert.equal(lastFetch.headers.get('X-Fixture'), 'yes');
+        assert.equal(lastFetch.credentials, 'include'); assert.equal(lastFetch.cache, 'no-store'); assert.equal(lastFetch.redirect, 'manual');
+        decision = () => Promise.resolve({action:0, modifiedURL:'https://other.example/path?tag=1#x'});
+        await box.fetch('https://example.org/path?utm_source=ad#x');
+        assert.equal(lastFetch.url, 'https://example.org/path?utm_source=ad#x');
+        decision = () => Promise.resolve({action:0, modifiedURL:'https://example.org/other'});
+        await box.fetch('https://example.org/path'); assert.equal(lastFetch.url, 'https://example.org/path');
+        decision = () => Promise.resolve({action:0, modifiedURL:'https://example.org/post'});
+        await box.fetch('https://example.org/post?utm_source=ad', {method:'POST',body:'payload'});
+        assert.equal(lastFetch.url, 'https://example.org/post?utm_source=ad'); assert.equal(await lastFetch.text(), 'payload');
     });
 })().catch(error=>{console.error(error); process.exitCode=1;});
