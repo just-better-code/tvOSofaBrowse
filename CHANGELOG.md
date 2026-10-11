@@ -2,6 +2,12 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.21.7 - 2026-10-11
+
+### Changed
+
+- Move the compact This Site toggle immediately left of Ad Block in the settings header ([User Guide](docs/USER_GUIDE.md)).
+
 ## 2.21.6 - 2026-10-11
 
 ### Fixed

@@ -922,6 +922,10 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) BrowserBadgeToggleControl *headerToggleButton;
 @property (nonatomic, copy) NSString *toggleTitle;
+@property (nonatomic, copy) NSString *leadingToggleTitle;
+@property (nonatomic, copy) BOOL (^leadingEnabledProvider)(void);
+@property (nonatomic, copy) void (^toggleLeadingEnabled)(void);
+@property (nonatomic, strong) BrowserBadgeToggleControl *leadingToggleButton;
 @property (nonatomic, copy) BOOL (^rowEnabledProvider)(NSString *identifier);
 @property (nonatomic, copy) NSString * (^rowDetailProvider)(NSString *identifier);
 @property (nonatomic) BOOL dismissBeforeRowAction;
@@ -980,6 +984,22 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
     self.headerToggleButton = headerToggleButton;
 
     [panel.contentView addSubview:headerToggleButton];
+    BrowserBadgeToggleControl *leadingToggleButton = nil;
+    if (self.leadingToggleTitle.length) {
+        leadingToggleButton = [[BrowserBadgeToggleControl alloc] initWithFrame:CGRectZero];
+        leadingToggleButton.translatesAutoresizingMaskIntoConstraints = NO;
+        leadingToggleButton.titleLabel.text = self.leadingToggleTitle;
+        leadingToggleButton.accessibilityLabel = self.leadingToggleTitle;
+        [leadingToggleButton addTarget:self action:@selector(leadingTogglePressed:)
+                     forControlEvents:UIControlEventPrimaryActionTriggered];
+        [panel.contentView addSubview:leadingToggleButton];
+        self.leadingToggleButton = leadingToggleButton;
+        [NSLayoutConstraint activateConstraints:@[
+            [leadingToggleButton.centerYAnchor constraintEqualToAnchor:headerToggleButton.centerYAnchor],
+            [leadingToggleButton.trailingAnchor constraintEqualToAnchor:headerToggleButton.leadingAnchor constant:-12.0],
+            [leadingToggleButton.heightAnchor constraintEqualToAnchor:headerToggleButton.heightAnchor],
+        ]];
+    }
     [self refreshHeaderToggle];
 
     UITableView *table = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
@@ -1019,6 +1039,7 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
     updateButton.hidden = self.secondaryAction == nil;
 
     CGFloat width = MIN(MAX(CGRectGetWidth(UIScreen.mainScreen.bounds) * 0.58, 720.0), 1100.0) * 0.5;
+    if (leadingToggleButton) width = MAX(width, 640.0);
     CGFloat contentHeight = 28.0 + 48.0 + 22.0 + ((CGFloat)self.rows.count + 1.5) * table.rowHeight + 18.0 + 64.0 + 24.0;
     NSLayoutConstraint *preferredHeight = [panel.heightAnchor constraintEqualToConstant:MIN(contentHeight, 860.0)];
     preferredHeight.priority = UILayoutPriorityDefaultHigh;
@@ -1030,7 +1051,7 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
         preferredHeight,
         [panel.heightAnchor constraintLessThanOrEqualToAnchor:self.view.safeAreaLayoutGuide.heightAnchor constant:-50.0],
         [heading.leadingAnchor constraintEqualToAnchor:panel.contentView.leadingAnchor constant:24.0],
-        [heading.trailingAnchor constraintLessThanOrEqualToAnchor:headerToggleButton.leadingAnchor constant:-16.0],
+        [heading.trailingAnchor constraintLessThanOrEqualToAnchor:(leadingToggleButton ?: headerToggleButton).leadingAnchor constant:-16.0],
         [heading.topAnchor constraintEqualToAnchor:panel.contentView.topAnchor constant:28.0],
         [headerToggleButton.centerYAnchor constraintEqualToAnchor:heading.centerYAnchor],
         [headerToggleButton.trailingAnchor constraintEqualToAnchor:panel.contentView.trailingAnchor constant:-24.0],
@@ -1104,6 +1125,7 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
 
 - (void)rowStatusDidChange:(NSNotification *)notification {
     (void)notification;
+    [self refreshHeaderToggle];
     [self refreshVisibleRows];
 }
 
@@ -1126,6 +1148,17 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
     BOOL enabled = enabledProvider != nil && enabledProvider();
     BrowserTVConfigureToggleBadge(self.headerToggleButton.stateLabel, enabled);
     self.headerToggleButton.accessibilityValue = enabled ? @"On" : @"Off";
+    if (self.leadingToggleButton) {
+        BOOL leadingEnabled = self.leadingEnabledProvider && self.leadingEnabledProvider();
+        BrowserTVConfigureToggleBadge(self.leadingToggleButton.stateLabel, leadingEnabled);
+        self.leadingToggleButton.accessibilityValue = leadingEnabled ? @"On" : @"Off";
+    }
+}
+
+- (void)leadingTogglePressed:(BrowserBadgeToggleControl *)button {
+    (void)button;
+    if (self.toggleLeadingEnabled) self.toggleLeadingEnabled();
+    [self refreshHeaderToggle];
 }
 
 - (void)headerTogglePressed:(BrowserBadgeToggleControl *)button {
@@ -1693,10 +1726,6 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
             strongSelf.preferencesStore.adBlockEnabled = enabled;
             [strongSelf.host browserSetAdBlockEnabled:enabled];
         } activateRow:^(NSString *identifier) {
-            if ([identifier isEqualToString:@"site"]) {
-                BrowserWebView *view = weakSelf.host.browserWebView;
-                [view setAdBlockSiteEnabled:!view.adBlockSiteEnabled]; return;
-            }
             if ([identifier isEqualToString:@"coverage"]) {
                 UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Ad Block Coverage" message:[weakSelf.host.browserWebView adBlockDiagnosticSummary] preferredStyle:UIAlertControllerStyleAlert];
                 [alert addAction:[UIAlertAction actionWithTitle:@"Done" style:UIAlertActionStyleCancel handler:nil]];
@@ -1708,7 +1737,14 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
     weakSettings = settings;
     settings.toggleTitle = @"Ad Block";
     NSMutableArray *rows = [NSMutableArray array];
-    if (self.host.browserWebView.request.URL.host.length) [rows addObject:@{@"id":@"site", @"title":@"This Site (including subdomains)"}];
+    if (self.host.browserWebView.request.URL.host.length) {
+        settings.leadingToggleTitle = @"This Site";
+        settings.leadingEnabledProvider = ^BOOL { return weakSelf.host.browserWebView.adBlockSiteEnabled; };
+        settings.toggleLeadingEnabled = ^{
+            BrowserWebView *view = weakSelf.host.browserWebView;
+            [view setAdBlockSiteEnabled:!view.adBlockSiteEnabled];
+        };
+    }
     for (NSDictionary *source in BrowserWebView.adBlockSources) {
         if ([source[@"id"] isEqualToString:@"custom"] && !BrowserWebView.adBlockUserFilters.length) continue;
         NSMutableDictionary *row = [source mutableCopy];
@@ -1718,10 +1754,9 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
     [rows addObject:@{@"id":@"coverage", @"title":@"Coverage and Diagnostics", @"action":@"yes"}];
     settings.rows = rows;
     settings.rowEnabledProvider = ^BOOL(NSString *identifier) {
-        return [identifier isEqualToString:@"site"] ? weakSelf.host.browserWebView.adBlockSiteEnabled : [BrowserWebView adBlockSourceEnabled:identifier];
+        return [BrowserWebView adBlockSourceEnabled:identifier];
     };
     settings.rowDetailProvider = ^NSString *(NSString *identifier) {
-        if ([identifier isEqualToString:@"site"]) return weakSelf.preferencesStore.adBlockEnabled ? @"Remembered" : @"Global OFF";
         return [BrowserWebView adBlockSourceStatus:identifier];
     };
     settings.secondaryActionTitle = @"Update Filters Now";
