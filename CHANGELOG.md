@@ -22,7 +22,7 @@ This personal-use project's retrospective versions do not correspond to publishe
 
 ### Fixed
 
-- Reduce extended-filter preparation memory by bridging rules in bounded batches and assembling scripts once, while preserving enabled lists and filtering behavior ([uBO components](_Project/Vendor/UBlock/README.md)).
+- Reduce extended-filter preparation memory by streaming complete rules in bounded batches and escaping them directly into final scripts, while preserving enabled lists and filtering behavior ([uBO components](_Project/Vendor/UBlock/README.md)).
 - Open requested pages while filters prepare, reuse cached network engines and extended scripts, coalesce reloads, defer them during playback or editing, and retain active protection when replacement rules fail ([User Guide](docs/USER_GUIDE.md)).
 - Prevent advanced-script stack overflows and discard obsolete network, worker and page-control results across navigation, tabs and history ([Browser runtime](_Project/Browser/BrowserWebView.m)).
 - Restore compatible cookie archives, preserve the order of rapid Center clicks, and keep asynchronous text dialogs attached to their original fields ([Browser runtime](_Project/Browser/BrowserWebView.m), [Page actions](_Project/Browser/BrowserPageActionCoordinator.m)).

@@ -40,7 +40,7 @@ extension BrowserAdBlockConverter {
         guard let source = resource("UBlockParser", "js"), let context = JSContext() else { return nil }
         let normalize: @convention(block) (String) -> String = { host in
             guard !host.contains("/"), !host.contains("@"), !host.contains(":") else { return "" }
-            return URL(string: "https://\(host)/")?.host?.lowercased() ?? ""
+            return autoreleasepool { URL(string: "https://\(host)/")?.host?.lowercased() ?? "" }
         }
         context.setObject(normalize, forKeyedSubscript: "browserNormalizeHostname" as NSString)
         context.evaluateScript(source)
@@ -65,35 +65,13 @@ extension BrowserAdBlockConverter {
     }
 
     private static func compileScripts(_ lists: NSArray) -> NSDictionary? {
-        guard let context = context(),
-              let libraryText = resource("UBlockScriptlets", "json"),
+        guard let libraryText = resource("UBlockScriptlets", "json"),
               let libraryData = libraryText.data(using: .utf8),
               let library = (try? JSONSerialization.jsonObject(with: libraryData)) as? [[String: Any]],
               let runtime = resource("UBlockRuntime", "js"),
               let domains = resource("UBlockDomains", "js"),
               let cosmetics = resource("UBlockCosmetics", "js"),
               let procedural = resource("UBlockProcedural", "js") else { return nil }
-        context.exception = nil
-        guard let result = context.objectForKeyedSubscript("browserCompileUBlock")?.call(withArguments: [lists, library]),
-              context.exception == nil,
-              let recordValues = result.objectForKeyedSubscript("records"),
-              let length = recordValues.objectForKeyedSubscript("length") else { return nil }
-        let count = Int(length.toInt32())
-        guard count >= 0 else { return nil }
-        let stats = result.objectForKeyedSubscript("stats")?.toDictionary() ?? [:]
-        let rejected = result.objectForKeyedSubscript("rejected")?.toDictionary() ?? [:]
-        var records = [[String: Any]]()
-        records.reserveCapacity(count)
-        // JSValue.toDictionary on the entire result accumulates autoreleased
-        // Foundation wrappers for every nested rule until conversion finishes.
-        for offset in stride(from: 0, to: count, by: 512) {
-            let end = min(offset + 512, count)
-            let batch: [[String: Any]]? = autoreleasepool {
-                recordValues.invokeMethod("slice", withArguments: [offset, end])?.toArray() as? [[String: Any]]
-            }
-            guard context.exception == nil, let batch, batch.count == end - offset else { return nil }
-            records.append(contentsOf: batch)
-        }
         let byName = Dictionary(uniqueKeysWithValues: library.compactMap { entry -> (String, [String: Any])? in
             guard let name = entry["name"] as? String else { return nil }; return (name, entry)
         })
@@ -108,46 +86,115 @@ extension BrowserAdBlockConverter {
         // Like uBO's hostname database, retrieve only candidate buckets before
         // running the authoritative domain/path/entity/ancestor matcher. Keep
         // regex/ancestor and generic scopes in the fallback, without guessing.
-        func indexedRecords(_ records: [[String: Any]]) -> String {
-            var groupIDs = [String: Int](), groups = [[[Any]]](), index = [String: [Int]](), fallback = [Int]()
-            for (ordinal, record) in records.enumerated() {
-                let domains = record["domains"] as? [[String: Any]] ?? []
-                let positives = domains.filter { $0["exclude"] as? Bool != true }.compactMap { $0["host"] as? String }
+        final class Buckets {
+            var groupIDs = [String: Int](), groups = [String](), index = [String: [Int]](), fallback = [Int]()
+            var ordinal = 0
+            var scriptletNames = [String]()
+
+            func append(_ record: String, positives: [String], scriptlet: String?, json: (Any) -> String) {
                 let broad = positives.isEmpty || positives.contains { $0.hasPrefix("/") || $0.hasSuffix(">>") }
                 let keys = broad ? [] : Array(Set(positives.map { String($0.split(separator: "/", maxSplits: 1).first ?? "") })).sorted()
                 let signature = broad ? "" : json(keys)
                 let id: Int
                 if let existing = groupIDs[signature] { id = existing }
                 else {
-                    id = groups.count; groupIDs[signature] = id; groups.append([])
+                    id = groups.count; groupIDs[signature] = id; groups.append("")
                     if broad { fallback.append(id) }
                     else { for key in keys { index[key, default: []].append(id) } }
                 }
-                groups[id].append([ordinal, record])
+                groups[id].append(groups[id].isEmpty ? "[" : ",")
+                groups[id].append("[\(ordinal),")
+                groups[id].append(record)
+                groups[id].append("]")
+                ordinal += 1
+                if let scriptlet { scriptletNames.append(scriptlet) }
             }
-            let lookup = index.keys.sorted().map { "case \(literal($0)):return \(json(index[$0]!));" }.joined()
-            let payloads = groups.enumerated().map { "case \($0.offset):return JSON.parse(\(literal(json($0.element))));" }.joined()
-            return """
-            (function(){
-            function buckets(host){switch(host){\(lookup)}return [];}
-            function entries(id){switch(id){\(payloads)}return [];}
-            const chosen=new Set(\(json(fallback)));
-            for(let host of [hostname,entityFor(hostname),'*']){
-                while(host){for(const id of buckets(host))chosen.add(id);const dot=host.indexOf('.');if(dot<0)break;host=host.slice(dot+1);}
+
+            var sourceCapacity: Int { groups.reduce(0) { $0 + $1.utf8.count } }
+
+            func appendSource(to source: inout String, json: (Any) -> String, literal: (String) -> String) {
+                source.append("(function(){\nfunction buckets(host){switch(host){")
+                for key in index.keys.sorted() {
+                    source.append("case \(literal(key)):return \(json(index[key]!));")
+                }
+                source.append("}return [];}\nfunction entries(id){switch(id){")
+                for id in groups.indices {
+                    groups[id].append("]")
+                    source.append("case \(id):return JSON.parse(")
+                    BrowserAdBlockConverter.appendJSONLiteral(groups[id], to: &source)
+                    source.append(");")
+                    groups[id] = ""
+                }
+                source.append("""
+                }return [];}
+                const chosen=new Set(\(json(fallback)));
+                for(let host of [hostname,entityFor(hostname),'*']){
+                    while(host){for(const id of buckets(host))chosen.add(id);const dot=host.indexOf('.');if(dot<0)break;host=host.slice(dot+1);}
+                }
+                const matches=[];for(const id of chosen)for(const entry of entries(id))matches.push(entry);
+                matches.sort((a,b)=>a[0]-b[0]);return matches.map(entry=>entry[1]);
+                })()
+                """)
             }
-            const matches=[];for(const id of chosen)for(const entry of entries(id))matches.push(entry);
-            matches.sort((a,b)=>a[0]-b[0]);return matches.map(entry=>entry[1]);
-            })()
-            """
         }
+        let buckets = ["MAIN": Buckets(), "ISOLATED": Buckets()]
+        let counters: (NSDictionary, NSDictionary)? = autoreleasepool {
+            guard let context = context() else { return nil }
+            // Release the VM before assembling the scripts; it owns neither
+            // the final bucket buffers nor the returned counters.
+            defer { parserContext = nil }
+            context.exception = nil
+            guard let iterator = context.objectForKeyedSubscript("browserCompileUBlockBatches")?.call(withArguments: [lists, library]),
+                  context.exception == nil,
+                  let next = context.evaluateScript("""
+            (function(iterator){
+                const step=iterator.next();
+                if(step.done)return {done:true,...step.value};
+                return {done:false,batch:step.value.map(r=>[
+                    JSON.stringify(r),
+                    (r.domains||[]).filter(d=>d.exclude!==true).map(d=>d.host),
+                    r.kind,r.world||'',r.exception===true,r.name||''
+                ])};
+            })
+            """), context.exception == nil else { return nil }
+            var counters: (NSDictionary, NSDictionary)?
+            while counters == nil {
+                let valid: Bool = autoreleasepool {
+                    // Pull and consume each batch within the same pool. Even
+                    // the JSValue wrappers die before the next parser batch.
+                    guard let step = next.call(withArguments: [iterator]), context.exception == nil,
+                          let done = step.objectForKeyedSubscript("done") else { return false }
+                    if done.toBool() {
+                        guard let stats = step.objectForKeyedSubscript("stats")?.toDictionary(),
+                              let rejected = step.objectForKeyedSubscript("rejected")?.toDictionary() else { return false }
+                        counters = (stats as NSDictionary, rejected as NSDictionary)
+                        return true
+                    }
+                    guard let batch = step.objectForKeyedSubscript("batch")?.toArray() as? [[Any]],
+                          !batch.isEmpty, batch.count <= 512 else { return false }
+                    for entry in batch {
+                        guard entry.count == 6, let record = entry[0] as? String,
+                              let positives = entry[1] as? [String], let kind = entry[2] as? String,
+                              let world = entry[3] as? String, let exception = entry[4] as? Bool,
+                              let name = entry[5] as? String else { return false }
+                        for target in ["MAIN", "ISOLATED"] {
+                            let selected = exception ? (kind != "cosmetic" || target == "ISOLATED") :
+                                (kind == "cosmetic" ? target == "ISOLATED" : world == target)
+                            if selected {
+                                buckets[target]!.append(record, positives: positives,
+                                    scriptlet: kind == "scriptlet" && !exception ? name : nil, json: json)
+                            }
+                        }
+                    }
+                    return true
+                }
+                guard valid else { return nil }
+            }
+            return counters
+        }
+        guard let (stats, rejected) = counters else { return nil }
         var scripts = [String: String]()
         for world in ["MAIN", "ISOLATED"] {
-            let selected = records.filter { entry in
-                if entry["exception"] as? Bool == true {
-                    return entry["kind"] as? String != "cosmetic" || world == "ISOLATED"
-                }
-                return entry["kind"] as? String == "cosmetic" ? world == "ISOLATED" : entry["world"] as? String == world
-            }
             var names = Set<String>(), declarations = [String](), functions = [String]()
             func collect(_ name: String) {
                 guard !names.contains(name), let entry = byName[name],
@@ -158,32 +205,60 @@ extension BrowserAdBlockConverter {
                 // Function declarations remain lexical, independent of dependency ordering.
                 declarations.append("const \(functionName)=(\(code));")
             }
-            for entry in selected where entry["kind"] as? String == "scriptlet" && entry["exception"] as? Bool != true {
-                if let name = entry["name"] as? String { collect(name) }
-            }
+            for name in buckets[world]!.scriptletNames { collect(name) }
             for name in names.sorted() where name.hasSuffix(".js") {
                 guard let entry = byName[name], let functionName = entry["functionName"] as? String else { continue }
                 functions.append("[\(json([name]).dropFirst().dropLast()),\(functionName)]")
             }
             scripts[world] = autoreleasepool {
                 render(runtime, parts: [
-                    "__BROWSER_RECORDS__": indexedRecords(selected),
                     "__BROWSER_DOMAINS__": domains,
                     "__BROWSER_FUNCTIONS__": declarations.joined(separator: "\n"),
                     "__BROWSER_FUNCTION_MAP__": "[\(functions.joined(separator: ","))]",
                     "__BROWSER_COSMETICS__": world == "ISOLATED" ? cosmetics.replacingOccurrences(of: "__BROWSER_PROCEDURAL__", with: procedural) : "",
-                ])
+                ], recordCapacity: buckets[world]!.sourceCapacity) { buffer in
+                    buckets[world]!.appendSource(to: &buffer, json: json, literal: literal)
+                }
             }
         }
         return ["scripts": scripts, "stats": stats, "rejected": rejected]
     }
 
+    // Escape directly into the final source buffer. Foundation serialization
+    // would materialize both a huge UTF-16 wrapper and a second escaped string.
+    private static func appendJSONLiteral(_ value: String, to output: inout String) {
+        output.append("\"")
+        let scalars = value.unicodeScalars
+        var cursor = scalars.startIndex
+        for index in scalars.indices {
+            let scalar = scalars[index].value
+            let escaped: String
+            switch scalar {
+            case 0x22: escaped = "\\\""
+            case 0x5C: escaped = "\\\\"
+            case 0x08: escaped = "\\b"
+            case 0x0C: escaped = "\\f"
+            case 0x0A: escaped = "\\n"
+            case 0x0D: escaped = "\\r"
+            case 0x09: escaped = "\\t"
+            case 0x00...0x1F, 0x2028, 0x2029: escaped = String(format: "\\u%04x", scalar)
+            default: continue
+            }
+            output.append(contentsOf: value[cursor..<index])
+            output.append(escaped)
+            cursor = scalars.index(after: index)
+        }
+        output.append(contentsOf: value[cursor...])
+        output.append("\"")
+    }
+
     // Assemble one final buffer rather than repeatedly copying a script that
     // already contains tens of megabytes of filter data. Inserted data stays
     // literal, including marker-looking text in filter arguments.
-    private static func render(_ template: String, parts: [String: String]) -> String {
+    private static func render(_ template: String, parts: [String: String], recordCapacity: Int,
+                               records: (inout String) -> Void) -> String {
         var tokens = [(Range<String.Index>, String)]()
-        for token in parts.keys {
+        for token in Array(parts.keys) + ["__BROWSER_RECORDS__"] {
             var cursor = template.startIndex
             while let range = template.range(of: token, range: cursor..<template.endIndex) {
                 tokens.append((range, token))
@@ -192,11 +267,12 @@ extension BrowserAdBlockConverter {
         }
         tokens.sort { $0.0.lowerBound < $1.0.lowerBound }
         var script = ""
-        script.reserveCapacity(template.utf8.count + tokens.reduce(0) { $0 + parts[$1.1]!.utf8.count })
+        script.reserveCapacity(template.utf8.count + recordCapacity + parts.values.reduce(0) { $0 + $1.utf8.count })
         var cursor = template.startIndex
         for (range, token) in tokens {
             script.append(contentsOf: template[cursor..<range.lowerBound])
-            script.append(parts[token]!)
+            if token == "__BROWSER_RECORDS__" { records(&script) }
+            else { script.append(parts[token]!) }
             cursor = range.upperBound
         }
         script.append(contentsOf: template[cursor...])

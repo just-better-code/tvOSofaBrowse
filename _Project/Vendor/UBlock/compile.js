@@ -14,7 +14,7 @@ globalThis.browserPreprocessUBlock = function(text) {
     }
     return out;
 };
-globalThis.browserCompileUBlock = function(lists, library) {
+globalThis.browserCompileUBlockBatches = function*(lists, library) {
     const resources = new Map(), aliases = new Map();
     for (const entry of library) {
         resources.set(entry.name, entry);
@@ -45,7 +45,9 @@ globalThis.browserCompileUBlock = function(lists, library) {
             if (parser.isScriptletFilter()) {
                 const args = parser.getScriptletArgs();
                 if (args.length === 0 && record.exception) {
-                    record.kind='scriptlet'; record.key='*'; record.args=[]; records.push(record); continue;
+                    record.kind='scriptlet'; record.key='*'; record.args=[]; records.push(record);
+                    if (records.length === 512) yield records.splice(0);
+                    continue;
                 }
                 const token = args[0]?.endsWith('.js') ? args[0] : `${args[0]}.js`;
                 const entry = resources.get(aliases.get(args[0]) || aliases.get(token) || token);
@@ -62,7 +64,23 @@ globalThis.browserCompileUBlock = function(lists, library) {
                 counts.cosmetic++;
             } else { reject('response-filter'); continue; }
             records.push(record);
+            if (records.length === 512) yield records.splice(0);
         }
     }
-    return {records, stats, rejected};
+    if (records.length !== 0) yield records.splice(0);
+    parser.finish();
+    return {stats, rejected};
+};
+
+// Retain the collecting API for existing tooling. The native host instead pulls
+// bounded batches under its own autorelease pool, without retaining JS wrappers
+// for every delivered rule until the end of the whole compilation.
+globalThis.browserCompileUBlock = function(lists, library) {
+    const iterator = browserCompileUBlockBatches(lists, library);
+    const records = [];
+    for (;;) {
+        const step = iterator.next();
+        if (step.done) return {records, ...step.value};
+        records.push(...step.value);
+    }
 };

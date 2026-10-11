@@ -509,7 +509,7 @@ void BrowserLoadUBlockRuntime(void (^completion)(NSDictionary *)) {
             const uint8_t *p = bytes.bytes; for (NSUInteger i = 0; i < bytes.length; i++) fingerprint = (fingerprint ^ p[i]) * 1099511628211ULL;
         }
         // Adapter schema changes invalidate this cache independently of filter text.
-        NSURL *snapshotURL = [directory URLByAppendingPathComponent:[NSString stringWithFormat:@"extended-v2-%@-%016llx.json", identifier, fingerprint]];
+        NSURL *snapshotURL = [directory URLByAppendingPathComponent:[NSString stringWithFormat:@"extended-v3-%@-%016llx.json", identifier, fingerprint]];
         NSData *data = [NSData dataWithContentsOfURL:snapshotURL];
         NSDictionary *compiled = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
         BOOL restored = [compiled isKindOfClass:NSDictionary.class] && [compiled[@"scripts"] isKindOfClass:NSDictionary.class] &&
