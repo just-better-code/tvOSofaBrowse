@@ -68,6 +68,8 @@
 		ADBF00000000000000000001 /* UBlockNetwork.js in Resources */ = {isa = PBXBuildFile; fileRef = ADBE00000000000000000001; };
 		ADBF00000000000000000002 /* PublicSuffixList.dat in Resources */ = {isa = PBXBuildFile; fileRef = ADBE00000000000000000002; };
 		ADBF00000000000000000003 /* UBlockRequests.js in Resources */ = {isa = PBXBuildFile; fileRef = ADBE00000000000000000003; };
+		ADB500000000000000000003 /* BrowserAdBlockService.m in Sources */ = {isa = PBXBuildFile; fileRef = ADB500000000000000000002; };
+		ADB500000000000000000005 /* uassets-pin.json in Resources */ = {isa = PBXBuildFile; fileRef = ADB500000000000000000004; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -176,6 +178,9 @@
 		ADBE00000000000000000001 /* UBlockNetwork.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "UBlockNetwork.js"; path = "../Vendor/UBlock/UBlockNetwork.js"; sourceTree = "<group>"; };
 		ADBE00000000000000000002 /* PublicSuffixList.dat */ = {isa = PBXFileReference; lastKnownFileType = text; name = "PublicSuffixList.dat"; path = "../Vendor/UBlock/PublicSuffixList.dat"; sourceTree = "<group>"; };
 		ADBE00000000000000000003 /* UBlockRequests.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "UBlockRequests.js"; path = "../Vendor/UBlock/UBlockRequests.js"; sourceTree = "<group>"; };
+		ADB500000000000000000001 /* BrowserAdBlockService.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BrowserAdBlockService.h; sourceTree = "<group>"; };
+		ADB500000000000000000002 /* BrowserAdBlockService.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BrowserAdBlockService.m; sourceTree = "<group>"; };
+		ADB500000000000000000004 /* uassets-pin.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = "uassets-pin.json"; path = "../Vendor/UBlock/uassets-pin.json"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -291,6 +296,8 @@
 				A1B49AA02D700080001D58A1 /* BrowserHistoryStore.m */,
 				ADBE00000000000000000006 /* BrowserAdBlockPolicy.m */,
 				ADBE00000000000000000007 /* BrowserAdBlockPolicy.h */,
+				ADB500000000000000000001 /* BrowserAdBlockService.h */,
+				ADB500000000000000000002 /* BrowserAdBlockService.m */,
 				A1B49A872D700000001D58A1 /* BrowserPreferencesStore.h */,
 				A1B49A882D700000001D58A1 /* BrowserPreferencesStore.m */,
 				A1B49A562D6828D4001D58A1 /* BrowserSessionStore.h */,
@@ -327,6 +334,7 @@
 				ADBC00000000000000000007 /* UAssets-LICENSE */,
 				ADBC00000000000000000006 /* LICENSE.txt */,
 				ADBC00000000000000000005 /* UBlockFilters.txt */,
+				ADB500000000000000000004 /* uassets-pin.json */,
 				ADBC00000000000000000004 /* UBlockCosmetics.js */,
 				ADBC00000000000000000003 /* UBlockRuntime.js */,
 				ADBE00000000000000000002 /* PublicSuffixList.dat */,
@@ -489,6 +497,7 @@
 				ADBD00000000000000000007 /* UAssets-LICENSE in Resources */,
 				ADBD00000000000000000006 /* LICENSE.txt in Resources */,
 				ADBD00000000000000000005 /* UBlockFilters.txt in Resources */,
+				ADB500000000000000000005 /* uassets-pin.json in Resources */,
 				ADBD00000000000000000004 /* UBlockCosmetics.js in Resources */,
 				ADBD00000000000000000003 /* UBlockRuntime.js in Resources */,
 				ADBF00000000000000000002 /* PublicSuffixList.dat in Resources */,
@@ -557,6 +566,7 @@
 				A1B49A842D6D2000001D58A1 /* BrowserDOMInteractionService.m in Sources */,
 				A1B49A4E2D680900001D58A1 /* BrowserNavigationService.m in Sources */,
 				ADBF00000000000000000006 /* BrowserAdBlockPolicy.m in Sources */,
+				ADB500000000000000000003 /* BrowserAdBlockService.m in Sources */,
 				A1B49A892D700000001D58A1 /* BrowserPreferencesStore.m in Sources */,
 				A1B49A582D6828D4001D58A1 /* BrowserSessionStore.m in Sources */,
 				A1B49A682D6AD500001D58A1 /* UIApplication+BrowserSelectPressForwarding.m in Sources */,

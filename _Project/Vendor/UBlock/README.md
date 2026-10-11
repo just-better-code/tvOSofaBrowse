@@ -18,7 +18,7 @@ The current adaptation scope is finalized in **2.21.0**. This is a practical WKW
 | Workers | Classic/module/nested same-realm Blob request adapters | HTTP(S), Shared/service workers and foreign Blob realms retain native WebKit fallback; custom-protocol cookie/cancellation gaps are not shipped |
 | Substitutions | List-selected page API scriptlets and GET/HEAD fetch query pruning | General redirects/surrogates, broader modifiers and network response-header/body delivery |
 | Diagnostics | Bounded scriptlet/DOM source-line events, rejection reasons, native action counters and winning navigation rule | Original network list/line attribution, complete traffic visibility and live blocked-dialog focus verification |
-| Preparation | Ready-engine snapshots, compiled/source recovery and isolated background replacement retaining the installed engine | Observed timings describe Simulator/macOS fixtures, not physical-TV performance |
+| Preparation | Ready-engine and extended-script snapshots, hostname candidate buckets, compiled/source recovery and isolated background replacement retaining the installed engine | Observed timings describe Simulator/macOS fixtures, not physical-TV performance |
 
 Changing cosmetic policy reloads the document because removal of nodes/attributes/classes is irreversible within that document. Individual DOM queries and regular expressions cannot be preempted; procedural scans defer above 15,000 elements. Deferred work is intentionally outside the finalized 2.21.0 scope.
 
@@ -46,3 +46,27 @@ Site third-party policy (2.21.0) sends Block/Allow/Noop host rules to the full c
 Advanced rejection accounting (2.21.0) parses HTML filter syntax with the pinned parser capability enabled but does not emit response-body rules. Valid HTML and header filters report pending delivery separately from malformed syntax. The pinned list has 130 HTML-response, six response-header and one syntax rejection; counts describe this snapshot, not downloaded lists.
 
 Strict-document matching (2.21.0) bundles the pinned traffic.js decision and hostname-validation helpers in strict.js with original GPL notice. Explicit document filters and validated generic hostname filters retain upstream important/exception precedence. The host shows a native blocked-navigation explanation including the winning filter from traffic.js strict-decision logData or the upstream dynamic engine toLogData. Reading only the last static probe would misattribute explicit/generic precedence. The rule stays in native memory/UI, is not written to logs or returned to page scripts, and does not claim original list/line provenance. No temporary allow-once mechanism is claimed. Destination site exceptions apply before main navigation matching, and policy-generation changes cancel obsolete decisions.
+
+## Preparation, document lifecycle and cache maintenance
+
+`BrowserAdBlockService` owns source preferences, downloads, policy variants, compilation caches, full-core preparation and native rule installation. The WebView keeps document generations, installed scripts and native UI/lifecycle decisions. Native rules apply as soon as available; extended preparation emits one final completion. Failed updates preserve installed rules, and partial results are not cached as complete policies. Successful partial protection is still usable on a cold start.
+
+Background reloads defer while fullscreen/media/input/dialog state is busy or an iframe is opaque. Exiting fullscreen requests another safe check; a still-playing inline video, edited field or opaque iframe keeps the upgrade registered for the next navigation/manual reload. Explicit preference changes still request their deliberate reload. The live document's bridge token remains valid until document replacement; page-cache markers restore the cached document token. Input dirtiness is tracked from document start in every frame, independently of filter readiness.
+
+Extended rules use lazy hostname/entity candidate buckets. Generic, regex and ancestor scopes remain in a conservative fallback; path constraints and exclusions still use the original applicability matcher. Original source order is retained. Documents materialize only candidate rule records; WebKit still receives shared script source, so this is not a claim that injected source bytes or measured frame load time decreased. This adapts uBO's hostname database retrieval without its synchronous WebExtension messaging host.
+
+Prepared MAIN/ISOLATED scripts persist under `BrowserExtendedRules` with source identity, bundled asset fingerprint and an explicit adapter schema. The current schema is `extended-v1`; bump it when changing the native script generator. Invalid cache shapes rebuild from source. Failed replacement compilation retains the installed runtime. Network/extended snapshots retain the successful current cache and one previous cache after successful restore/write. Native store cleanup uses WebKit enumeration/removal APIs, preserving all installed identifiers, three policy manifests and in-flight compilation. It only removes superseded generated rule caches; downloaded lists, preferences and website data remain separate.
+
+## Reproducible uAssets refresh
+
+Choose an immutable 40-character commit from the official uAssets repository and record the retrieval date explicitly:
+
+```sh
+node scripts/update-uassets-snapshot.mjs --revision <commit-sha> --date YYYY-MM-DD --checkout <local-uAssets-checkout>
+# Or retrieve exactly that commit from the official raw GitHub host:
+node scripts/update-uassets-snapshot.mjs --revision <commit-sha> --date YYYY-MM-DD --download
+```
+
+The local mode reads committed files with `git show`, ignoring working-tree edits, and requires the official origin. The tool recursively flattens relative filter includes at their original position, preserves conditional directives and upstream notices, rejects cycles/unsupported paths, and retrieves the upstream license. It completes all input reads and validation before staging output replacements. The pin records the commit, entry file, each input SHA-256, flattened output SHA-256, license SHA-256 and retrieval date. Reusing the same commit/date produces the same snapshot metadata. Review the three resulting files together, then build/deliver the app; updating filter text alone does not require regenerating the pinned engine/scriptlet code.
+
+The existing 2026-10-11 snapshot is unchanged and has no known exact commit; its original input digests are retained rather than inventing provenance. Future refreshes use the new commit-based workflow. The settings date comes from bundled `uassets-pin.json`. The updater is a maintenance tool, not an automatic network updater, and does not execute downloaded filter text.

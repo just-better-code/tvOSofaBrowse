@@ -11,9 +11,10 @@ This personal-use project's retrospective versions do not correspond to publishe
 
 ### Added
 
-- Apply pinned uBlock scriptlets, procedural cosmetics and full static/dynamic matching to navigation, page fetch/XHR and supported classic, module and nested Blob workers, including scoped exceptions and fetch query pruning ([Ad Block coverage](docs/USER_GUIDE.md), [uBO components](_Project/Vendor/UBlock/README.md)).
+- Select extended-rule candidates by hostname while preserving scoped exceptions, and apply pinned uBlock scriptlets, procedural cosmetics and full static/dynamic matching to navigation, page fetch/XHR and supported classic, module and nested Blob workers, including fetch query pruning ([Ad Block coverage](docs/USER_GUIDE.md), [uBO components](_Project/Vendor/UBlock/README.md)).
 - Choose Block (Strict), Allow (Soft), Use Filters (Default) or Inherit per site, show the matching rule in blocked-navigation explanations, and report bounded coverage and unsupported-filter reasons ([Ad Block controls](docs/USER_GUIDE.md)).
 - Scroll at the pointer's top or bottom edge outside fullscreen and add Go to End to VLC playback ([User Guide](docs/USER_GUIDE.md)).
+- Refresh bundled uAssets from an immutable upstream commit with recorded input/output digests and retain only current or needed generated caches ([uBO maintenance](_Project/Vendor/UBlock/README.md)).
 
 ### Removed
 
@@ -21,7 +22,7 @@ This personal-use project's retrospective versions do not correspond to publishe
 
 ### Fixed
 
-- Open requested pages while filters prepare, coalesce preparation reloads, defer background reloads during playback or editing, and retain active protection when replacement rules fail ([User Guide](docs/USER_GUIDE.md)).
+- Open requested pages while filters prepare, reuse cached network engines and extended scripts, coalesce reloads, defer them during playback or editing, and retain active protection when replacement rules fail ([User Guide](docs/USER_GUIDE.md)).
 - Prevent advanced-script stack overflows and discard obsolete network, worker and page-control results across navigation, tabs and history ([Browser runtime](_Project/Browser/BrowserWebView.m)).
 - Restore compatible cookie archives, preserve the order of rapid Center clicks, and keep asynchronous text dialogs attached to their original fields ([Browser runtime](_Project/Browser/BrowserWebView.m), [Page actions](_Project/Browser/BrowserPageActionCoordinator.m)).
 

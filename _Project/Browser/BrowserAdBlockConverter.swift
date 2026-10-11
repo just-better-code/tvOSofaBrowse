@@ -78,10 +78,48 @@ extension BrowserAdBlockConverter {
                   let text = String(data: data, encoding: .utf8) else { return "[]" }
             return text
         }
+        func literal(_ value: String) -> String { String(json([value]).dropFirst().dropLast()) }
+        // Like uBO's hostname database, retrieve only candidate buckets before
+        // running the authoritative domain/path/entity/ancestor matcher. Keep
+        // regex/ancestor and generic scopes in the fallback, without guessing.
+        func indexedRecords(_ records: [[String: Any]]) -> String {
+            var groupIDs = [String: Int](), groups = [[[Any]]](), index = [String: [Int]](), fallback = [Int]()
+            for (ordinal, record) in records.enumerated() {
+                let domains = record["domains"] as? [[String: Any]] ?? []
+                let positives = domains.filter { $0["exclude"] as? Bool != true }.compactMap { $0["host"] as? String }
+                let broad = positives.isEmpty || positives.contains { $0.hasPrefix("/") || $0.hasSuffix(">>") }
+                let keys = broad ? [] : Array(Set(positives.map { String($0.split(separator: "/", maxSplits: 1).first ?? "") })).sorted()
+                let signature = broad ? "" : json(keys)
+                let id: Int
+                if let existing = groupIDs[signature] { id = existing }
+                else {
+                    id = groups.count; groupIDs[signature] = id; groups.append([])
+                    if broad { fallback.append(id) }
+                    else { for key in keys { index[key, default: []].append(id) } }
+                }
+                groups[id].append([ordinal, record])
+            }
+            let lookup = index.keys.sorted().map { "case \(literal($0)):return \(json(index[$0]!));" }.joined()
+            let payloads = groups.enumerated().map { "case \($0.offset):return JSON.parse(\(literal(json($0.element))));" }.joined()
+            return """
+            (function(){
+            function buckets(host){switch(host){\(lookup)}return [];}
+            function entries(id){switch(id){\(payloads)}return [];}
+            const chosen=new Set(\(json(fallback)));
+            for(let host of [hostname,entityFor(hostname),'*']){
+                while(host){for(const id of buckets(host))chosen.add(id);const dot=host.indexOf('.');if(dot<0)break;host=host.slice(dot+1);}
+            }
+            const matches=[];for(const id of chosen)for(const entry of entries(id))matches.push(entry);
+            matches.sort((a,b)=>a[0]-b[0]);return matches.map(entry=>entry[1]);
+            })()
+            """
+        }
         var scripts = [String: String]()
         for world in ["MAIN", "ISOLATED"] {
             let selected = records.filter { entry in
-                if entry["exception"] as? Bool == true { return true }
+                if entry["exception"] as? Bool == true {
+                    return entry["kind"] as? String != "cosmetic" || world == "ISOLATED"
+                }
                 return entry["kind"] as? String == "cosmetic" ? world == "ISOLATED" : entry["world"] as? String == world
             }
             var names = Set<String>(), declarations = [String](), functions = [String]()
@@ -101,7 +139,7 @@ extension BrowserAdBlockConverter {
                 guard let entry = byName[name], let functionName = entry["functionName"] as? String else { continue }
                 functions.append("[\(json([name]).dropFirst().dropLast()),\(functionName)]")
             }
-            var script = runtime.replacingOccurrences(of: "__BROWSER_RECORDS__", with: "JSON.parse(\(json([json(selected)]))[0])")
+            var script = runtime.replacingOccurrences(of: "__BROWSER_RECORDS__", with: indexedRecords(selected))
             script = script.replacingOccurrences(of: "__BROWSER_DOMAINS__", with: domains)
             script = script.replacingOccurrences(of: "__BROWSER_FUNCTIONS__", with: declarations.joined(separator: "\n"))
             script = script.replacingOccurrences(of: "__BROWSER_FUNCTION_MAP__", with: "[\(functions.joined(separator: ","))]")
@@ -130,6 +168,26 @@ final class BrowserNetworkFilterEngine: NSObject {
     private static var installedIdentity = ""
     private static var installedSummary: NSDictionary = [:]
     private static var preparationGeneration = 0
+
+    // Only generated network snapshots are disposable. Retain the successful
+    // current cache and one previous cache; never touch website/torrent data.
+    private static func pruneSnapshots(directory: URL, keeping current: URL) {
+        let keys: Set<URLResourceKey> = [.isRegularFileKey, .contentModificationDateKey]
+        let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: Array(keys))) ?? []
+        let candidates = files.filter {
+            $0.lastPathComponent.hasPrefix("network-v") && $0.pathExtension == "json" &&
+                (try? $0.resourceValues(forKeys: keys).isRegularFile) == true
+        }.sorted {
+            let a = (try? $0.resourceValues(forKeys: keys).contentModificationDate) ?? .distantPast
+            let b = (try? $1.resourceValues(forKeys: keys).contentModificationDate) ?? .distantPast
+            return a > b
+        }
+        var keptPrevious = false
+        for file in candidates where file != current {
+            if !keptPrevious { keptPrevious = true; continue }
+            try? FileManager.default.removeItem(at: file)
+        }
+    }
 
     private static func createContext(runtime: BrowserNetworkRuntime) -> JSContext? {
         guard let context = JSContext(),
@@ -231,12 +289,16 @@ final class BrowserNetworkFilterEngine: NSObject {
                 }
                 context.exception = nil // Cache failure must not disable matching.
             }
+            var persisted = summary["snapshot"] as? Bool == true
             if let persistent, let data = try? JSONSerialization.data(withJSONObject: persistent) {
-                try? data.write(to: cacheURL, options: .atomic)
+                do { try data.write(to: cacheURL, options: .atomic); persisted = true }
+                catch { persisted = false }
             }
             summary["available"] = true
             summary["prepareMilliseconds"] = Int(Date().timeIntervalSince(started) * 1000)
             let preparedSummary = summary as NSDictionary
+            let prune = persisted
+            let retainedCache = FileManager.default.fileExists(atPath: cacheURL.path) ? cacheURL : directory.appendingPathComponent("network-v2-\(identity).json")
             DispatchQueue.main.async {
                 guard generation == preparationGeneration else {
                     completion(["available": false, "superseded": true]); return
@@ -244,6 +306,7 @@ final class BrowserNetworkFilterEngine: NSObject {
                 installed = candidate
                 installedIdentity = identity
                 installedSummary = preparedSummary
+                if prune { pruneSnapshots(directory: directory, keeping: retainedCache) }
                 completion(preparedSummary)
             }
         }
