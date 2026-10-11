@@ -1730,12 +1730,9 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
         } activateRow:^(NSString *identifier) {
             if ([identifier isEqualToString:@"dynamic-policy"]) {
                 NSString *selected = [BrowserWebView dynamicAdBlockPolicyForHost:policyHost];
-                NSString *effective = [BrowserWebView effectiveDynamicAdBlockPolicyForHost:policyHost];
-                NSDictionary *effectiveTitles = @{@"standard":@"Filter lists", @"block":@"Block third-party requests", @"allow":@"Allow third-party requests", @"noop":@"Filter lists"};
-                NSString *message = [NSString stringWithFormat:@"%@ and its subdomains.\nSaved: %@%@.\nThird-party requests load content from other websites. Block stops all of them; Allow lets them through; Use Filters applies the filter lists. Follow Parent removes this site's choice. Changes reload the page when ready.", policyHost, effectiveTitles[effective], [selected isEqual:@"inherit"] ? @" (inherited)" : @""];
                 UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Third-party Requests"
-                    message:message preferredStyle:UIAlertControllerStyleAlert];
-                NSDictionary *titles = @{@"inherit":@"Follow Parent", @"block":@"Block Third-party", @"allow":@"Allow Third-party", @"noop":@"Use Filters"};
+                    message:policyHost preferredStyle:UIAlertControllerStyleAlert];
+                NSDictionary *titles = @{@"inherit":@"Default", @"block":@"Block", @"allow":@"Allow", @"noop":@"Use Filters"};
                 for (NSString *policy in @[@"inherit", @"block", @"allow", @"noop"]) {
                     [alert addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"%@%@", [selected isEqual:policy] ? @"✓ " : @"", titles[policy]] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
                         [BrowserWebView setDynamicAdBlockPolicy:policy forHost:policyHost];
@@ -1780,7 +1777,8 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
             NSString *policy = [BrowserWebView dynamicAdBlockPolicyForHost:policyHost];
             NSDictionary *titles = @{@"standard":@"Use Filters", @"block":@"Block", @"allow":@"Allow", @"noop":@"Use Filters"};
             NSString *effective = [BrowserWebView effectiveDynamicAdBlockPolicyForHost:policyHost];
-            return [NSString stringWithFormat:@"%@%@%@", titles[effective], [policy isEqual:@"inherit"] ? @" · Inherited" : @"", weakSelf.host.browserWebView.adBlockPolicyPreparing ? @" · Preparing" : @""];
+            NSString *label = [policy isEqual:@"inherit"] ? ([effective isEqual:@"standard"] ? @"Default" : [NSString stringWithFormat:@"Default · %@ from parent", titles[effective]]) : titles[effective];
+            return [label stringByAppendingString:weakSelf.host.browserWebView.adBlockPolicyPreparing ? @" · Preparing" : @""];
         }
         return [BrowserWebView adBlockSourceStatus:identifier];
     };

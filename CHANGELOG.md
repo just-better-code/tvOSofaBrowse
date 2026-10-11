@@ -2,6 +2,17 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.21.23 - 2026-10-11
+
+### Added
+
+- Apply upstream strict-document blocking with hostname validation and show a native explanation when Ad Block stops opening a page ([Navigation adapter](_Project/Browser/BrowserWebView.m)).
+
+### Fixed
+
+- Label the default third-party policy explicitly and remove the long menu description while retaining the selected mode and preparation status ([Ad Block controls](docs/USER_GUIDE.md)).
+- Check the destination site's exception for main-page navigation and discard decisions from an obsolete policy generation ([Navigation adapter](_Project/Browser/BrowserWebView.m)).
+
 ## 2.21.22 - 2026-10-11
 
 ### Fixed

@@ -980,6 +980,21 @@ static UIColor *kTextColor(void) {
     return YES;
 }
 
+- (void)webView:(id)webView didBlockNavigationToURL:(NSURL *)URL {
+    // Never present a delayed background-tab decision over the active page.
+    if (webView != self.webview) return;
+    NSString *host = URL.host ?: @"this website";
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Page Blocked by Ad Block"
+        message:[NSString stringWithFormat:@"Ad Block stopped opening %@. This navigation was stopped. You can change Ad Block in the browser menu if you want to open this website.", host]
+        preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Done" style:UIAlertActionStyleCancel handler:nil]];
+    // Present over an app-owned menu if navigation was initiated there.
+    UIViewController *presenter = self;
+    while (presenter.presentedViewController && !presenter.presentedViewController.isBeingDismissed) presenter = presenter.presentedViewController;
+    if (presenter.isBeingDismissed || presenter.isBeingPresented) return;
+    [presenter presentViewController:alert animated:YES completion:nil];
+}
+
 - (BOOL)webView:(id)webView shouldStartLoadWithRequest:(NSURLRequest *)request navigationType:(NSInteger)navigationType {
     (void)navigationType;
     if ([self handleTorrentRequest:request]) return NO;

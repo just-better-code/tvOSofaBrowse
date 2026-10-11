@@ -2727,7 +2727,7 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 
 - (void)webView:(id)webView decidePolicyForNavigationAction:(id)navigationAction decisionHandler:(void (^)(NSInteger))decisionHandler {
     NSURLRequest *request = [self requestFromNavigationAction:navigationAction];
-    if (!self.adBlockEffectiveEnabled || ![@[@"http", @"https"] containsObject:request.URL.scheme.lowercaseString]) {
+    if (!self.adBlockEnabled || ![@[@"http", @"https"] containsObject:request.URL.scheme.lowercaseString]) {
         [self webView:webView finishNavigationAction:navigationAction decisionHandler:decisionHandler];
         return;
     }
@@ -2737,22 +2737,35 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
         [self webView:webView finishNavigationAction:navigationAction decisionHandler:decisionHandler]; return;
     }
     BOOL mainFrame = !targetFrame || ((BOOL (*)(id, SEL))objc_msgSend)(targetFrame, mainSelector);
+    if (!BrowserAdBlockSiteEnabled(mainFrame ? request.URL : self.request.URL)) {
+        [self webView:webView finishNavigationAction:navigationAction decisionHandler:decisionHandler]; return;
+    }
     id sourceFrame = BrowserObjectResultForGetter(navigationAction, @"sourceFrame");
     NSURLRequest *origin = BrowserObjectResultForGetter(sourceFrame, @"request");
     NSString *topURL = mainFrame ? request.URL.absoluteString : self.request.URL.absoluteString;
     NSDictionary *details = @{@"url":request.URL.absoluteString ?: @"", @"originURL":origin.URL.absoluteString ?: topURL ?: @"",
         @"topURL":topURL ?: @"", @"type":mainFrame ? @"main_frame" : @"sub_frame", @"method":request.HTTPMethod ?: @"GET"};
     NSUInteger generation = self.documentGeneration;
+    NSUInteger policyGeneration = self.adBlockPolicyGeneration;
     __block BOOL finished = NO;
     __weak typeof(self) weakSelf = self;
     void (^finish)(NSDictionary *) = ^(NSDictionary *result) {
         if (finished) return;
         finished = YES;
         BrowserWebView *owner = weakSelf;
-        if (!owner || owner.documentGeneration != generation) { decisionHandler(0); return; }
-        BOOL blocked = [result[@"action"] integerValue] == 1 && owner.adBlockEffectiveEnabled;
+        if (!owner || owner.documentGeneration != generation || owner.adBlockPolicyGeneration != policyGeneration) { decisionHandler(0); return; }
+        BOOL blocked = [result[@"action"] integerValue] == 1 && owner.adBlockEnabled && BrowserAdBlockSiteEnabled(mainFrame ? request.URL : owner.request.URL);
         if (BrowserPreferencesStore.websiteLoggingEnabled) BrowserLog(@"[AdBlock] navigation main=%d blocked=%d engine=%@", mainFrame, blocked, result[@"engine"] ?: @"timeout");
-        if (blocked) { decisionHandler(0); return; }
+        if (blocked) {
+            decisionHandler(0);
+            if (mainFrame) {
+                owner.loading = NO;
+                if ([owner.delegate respondsToSelector:@selector(webView:didBlockNavigationToURL:)]) {
+                    [owner.delegate webView:owner didBlockNavigationToURL:request.URL];
+                }
+            }
+            return;
+        }
         [owner webView:webView finishNavigationAction:navigationAction decisionHandler:decisionHandler];
     };
     [BrowserNetworkFilterEngine matchRequest:details

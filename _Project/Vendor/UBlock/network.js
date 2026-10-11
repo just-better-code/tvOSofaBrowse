@@ -59,7 +59,10 @@ globalThis.browserMatchNetwork = function(details) {
         action = firewall.evaluateCellZY(source, context.getHostname(), details.type);
         engine = 'dynamic-host';
     }
-    if (action === 0 || action === 3) { action = snfe.matchRequest(context); engine = 'static'; }
+    if (action === 0 || action === 3) {
+        action = details.type === 'main_frame' ? shouldStrictBlock(context, false).result : snfe.matchRequest(context);
+        engine = 'static';
+    }
     const result = {action,engine};
     // Query pruning is implemented entirely by the upstream matcher without the
     // host URL shim. Keep modifiers separate from a blocking/allowing decision.
