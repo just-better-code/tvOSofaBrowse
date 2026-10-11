@@ -37,7 +37,7 @@ function mediaState() {
     var seekable = !!(v && v.seekable.length);
     return {available: !!v || !!mediaHandlers.play || !!mediaHandlers.pause,
         paused: v ? v.paused : !(navigator.mediaSession && navigator.mediaSession.playbackState === 'playing'),
-        currentTime: current, duration: duration,
+        currentTime: current, duration: duration, muted: !!(v && v.muted), canMute: !!v,
         canSeekBack: seekable || !!mediaHandlers.seekbackward,
         canSeekForward: seekable || !!mediaHandlers.seekforward,
         canPrevious: !!mediaHandlers.previoustrack || (current > 5 && (seekable || !!mediaHandlers.seekto)),
@@ -112,6 +112,11 @@ function performMediaCommand(command, value, request) {
     var v = mediaVideo();
     var state = mediaState();
     var action, details = {};
+    if (command === 'mute') {
+        if (!v) return false;
+        v.muted = !v.muted;
+        return true;
+    }
     if (command === 'toggle') action = state.paused ? 'play' : 'pause';
     else if (command === 'seek' && Number.isFinite(value) && Math.abs(value) <= 120) {
         action = value < 0 ? 'seekbackward' : 'seekforward'; details.seekOffset = Math.abs(value);
@@ -119,7 +124,7 @@ function performMediaCommand(command, value, request) {
         action = 'previoustrack';
     } else if (command === 'next') action = 'nexttrack';
     else if (command === 'restart') { action = 'seekto'; details.seekTime = 0; }
-    else if (command === 'end' && state.canEnd) { action = 'seekto'; details.seekTime = Math.max(0, state.duration - 2); }
+    else if (command === 'end' && state.canEnd) { action = 'seekto'; details.seekTime = Math.max(0, state.duration - 5); }
     if (!action) return false;
     details.action = action;
     try {

@@ -2,6 +2,22 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.19.12 - 2026-10-11
+
+### Changed
+
+- Keep Go to End exclusively in fullscreen iframe controls ([User Guide](docs/USER_GUIDE.md)).
+
+### Added
+
+- Toggle mute with a state-aware speaker button in fullscreen iframe and VLC playback controls ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.19.11 - 2026-10-11
+
+### Changed
+
+- Seek five seconds before the end with Go to End in iframe and VLC playback controls ([User Guide](docs/USER_GUIDE.md)).
+
 ## 2.19.10 - 2026-10-11
 
 ### Changed

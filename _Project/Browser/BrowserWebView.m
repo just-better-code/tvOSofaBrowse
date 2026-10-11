@@ -732,7 +732,7 @@ static id BrowserPersistentWebsiteDataStore(void) {
     if (![body isKindOfClass:NSDictionary.class] || ![body[@"token"] isEqual:self.token]) return;
     if (![body[@"session"] isKindOfClass:NSString.class] || [body[@"session"] length] > 128) return;
     NSMutableDictionary *state = [NSMutableDictionary dictionaryWithObject:body[@"session"] forKey:@"session"];
-    for (NSString *key in @[@"active", @"available", @"paused", @"canSeekBack", @"canSeekForward", @"canPrevious", @"canNext", @"canRestart", @"canEnd"]) {
+    for (NSString *key in @[@"active", @"available", @"paused", @"canSeekBack", @"canSeekForward", @"canPrevious", @"canNext", @"canRestart", @"canEnd", @"muted", @"canMute"]) {
         state[key] = @([body[key] isKindOfClass:NSNumber.class] && [body[key] boolValue]);
     }
     for (NSString *key in @[@"currentTime", @"duration"]) {
