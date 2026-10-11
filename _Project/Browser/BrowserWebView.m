@@ -2812,8 +2812,25 @@ windowFeatures:(id)windowFeatures {
 + (void)restoreCookiesFromData:(NSData *)cookieData completion:(void (^)(void))completion {
     NSError *error = nil;
     NSSet *classes = [NSSet setWithObjects:NSArray.class, NSHTTPCookie.class, nil];
-    NSArray *cookies = cookieData.length ? [NSKeyedUnarchiver unarchivedObjectOfClasses:classes fromData:cookieData error:&error] : nil;
-    if (![cookies isKindOfClass:NSArray.class]) { if (completion) completion(); return; }
+    NSArray *cookies = nil;
+    if (cookieData.length) {
+        @try {
+            // This app-owned archive uses NSCoding: NSHTTPCookie does not adopt
+            // NSSecureCoding, so the secure convenience decoder rejects it.
+            NSKeyedUnarchiver *decoder = [[NSKeyedUnarchiver alloc] initForReadingFromData:cookieData error:&error];
+            decoder.requiresSecureCoding = NO;
+            cookies = [decoder decodeObjectOfClasses:classes forKey:NSKeyedArchiveRootObjectKey];
+            [decoder finishDecoding];
+            error = error ?: decoder.error;
+        } @catch (__unused NSException *exception) {
+            cookies = nil;
+        }
+    }
+    BOOL valid = !error && [cookies isKindOfClass:NSArray.class];
+    for (id cookie in valid ? cookies : @[]) {
+        if (![cookie isKindOfClass:NSHTTPCookie.class]) { valid = NO; break; }
+    }
+    if (!valid) { if (completion) completion(); return; }
     if (!BrowserCookieRestoreGroup) BrowserCookieRestoreGroup = dispatch_group_create();
     dispatch_group_t batch = dispatch_group_create();
     dispatch_group_enter(BrowserCookieRestoreGroup);

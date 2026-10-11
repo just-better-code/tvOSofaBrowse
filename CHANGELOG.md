@@ -2,6 +2,12 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.21.14 - 2026-10-11
+
+### Fixed
+
+- Restore saved cookies with the compatible archive decoder and reject malformed cookie archives before applying them ([BrowserWebView](_Project/Browser/BrowserWebView.m)).
+
 ## 2.21.13 - 2026-10-11
 
 ### Fixed
