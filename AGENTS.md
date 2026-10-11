@@ -46,7 +46,7 @@ The knowledge graph under `graphify-out/` is optional. Prefer `rg` and targeted 
 - Do not automatically update or rebuild the graph after code changes. Update it when explicitly requested or when fresh graph data is needed for a chosen architecture investigation.
 - Keep queries focused and output bounded; confirm graph findings in the source because the graph can be stale or partially extracted.
 - Local references remain useful through direct reading without graph indexing. Retain them independently of graph maintenance.
-- Actual token savings have not been measured. A benchmark against reading the entire corpus does not establish savings over targeted searches; avoid indexing the full reference corpus merely to claim token efficiency.
+- Do not claim graph token savings without measurements against relevant targeted-source workflows; avoid indexing the full reference corpus merely to claim token efficiency.
 - This user-selected policy takes precedence over the repository graphify skill's default graph-first and automatic-update workflow.
 
 ## Data protection and public documentation
@@ -60,7 +60,7 @@ The knowledge graph under `graphify-out/` is optional. Prefer `rg` and targeted 
 
 ## Agent file layout
 
-- Root `AGENTS.md`: project context, durable rules, tool entry points, and links to task-specific procedures. Keep instructions concise and remove obsolete or conflicting rules.
+- Root `AGENTS.md`: project context, durable rules, tool entry points, and links to task-specific procedures. Keep instructions concise and remove obsolete or conflicting rules. Keep history, dated outcomes, task status and pending questions out of all agent instruction files; record them in development history or the roadmap.
 - Nested `AGENTS.md`: instructions specific to that directory, only when needed. `AGENTS.override.md` replaces the instruction file at its directory level; use it only for an intentional override.
 - `AGENTS.local.md`: ignored local notes, explicitly read when local context is relevant. This name is not automatically discovered by Codex by default, and a fallback filename does not make it merge alongside an existing root `AGENTS.md`.
 - `docs/agent/`: ignored local runbooks, plans, and development history, loaded for the relevant task. They are not public repository links. The public user guide lives at `docs/USER_GUIDE.md`; the single project changelog is the tracked root `CHANGELOG.md`. Do not maintain a separate local changelog.
@@ -76,10 +76,10 @@ The knowledge graph under `graphify-out/` is optional. Prefer `rg` and targeted 
 - Keep detailed dialogue history, implementation reasoning, verification evidence and reversals in `docs/agent/DEVELOPMENT_HISTORY.md`; keep planned and rejected directions in `docs/agent/ROADMAP.md`; keep usage instructions in `docs/USER_GUIDE.md`. Link public documents from the changelog when useful.
 - Keep process and versioning rules in `AGENTS.md`, rather than mixing them into the changelog or user documentation.
 - Use `major.minor.patch`: increment minor only for a substantial, distinct user-visible capability; small additions, refinements and fixes increment patch in the current minor line. The user explicitly classifies unified media controls and shared VLC web playback as minor features, but scoped clearing and Debug Inspector gating as patches. Bundle changes that jointly deliver one feature into one minor version, with patch reset to zero. For example, a feature at `2.16.0` is followed by its first fix or small extension at `2.16.1`.
-- Keep the current unreleased 2.21 development line at `2.21.0` and consolidate its changes into that one changelog entry, as requested by the user on 2026-10-11. Continue stage commits and record intermediate evidence in local development history; resume patch release numbering only after the user confirms release.
+- Consolidate changes to an unreleased version into its single changelog entry rather than inventing intermediate patch releases. Use the user-selected development version recorded in development history; resume release numbering only after release confirmation.
 - Automatically update `CHANGELOG.md` and both Debug and Release `MARKETING_VERSION` settings whenever a user-visible feature or logical bug fix is completed, without waiting for a separate request. Record only the behavior delivered by the resulting version, and update the user guide or development history when needed.
 - Documentation or formatting changes alone do not increment the application version. Keep Debug and Release `MARKETING_VERSION` consistent. Treat `CURRENT_PROJECT_VERSION` as a separate technical build number, not the user-facing fix number.
-- Preserve the initial retrospective baseline: upstream `e245b8f` is `2.0.0`; the initial snapshot is `2.15.22`, cataloguing 15 feature groups and 22 fix groups. These are reconstructed logical versions, not proof of separately published binaries. Historical fix IDs do not imply every fix occurred after feature 2.15.
+- Preserve the retrospective changelog baseline documented in development history. Do not reinterpret reconstructed logical versions or historical fix IDs as proof of release publication or implementation order.
 - Distinguish commit/package dates from implementation dates in dialogue history. Do not invent release dates, Git tags, published releases or verification results. This personal-use project's retrospective changelog has no matching release tags; explain that status in its release notice.
 
 ## Instruction maintenance references
