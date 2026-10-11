@@ -57,7 +57,14 @@ extension BrowserAdBlockConverter {
     }
 
     @objc static func compileUBlockLists(_ lists: NSArray) -> NSDictionary? {
-        parserLock.lock(); defer { parserLock.unlock() }
+        parserLock.lock()
+        defer { parserContext = nil; parserLock.unlock() }
+        // The background queue need not drain its pool between preparations.
+        // Retain only the compiled scripts/counters, not temporary bridge objects.
+        return autoreleasepool { compileScripts(lists) }
+    }
+
+    private static func compileScripts(_ lists: NSArray) -> NSDictionary? {
         guard let context = context(),
               let libraryText = resource("UBlockScriptlets", "json"),
               let libraryData = libraryText.data(using: .utf8),
@@ -68,15 +75,34 @@ extension BrowserAdBlockConverter {
               let procedural = resource("UBlockProcedural", "js") else { return nil }
         context.exception = nil
         guard let result = context.objectForKeyedSubscript("browserCompileUBlock")?.call(withArguments: [lists, library]),
-              context.exception == nil, let compiled = result.toDictionary(),
-              let records = compiled["records"] as? [[String: Any]] else { return nil }
+              context.exception == nil,
+              let recordValues = result.objectForKeyedSubscript("records"),
+              let length = recordValues.objectForKeyedSubscript("length") else { return nil }
+        let count = Int(length.toInt32())
+        guard count >= 0 else { return nil }
+        let stats = result.objectForKeyedSubscript("stats")?.toDictionary() ?? [:]
+        let rejected = result.objectForKeyedSubscript("rejected")?.toDictionary() ?? [:]
+        var records = [[String: Any]]()
+        records.reserveCapacity(count)
+        // JSValue.toDictionary on the entire result accumulates autoreleased
+        // Foundation wrappers for every nested rule until conversion finishes.
+        for offset in stride(from: 0, to: count, by: 512) {
+            let end = min(offset + 512, count)
+            let batch: [[String: Any]]? = autoreleasepool {
+                recordValues.invokeMethod("slice", withArguments: [offset, end])?.toArray() as? [[String: Any]]
+            }
+            guard context.exception == nil, let batch, batch.count == end - offset else { return nil }
+            records.append(contentsOf: batch)
+        }
         let byName = Dictionary(uniqueKeysWithValues: library.compactMap { entry -> (String, [String: Any])? in
             guard let name = entry["name"] as? String else { return nil }; return (name, entry)
         })
         func json(_ object: Any) -> String {
-            guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
-                  let text = String(data: data, encoding: .utf8) else { return "[]" }
-            return text
+            autoreleasepool {
+                guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
+                      let text = String(data: data, encoding: .utf8) else { return "[]" }
+                return text
+            }
         }
         func literal(_ value: String) -> String { String(json([value]).dropFirst().dropLast()) }
         // Like uBO's hostname database, retrieve only candidate buckets before
@@ -139,14 +165,42 @@ extension BrowserAdBlockConverter {
                 guard let entry = byName[name], let functionName = entry["functionName"] as? String else { continue }
                 functions.append("[\(json([name]).dropFirst().dropLast()),\(functionName)]")
             }
-            var script = runtime.replacingOccurrences(of: "__BROWSER_RECORDS__", with: indexedRecords(selected))
-            script = script.replacingOccurrences(of: "__BROWSER_DOMAINS__", with: domains)
-            script = script.replacingOccurrences(of: "__BROWSER_FUNCTIONS__", with: declarations.joined(separator: "\n"))
-            script = script.replacingOccurrences(of: "__BROWSER_FUNCTION_MAP__", with: "[\(functions.joined(separator: ","))]")
-            script = script.replacingOccurrences(of: "__BROWSER_COSMETICS__", with: world == "ISOLATED" ? cosmetics.replacingOccurrences(of: "__BROWSER_PROCEDURAL__", with: procedural) : "")
-            scripts[world] = script
+            scripts[world] = autoreleasepool {
+                render(runtime, parts: [
+                    "__BROWSER_RECORDS__": indexedRecords(selected),
+                    "__BROWSER_DOMAINS__": domains,
+                    "__BROWSER_FUNCTIONS__": declarations.joined(separator: "\n"),
+                    "__BROWSER_FUNCTION_MAP__": "[\(functions.joined(separator: ","))]",
+                    "__BROWSER_COSMETICS__": world == "ISOLATED" ? cosmetics.replacingOccurrences(of: "__BROWSER_PROCEDURAL__", with: procedural) : "",
+                ])
+            }
         }
-        return ["scripts": scripts, "stats": compiled["stats"] ?? [:], "rejected": compiled["rejected"] ?? [:]]
+        return ["scripts": scripts, "stats": stats, "rejected": rejected]
+    }
+
+    // Assemble one final buffer rather than repeatedly copying a script that
+    // already contains tens of megabytes of filter data. Inserted data stays
+    // literal, including marker-looking text in filter arguments.
+    private static func render(_ template: String, parts: [String: String]) -> String {
+        var tokens = [(Range<String.Index>, String)]()
+        for token in parts.keys {
+            var cursor = template.startIndex
+            while let range = template.range(of: token, range: cursor..<template.endIndex) {
+                tokens.append((range, token))
+                cursor = range.upperBound
+            }
+        }
+        tokens.sort { $0.0.lowerBound < $1.0.lowerBound }
+        var script = ""
+        script.reserveCapacity(template.utf8.count + tokens.reduce(0) { $0 + parts[$1.1]!.utf8.count })
+        var cursor = template.startIndex
+        for (range, token) in tokens {
+            script.append(contentsOf: template[cursor..<range.lowerBound])
+            script.append(parts[token]!)
+            cursor = range.upperBound
+        }
+        script.append(contentsOf: template[cursor...])
+        return script
     }
 }
 
