@@ -35,6 +35,9 @@ NS_ASSUME_NONNULL_BEGIN
 @interface BrowserRemoteInputController : NSObject
 
 @property (nonatomic, readonly) UIImageView *cursorView;
+@property (nonatomic, readonly) BOOL cursorVisible;
+@property (nonatomic) BOOL cursorSuppressed;
+@property (nullable, nonatomic, copy) void (^cursorVisibilityDidChange)(BOOL visible);
 @property (nonatomic, readonly, getter=isCursorModeEnabled) BOOL cursorModeEnabled;
 @property (nonatomic, getter=isMagnifierEnabled) BOOL magnifierEnabled;
 

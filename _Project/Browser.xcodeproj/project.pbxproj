@@ -57,6 +57,8 @@
 		B002B86D1BAE420500C744AF /* ViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = B002B86C1BAE420500C744AF /* ViewController.m */; };
 		B002B8701BAE420500C744AF /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B002B86E1BAE420500C744AF /* Main.storyboard */; };
 		B002B8721BAE420500C744AF /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B002B8711BAE420500C744AF /* Assets.xcassets */; };
+		F51920261011000000000004 /* BrowserFullscreenMediaControlsController.m in Sources */ = {isa = PBXBuildFile; fileRef = F51920261011000000000002; };
+		F51920261011000000000005 /* BrowserFullscreenMediaBridge.js in Resources */ = {isa = PBXBuildFile; fileRef = F51920261011000000000003; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -154,6 +156,10 @@
 		B002B8711BAE420500C744AF /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B002B8731BAE420500C744AF /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B0F6B4611BAEBF9900E2F26B /* ../README.mdown */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = ../README.mdown; sourceTree = "<group>"; };
+		F51920261011000000000001 /* BrowserFullscreenMediaControlsController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BrowserFullscreenMediaControlsController.h; sourceTree = "<group>"; };
+		F51920261011000000000002 /* BrowserFullscreenMediaControlsController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BrowserFullscreenMediaControlsController.m; sourceTree = "<group>"; };
+		F51920261011000000000003 /* BrowserFullscreenMediaBridge.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = BrowserFullscreenMediaBridge.js; sourceTree = "<group>"; };
+		F51920261011000000000006 /* BrowserPlaybackSymbols.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BrowserPlaybackSymbols.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -252,6 +258,10 @@
 				D0A202600000000000000004 /* BrowserTVAppearance.h */,
 				A1B49A852D6D2000001D58A1 /* BrowserVideoPlaybackCoordinator.h */,
 				A1B49A862D6D2000001D58A1 /* BrowserVideoPlaybackCoordinator.m */,
+				F51920261011000000000006 /* BrowserPlaybackSymbols.h */,
+				F51920261011000000000001 /* BrowserFullscreenMediaControlsController.h */,
+				F51920261011000000000002 /* BrowserFullscreenMediaControlsController.m */,
+				F51920261011000000000003 /* BrowserFullscreenMediaBridge.js */,
 			);
 			name = Coordinators;
 			sourceTree = "<group>";
@@ -452,6 +462,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F51920261011000000000005 /* BrowserFullscreenMediaBridge.js in Resources */,
 				ADBB00000000000000000001 /* AdBlockCustomRules.json in Resources */,
 				3A2A7C1C21E783D00083CB13 /* menu-button.png in Resources */,
 				3A2A7C2021E784760083CB13 /* resize-arrows.png in Resources */,
@@ -508,6 +519,7 @@
 				C0D3A0010000000000000015 /* BrowserTorrentHTTPServer.m in Sources */,
 				C0D3A0010000000000000018 /* BrowserTorrentVLCPlayerViewController.m in Sources */,
 				D0A202600000000000000001 /* BrowserNativeStartPageView.m in Sources */,
+				F51920261011000000000004 /* BrowserFullscreenMediaControlsController.m in Sources */,
 				A1B49A872D6D2000001D58A1 /* BrowserVideoPlaybackCoordinator.m in Sources */,
 				A1B49A842D6D2000001D58A1 /* BrowserDOMInteractionService.m in Sources */,
 				A1B49A4E2D680900001D58A1 /* BrowserNavigationService.m in Sources */,
@@ -670,7 +682,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.18.23;
+				MARKETING_VERSION = 2.19.17;
 			PRODUCT_NAME = "$(TARGET_NAME)";
 			SCAN_ALL_SOURCE_FILES_FOR_INCLUDES = NO;
 			SWIFT_VERSION = 5.0;
@@ -701,7 +713,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.18.23;
+				MARKETING_VERSION = 2.19.17;
 			PRODUCT_NAME = "$(TARGET_NAME)";
 			SCAN_ALL_SOURCE_FILES_FOR_INCLUDES = NO;
 			SWIFT_VERSION = 5.0;

@@ -68,6 +68,7 @@ graphify-out/
 # Locally downloaded tvOS torrent toolchain (see scripts/bootstrap-torrent-deps.sh)
 .deps/
 .data/
+.codex/
 
 # Personal, machine-local agent notes
 AGENTS.local.md
@@ -76,4 +77,5 @@ AGENTS.local.md
 _Project/Browser/Config/Signing.local.xcconfig
 
 # Personal device deployment
-scripts/push-to-*
+scripts/push-*
+scripts/build-*

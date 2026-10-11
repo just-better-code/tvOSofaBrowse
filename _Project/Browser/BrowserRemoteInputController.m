@@ -212,7 +212,7 @@ static NSString *BrowserPressPhaseString(UIPressPhase phase) {
         strongSelf.magnifierCaptureInFlight = NO;
         if (generation != strongSelf.magnifierGeneration || !strongSelf.magnifierEnabled) { return; }
         strongSelf.magnifierImageView.image = image;
-        strongSelf.magnifierView.hidden = image == nil || strongSelf.cursorIdleHidden ||
+        strongSelf.magnifierView.hidden = image == nil || strongSelf.cursorSuppressed || strongSelf.cursorIdleHidden ||
             [strongSelf.host browserRemoteInputControllerPresentedViewController] != nil ||
             [strongSelf.host browserRemoteInputControllerTabOverviewVisible];
         if (!CGPointEqualToPoint(point, strongSelf.latestMagnifierPoint)) {
@@ -237,8 +237,27 @@ static NSString *BrowserPressPhaseString(UIPressPhase phase) {
     }
 }
 
+- (void)setCursorSuppressed:(BOOL)cursorSuppressed {
+    if (_cursorSuppressed == cursorSuppressed) return;
+    _cursorSuppressed = cursorSuppressed;
+    self.hoverGeneration += 1;
+    self.magnifierGeneration += 1;
+    self.cursorIdleGeneration += 1;
+    self.lastTouchLocation = CGPointMake(-1, -1);
+    [self refreshInteractionState];
+    if (!cursorSuppressed) [self noteCursorActivity];
+}
+
+- (BOOL)cursorVisible {
+    return !self.cursorView.hidden && self.cursorView.alpha > 0.01;
+}
+
+- (void)notifyCursorVisibility {
+    if (self.cursorVisibilityDidChange) self.cursorVisibilityDidChange(self.cursorVisible);
+}
+
 - (void)noteCursorActivity {
-    if (!self.cursorModeEnabled || self.cursorHiddenForDirectionalNavigation) {
+    if (!self.cursorModeEnabled || self.cursorSuppressed || self.cursorHiddenForDirectionalNavigation) {
         return;
     }
     if (self.magnifierEnabled) {
@@ -254,6 +273,7 @@ static NSString *BrowserPressPhaseString(UIPressPhase phase) {
         }];
     }
 
+    [self notifyCursorVisibility];
     NSUInteger generation = ++self.cursorIdleGeneration;
     __weak typeof(self) weakSelf = self;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kBrowserCursorIdleDelay * NSEC_PER_SEC)),
@@ -266,9 +286,11 @@ static NSString *BrowserPressPhaseString(UIPressPhase phase) {
         strongSelf.magnifierView.hidden = YES;
         [UIView animateWithDuration:0.25 animations:^{
             strongSelf.cursorView.alpha = 0.0;
+            [strongSelf notifyCursorVisibility];
         } completion:^(__unused BOOL finished) {
             if (generation == strongSelf.cursorIdleGeneration && strongSelf.cursorIdleHidden) {
                 strongSelf.cursorView.hidden = YES;
+                [strongSelf notifyCursorVisibility];
             }
         }];
     });
@@ -282,6 +304,7 @@ static NSString *BrowserPressPhaseString(UIPressPhase phase) {
     self.cursorView.alpha = 0.0;
     self.cursorView.hidden = YES;
     self.magnifierView.hidden = YES;
+    [self notifyCursorVisibility];
 }
 
 - (void)requestHoverStateAtPoint:(CGPoint)point {
@@ -322,7 +345,7 @@ static NSString *BrowserPressPhaseString(UIPressPhase phase) {
     // Remote arrows own page scrolling; touchpad movement must not pan the page.
     scrollView.scrollEnabled = NO;
     [self.host browserRemoteInputControllerSetWebInteractionEnabled:shouldAllowWebInteraction];
-    self.cursorView.hidden = !self.cursorModeEnabled ||
+    self.cursorView.hidden = self.cursorSuppressed || !self.cursorModeEnabled ||
         [self.host browserRemoteInputControllerTabOverviewVisible] ||
         self.cursorIdleHidden || self.cursorHiddenForDirectionalNavigation;
     self.magnifierView.hidden = !self.magnifierEnabled || self.magnifierImageView.image == nil ||
@@ -330,6 +353,7 @@ static NSString *BrowserPressPhaseString(UIPressPhase phase) {
     if (self.cursorModeEnabled && self.cursorIdleGeneration == 0) {
         [self noteCursorActivity];
     }
+    [self notifyCursorVisibility];
 }
 
 - (BOOL)applyManualScrollDelta:(CGPoint)delta {

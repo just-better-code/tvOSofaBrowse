@@ -18,6 +18,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)browserTabCoordinatorSnapshotDidUpdateForTab:(BrowserTabViewModel *)tab;
 - (void)browserTabCoordinatorShowNativeStartPageSelectingGroup:(nullable NSString *)group index:(NSUInteger)index;
 - (void)browserTabCoordinatorHideNativeStartPage;
+- (void)browserTabCoordinatorDidChangeActiveWebView;
 
 @end
 
