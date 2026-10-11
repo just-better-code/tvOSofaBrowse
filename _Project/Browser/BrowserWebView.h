@@ -11,6 +11,7 @@ FOUNDATION_EXPORT NSString * const BrowserAdBlockSourceStatusDidChangeNotificati
 - (BOOL)webView:(id _Nonnull)webView shouldCreateNewTabWithRequest:(NSURLRequest * _Nullable)request navigationType:(NSInteger)navigationType;
 - (BOOL)webView:(id _Nonnull)webView shouldImportTorrentResponse:(NSURLResponse * _Nonnull)response request:(NSURLRequest * _Nullable)request;
 - (void)webView:(id)webView didUpdateFullscreenMediaState:(NSDictionary *)state;
+- (void)webView:(id)webView didRequestVLCPlayback:(NSDictionary *)info;
 - (void)webViewDidStartLoad:(id _Nonnull)webView;
 - (void)webViewDidFinishLoad:(id _Nonnull)webView;
 - (void)webViewDidChangeNavigationHistory:(id _Nonnull)webView;
@@ -67,6 +68,7 @@ FOUNDATION_EXPORT NSString * const BrowserAdBlockSourceStatusDidChangeNotificati
 
 + (nullable NSData *)cookieDataRepresentation;
 + (NSArray<NSHTTPCookie *> * _Nonnull)allCookies;
++ (void)fetchCookiesWithCompletion:(void (^)(NSArray<NSHTTPCookie *> *cookies))completion;
 + (void)restoreCookiesFromData:(NSData * _Nullable)cookieData;
 + (void)clearCachedDataWithCompletion:(void (^ _Nullable)(void))completion;
 + (void)clearCachedDataForURL:(nullable NSURL *)URL completion:(void (^ _Nullable)(void))completion;

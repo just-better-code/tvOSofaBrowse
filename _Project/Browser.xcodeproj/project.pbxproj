@@ -47,7 +47,7 @@
 		C0D3A0010000000000000010 /* TVVLCKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = C0D3A0010000000000000012 /* TVVLCKit.xcframework */; };
 		C0D3A0010000000000000011 /* TVVLCKit.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = C0D3A0010000000000000012 /* TVVLCKit.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		C0D3A0010000000000000015 /* BrowserTorrentHTTPServer.m in Sources */ = {isa = PBXBuildFile; fileRef = C0D3A0010000000000000014 /* BrowserTorrentHTTPServer.m */; };
-		C0D3A0010000000000000018 /* BrowserTorrentVLCPlayerViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = C0D3A0010000000000000017 /* BrowserTorrentVLCPlayerViewController.m */; };
+		C0D3A0010000000000000018 /* BrowserVLCPlayerViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = C0D3A0010000000000000017 /* BrowserVLCPlayerViewController.m */; };
 		D0A202600000000000000001 /* BrowserNativeStartPageView.m in Sources */ = {isa = PBXBuildFile; fileRef = D0A202600000000000000003 /* BrowserNativeStartPageView.m */; };
 		B002B8671BAE420500C744AF /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = B002B8661BAE420500C744AF /* main.m */; };
 		B002B86A1BAE420500C744AF /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = B002B8691BAE420500C744AF /* AppDelegate.m */; };
@@ -132,8 +132,8 @@
 		C0D3A0010000000000000012 /* TVVLCKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = TVVLCKit.xcframework; path = ../.deps/TVVLCKit.xcframework; sourceTree = "<group>"; };
 		C0D3A0010000000000000013 /* BrowserTorrentHTTPServer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BrowserTorrentHTTPServer.h; sourceTree = "<group>"; };
 		C0D3A0010000000000000014 /* BrowserTorrentHTTPServer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BrowserTorrentHTTPServer.m; sourceTree = "<group>"; };
-		C0D3A0010000000000000016 /* BrowserTorrentVLCPlayerViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BrowserTorrentVLCPlayerViewController.h; sourceTree = "<group>"; };
-		C0D3A0010000000000000017 /* BrowserTorrentVLCPlayerViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BrowserTorrentVLCPlayerViewController.m; sourceTree = "<group>"; };
+		C0D3A0010000000000000016 /* BrowserVLCPlayerViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BrowserVLCPlayerViewController.h; sourceTree = "<group>"; };
+		C0D3A0010000000000000017 /* BrowserVLCPlayerViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BrowserVLCPlayerViewController.m; sourceTree = "<group>"; };
 		D0A202600000000000000002 /* BrowserNativeStartPageView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BrowserNativeStartPageView.h; sourceTree = "<group>"; };
 		D0A202600000000000000003 /* BrowserNativeStartPageView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BrowserNativeStartPageView.m; sourceTree = "<group>"; };
 		D0A202600000000000000004 /* BrowserTVAppearance.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BrowserTVAppearance.h; sourceTree = "<group>"; };
@@ -288,8 +288,8 @@
 				B002B86C1BAE420500C744AF /* ViewController.m */,
 				C0D3A001000000000000000A /* BrowserTorrentLibraryViewController.h */,
 				C0D3A0010000000000000009 /* BrowserTorrentLibraryViewController.m */,
-				C0D3A0010000000000000016 /* BrowserTorrentVLCPlayerViewController.h */,
-				C0D3A0010000000000000017 /* BrowserTorrentVLCPlayerViewController.m */,
+				C0D3A0010000000000000016 /* BrowserVLCPlayerViewController.h */,
+				C0D3A0010000000000000017 /* BrowserVLCPlayerViewController.m */,
 			);
 			name = Controllers;
 			sourceTree = "<group>";
@@ -502,7 +502,7 @@
 				C0D3A0010000000000000008 /* BrowserTorrentLibraryViewController.m in Sources */,
 				C0D3A001000000000000000B /* BrowserTorrentKeepAlive.m in Sources */,
 				C0D3A0010000000000000015 /* BrowserTorrentHTTPServer.m in Sources */,
-				C0D3A0010000000000000018 /* BrowserTorrentVLCPlayerViewController.m in Sources */,
+				C0D3A0010000000000000018 /* BrowserVLCPlayerViewController.m in Sources */,
 				D0A202600000000000000001 /* BrowserNativeStartPageView.m in Sources */,
 				F51920261011000000000004 /* BrowserFullscreenMediaControlsController.m in Sources */,
 				A1B49A842D6D2000001D58A1 /* BrowserDOMInteractionService.m in Sources */,
@@ -664,7 +664,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.20.1;
+				MARKETING_VERSION = 2.20.3;
 			PRODUCT_NAME = "$(TARGET_NAME)";
 			SCAN_ALL_SOURCE_FILES_FOR_INCLUDES = NO;
 			SWIFT_VERSION = 5.0;
@@ -695,7 +695,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.20.1;
+				MARKETING_VERSION = 2.20.3;
 			PRODUCT_NAME = "$(TARGET_NAME)";
 			SCAN_ALL_SOURCE_FILES_FOR_INCLUDES = NO;
 			SWIFT_VERSION = 5.0;

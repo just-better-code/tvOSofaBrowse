@@ -186,6 +186,7 @@ static UIColor *BrowserPageActionTextColor(void) {
                                                                              "return window.__browserTVFrameClick(x, y) ? 'true' : 'false';"
                                                                          "}"
                                                                          "var target = editableElement || interactiveElement || resolvedElement;"
+                                                                         "if (window.__browserTVOpenControlledVideo && window.__browserTVOpenControlledVideo(target)) { return 'true'; }"
                                                                          "if (!target) { return 'false'; }"
                                                                          "try { if (target.focus) { target.focus(); } } catch (error) {}"
                                                                          "function dispatchPointerLikeEvent(type, constructorName) {"

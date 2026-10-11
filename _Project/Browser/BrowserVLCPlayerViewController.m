@@ -1,5 +1,5 @@
 #import "BrowserPreferencesStore.h"
-#import "BrowserTorrentVLCPlayerViewController.h"
+#import "BrowserVLCPlayerViewController.h"
 
 #import "BrowserTorrentHTTPServer.h"
 #import "BrowserTorrentManager.h"
@@ -8,9 +8,16 @@
 
 #import <TVVLCKit/TVVLCKit.h>
 
-@interface BrowserTorrentVLCPlayerViewController () <VLCMediaPlayerDelegate>
+@interface BrowserVLCPlayerViewController () <VLCMediaPlayerDelegate>
 @property (nonatomic, copy) NSString *identifier;
 @property (nonatomic) NSInteger fileIndex;
+@property (nonatomic, copy) NSURL *webVideoURL;
+@property (nonatomic, copy) NSURL *webPageURL;
+@property (nonatomic) double initialWebTime;
+@property (nonatomic) double initialWebVolume;
+@property (nonatomic) BOOL initialWebMuted;
+@property (nonatomic, copy) NSDictionary<NSString *, NSString *> *webRequestHeaders;
+@property (nonatomic, copy) NSArray<NSHTTPCookie *> *webCookies;
 @property (nonatomic, copy) NSString *mediaTitle;
 @property (nonatomic) BrowserTorrentHTTPServer *server;
 @property (nonatomic) VLCMediaPlayer *vlcPlayer;
@@ -28,6 +35,7 @@
 @property (nonatomic) NSTimer *progressTimer;
 @property (nonatomic) NSUInteger controlsGeneration;
 @property (nonatomic) NSInteger lastReportedState;
+@property (nonatomic) BOOL playbackEnded;
 @property (nonatomic) UIView *headerView;
 @property (nonatomic) NSTimeInterval lastDurationLogTime;
 @property (nonatomic) UIView *videoView;
@@ -41,8 +49,7 @@
 @property (nonatomic) NSTimeInterval seekHoldStartTime;
 @end
 
-@implementation BrowserTorrentVLCPlayerViewController
-
+@implementation BrowserVLCPlayerViewController
 static NSInteger const kBrowserVLCControlIconTag = 9797;
 
 - (UIVisualEffectView *)glassBackdrop {
@@ -98,7 +105,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     self.titleLabel = title;
     UILabel *status = [UILabel new];
     status.translatesAutoresizingMaskIntoConstraints = NO;
-    status.text = @"Preparing torrent playback…";
+    status.text = self.webVideoURL ? @"Preparing video…" : @"Preparing torrent playback…";
     status.textColor = UIColor.whiteColor;
     status.font = [UIFont systemFontOfSize:22];
     [header addSubview:status];
@@ -152,6 +159,10 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     UIButton *volumeDown = [self controlButtonWithSymbol:@"speaker.minus.fill" label:@"Volume down" action:@selector(volumeDownPressed)];
     UIButton *volumeUp = [self controlButtonWithSymbol:@"speaker.plus.fill" label:@"Volume up" action:@selector(volumeUpPressed)];
     UIButton *next = [self controlButtonWithSymbol:@"forward.end.fill" label:@"Next file" action:@selector(nextFilePressed)];
+    if (self.webVideoURL) {
+        previous.enabled = NO; next.enabled = NO;
+        previous.alpha = 0.35; next.alpha = 0.35;
+    }
     backTen.tag = -10;
     back.tag = -5;
     forward.tag = 5;
@@ -225,7 +236,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
                                                  name:UIApplicationWillResignActiveNotification
                                                object:nil];
 
-    [self prepareCurrentFile];
+    [self prepareCurrentMedia];
 }
 
 - (void)dealloc {
@@ -284,7 +295,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     self.seekHoldTargetMs = MAX(0, self.seekHoldTargetMs + step);
     int64_t duration = self.vlcPlayer.media.length.value.longLongValue;
     if (duration > 0) self.seekHoldTargetMs = MIN(self.seekHoldTargetMs, duration);
-    self.vlcPlayer.time = [VLCTime timeWithNumber:@(self.seekHoldTargetMs)];
+    [self seekToMilliseconds:self.seekHoldTargetMs];
     [self showControls];
     [self refreshProgress];
 }
@@ -295,12 +306,30 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     self.seekHoldStepMs = 0;
 }
 
-- (void)prepareCurrentFile {
-    BrowserTorrentManager *manager = [BrowserTorrentManager sharedManager];
-    self.pendingResumeMs = [manager playbackPositionForTorrent:self.identifier fileIndex:self.fileIndex];
+- (instancetype)initWithWebVideoURL:(NSURL *)URL pageURL:(NSURL *)pageURL title:(NSString *)title
+                       currentTime:(double)time volume:(double)volume muted:(BOOL)muted
+                  requestHeaders:(NSDictionary<NSString *,NSString *> *)headers cookies:(NSArray<NSHTTPCookie *> *)cookies {
+    self = [self initWithTorrentIdentifier:nil fileIndex:0 title:title];
+    if (self) {
+        _webVideoURL = [URL copy];
+        _webRequestHeaders = [headers copy];
+        _webCookies = [cookies copy];
+        _webPageURL = [pageURL copy];
+        _initialWebTime = MAX(0, time);
+        _initialWebVolume = MIN(1, MAX(0, volume));
+        _initialWebMuted = muted;
+    }
+    return self;
+}
+
+- (void)prepareCurrentMedia {
+    self.playbackEnded = NO;
+    BrowserTorrentManager *manager = self.webVideoURL ? nil : [BrowserTorrentManager sharedManager];
+    self.pendingResumeMs = self.webVideoURL ? (int64_t)(self.initialWebTime * 1000)
+        : [manager playbackPositionForTorrent:self.identifier fileIndex:self.fileIndex];
     self.lastPositionSaveTime = NSDate.date.timeIntervalSince1970;
-    NSURL *mediaURL = nil;
-    if ([manager isFileCompleteForTorrent:self.identifier fileIndex:self.fileIndex]) {
+    NSURL *mediaURL = self.webVideoURL;
+    if (!mediaURL && [manager isFileCompleteForTorrent:self.identifier fileIndex:self.fileIndex]) {
         mediaURL = [manager fileURLForTorrent:self.identifier fileIndex:self.fileIndex];
         if (![[NSFileManager defaultManager] fileExistsAtPath:mediaURL.path]) mediaURL = nil;
     }
@@ -315,10 +344,41 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     }
     VLCMedia *media = [VLCMedia mediaWithURL:mediaURL];
     [media addOption:@":network-caching=3000"];
+    if (self.webVideoURL) {
+        NSString *agent = self.webRequestHeaders[@"User-Agent"];
+        NSString *referrer = self.webRequestHeaders[@"Referer"];
+        if (agent.length) [media addOption:[@":http-user-agent=" stringByAppendingString:agent]];
+        if (referrer.length) [media addOption:[@":http-referrer=" stringByAppendingString:referrer]];
+        [media addOption:@":http-forward-cookies=1"];
+        // Each media gets its own cookie jar; no credentials are written to options or logs.
+        NSUInteger stored = 0;
+        NSDateFormatter *expiryFormat = [NSDateFormatter new];
+        expiryFormat.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+        expiryFormat.timeZone = [NSTimeZone timeZoneForSecondsFromGMT:0];
+        expiryFormat.dateFormat = @"EEE, dd MMM yyyy HH:mm:ss 'GMT'";
+        for (NSHTTPCookie *cookie in self.webCookies) {
+            if (cookie.expiresDate && [cookie.expiresDate timeIntervalSinceNow] <= 0) continue;
+            if ([cookie.name rangeOfCharacterFromSet:[NSCharacterSet characterSetWithCharactersInString:@"\r\n;= "]].location != NSNotFound ||
+                [cookie.value rangeOfCharacterFromSet:[NSCharacterSet characterSetWithCharactersInString:@"\r\n;"]].location != NSNotFound ||
+                [cookie.path rangeOfCharacterFromSet:[NSCharacterSet characterSetWithCharactersInString:@"\r\n;"]].location != NSNotFound) continue;
+            NSMutableString *value = [NSMutableString stringWithFormat:@"%@=%@; Path=%@", cookie.name, cookie.value, cookie.path ?: @"/"];
+            if ([cookie.domain hasPrefix:@"."]) [value appendFormat:@"; Domain=%@", cookie.domain];
+            if (cookie.isSecure) [value appendString:@"; Secure"];
+            if (cookie.isHTTPOnly) [value appendString:@"; HttpOnly"];
+            if (cookie.expiresDate) [value appendFormat:@"; Expires=%@", [expiryFormat stringFromDate:cookie.expiresDate]];
+            NSString *host = [cookie.domain hasPrefix:@"."] ? [cookie.domain substringFromIndex:1] : cookie.domain;
+            if ([media storeCookie:value forHost:host path:cookie.path ?: @"/"] == 0) stored++;
+        }
+        BrowserDebugLog(@"[TorrentVLC] webContext cookies=%lu referrer=%d", (unsigned long)stored, referrer.length > 0);
+    }
     self.vlcPlayer = [[VLCMediaPlayer alloc] initWithOptions:@[]];
     self.vlcPlayer.delegate = self;
     self.vlcPlayer.drawable = self.videoView;
     self.vlcPlayer.media = media;
+    if (self.webVideoURL) {
+        self.vlcPlayer.audio.volume = (int)lround(self.initialWebVolume * 100);
+        self.vlcPlayer.audio.muted = self.initialWebMuted;
+    }
     self.audioMenuKey = nil;
     self.subtitleMenuKey = nil;
     [self updateTrackButton:self.audioTrackButton prefix:@"Audio" indexes:@[] names:@[] selectedIndex:-1];
@@ -343,6 +403,12 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     [super viewWillDisappear:animated];
     [self stopHeldSeek];
     [self savePlaybackPosition];
+    if (self.webVideoURL && self.webVideoDidClose) {
+        double time = MAX(0, self.vlcPlayer.time.value.longLongValue / 1000.0);
+        if (self.pendingResumeMs > 0) time = self.initialWebTime;
+        self.webVideoDidClose(time, self.vlcPlayer.audio.volume / 100.0, self.vlcPlayer.audio.isMuted);
+        self.webVideoDidClose = nil;
+    }
     self.vlcPlayer.delegate = nil;
     [self.vlcPlayer stop];
     [self.server stop];
@@ -531,6 +597,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
 }
 
 - (NSString *)downloadStatusWithPrefix:(NSString *)prefix {
+    if (self.webVideoURL) return prefix;
     double progress = [[BrowserTorrentManager sharedManager] downloadProgressForTorrent:self.identifier
                                                                              fileIndex:self.fileIndex];
     if (progress < 0) return prefix;
@@ -539,6 +606,11 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
 }
 
 - (void)savePlaybackPosition {
+    if (self.webVideoURL) {
+        [[BrowserPreferencesStore new] setPlayerVolume:self.vlcPlayer.audio.volume / 100.0 forURL:self.webPageURL];
+        self.lastPositionSaveTime = NSDate.date.timeIntervalSince1970;
+        return;
+    }
     BrowserTorrentManager *manager = [BrowserTorrentManager sharedManager];
     if (self.vlcPlayer.state == VLCMediaPlayerStateEnded) {
         [manager savePlaybackPosition:0 forTorrent:self.identifier fileIndex:self.fileIndex];
@@ -554,7 +626,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
 
 - (void)refreshProgress {
     [self refreshTrackControls];
-    if (self.pendingResumeMs >= 5000 && self.vlcPlayer.isPlaying && self.vlcPlayer.isSeekable) {
+    if (self.pendingResumeMs > 0 && self.vlcPlayer.isPlaying && self.vlcPlayer.isSeekable) {
         int64_t target = self.pendingResumeMs;
         self.pendingResumeMs = 0;
         self.lastPositionSaveTime = NSDate.date.timeIntervalSince1970;
@@ -575,7 +647,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
                now - self.lastPlaybackProgressTime > 2.5) {
         self.statusLabel.text = [self downloadStatusWithPrefix:@"Buffering"];
     }
-    double completion = [[BrowserTorrentManager sharedManager] downloadProgressForTorrent:self.identifier
+    double completion = self.webVideoURL ? -1 : [[BrowserTorrentManager sharedManager] downloadProgressForTorrent:self.identifier
                                                                                  fileIndex:self.fileIndex];
     VLCMediaPlayerState state = self.vlcPlayer.state;
     BOOL streaming = self.vlcPlayer.isPlaying && now - self.lastPlaybackProgressTime <= 2.5;
@@ -631,7 +703,9 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
 
 - (void)closePressed { [self dismissViewControllerAnimated:YES completion:nil]; }
 - (void)playPausePressed {
-    if (self.vlcPlayer.isPlaying) {
+    if (self.playbackEnded || self.vlcPlayer.state == VLCMediaPlayerStateEnded) {
+        [self reopenFinishedMediaAtMilliseconds:0];
+    } else if (self.vlcPlayer.isPlaying) {
         [self savePlaybackPosition];
         [self.vlcPlayer pause];
     } else [self.vlcPlayer play];
@@ -645,9 +719,8 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
 
 - (void)restartPressed {
     [self stopHeldSeek];
-    self.vlcPlayer.time = [VLCTime timeWithNumber:@0];
-    self.pendingResumeMs = 0;
-    [[BrowserTorrentManager sharedManager] savePlaybackPosition:0 forTorrent:self.identifier fileIndex:self.fileIndex];
+    [self seekToMilliseconds:0];
+    if (!self.webVideoURL) [[BrowserTorrentManager sharedManager] savePlaybackPosition:0 forTorrent:self.identifier fileIndex:self.fileIndex];
     self.lastPositionSaveTime = NSDate.date.timeIntervalSince1970;
     [self showControls];
     [self refreshProgress];
@@ -673,6 +746,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
 - (void)nextFilePressed { [self switchToAdjacentFileInDirection:1]; }
 
 - (void)switchToAdjacentFileInDirection:(NSInteger)direction {
+    if (self.webVideoURL) return;
     NSArray<NSString *> *extensions = @[@"mp4", @"m4v", @"mov", @"mp3", @"m4a", @"mkv", @"avi"];
     BrowserTorrentFile *candidate = nil;
     for (BrowserTorrentFile *file in [[BrowserTorrentManager sharedManager] filesForTorrent:self.identifier]) {
@@ -696,25 +770,73 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     self.lastReportedState = -1;
     self.lastDurationLogTime = 0;
     [[BrowserTorrentManager sharedManager] prioritizePlaybackForTorrent:self.identifier fileIndex:self.fileIndex];
-    [self prepareCurrentFile];
+    [self prepareCurrentMedia];
     [self.vlcPlayer play];
     [self showControls];
     [self refreshProgress];
 }
+// VLC releases its input at EOF and can then report Stopped. Keep EOF latched until
+// a fresh player/input is created; setting time on the released input does nothing.
+- (void)reopenFinishedMediaAtMilliseconds:(int64_t)target {
+    VLCMediaPlayer *previous = self.vlcPlayer;
+    VLCMedia *media = previous.media;
+    if (!media) return;
+    int volume = previous.audio.volume;
+    BOOL muted = previous.audio.isMuted;
+    previous.delegate = nil;
+    [previous stop];
+    previous.drawable = nil;
+    VLCMediaPlayer *player = [[VLCMediaPlayer alloc] initWithOptions:@[]];
+    self.vlcPlayer = player;
+    self.playbackEnded = NO;
+    self.lastReportedState = -1;
+    self.lastPlaybackTime = 0;
+    self.lastPlaybackProgressTime = NSDate.date.timeIntervalSince1970;
+    self.pendingResumeMs = MAX(0, target);
+    player.delegate = self;
+    player.drawable = self.videoView;
+    player.media = media;
+    player.audio.volume = volume;
+    player.audio.muted = muted;
+    self.audioMenuKey = nil;
+    self.subtitleMenuKey = nil;
+    self.statusLabel.text = @"Opening media…";
+    BrowserDebugLog(@"[TorrentVLC] reopen positionMs=%lld", (long long)self.pendingResumeMs);
+    [player play];
+}
+
+- (void)seekToMilliseconds:(int64_t)target {
+    target = MAX(0, target);
+    if (self.playbackEnded || self.vlcPlayer.state == VLCMediaPlayerStateEnded) {
+        int64_t duration = self.vlcPlayer.media.length.value.longLongValue;
+        if (duration > 0) target = MIN(target, MAX(0, duration - 1000));
+        [self reopenFinishedMediaAtMilliseconds:target];
+    } else if (!self.vlcPlayer.isSeekable &&
+               (self.vlcPlayer.state == VLCMediaPlayerStateOpening ||
+                self.vlcPlayer.state == VLCMediaPlayerStateBuffering)) {
+        self.pendingResumeMs = target;
+    } else {
+        self.pendingResumeMs = 0;
+        self.vlcPlayer.time = [VLCTime timeWithNumber:@(target)];
+    }
+}
+
 - (void)seekByMilliseconds:(int64_t)delta {
-    int64_t target = MAX(0, self.vlcPlayer.time.value.longLongValue + delta);
-    self.vlcPlayer.time = [VLCTime timeWithNumber:@(target)];
+    int64_t position = self.pendingResumeMs > 0 ? self.pendingResumeMs : self.vlcPlayer.time.value.longLongValue;
+    [self seekToMilliseconds:position + delta];
     [self showControls];
     [self refreshProgress];
 }
 
 - (void)mediaPlayerStateChanged:(NSNotification *)notification {
-    (void)notification;
-    VLCMediaPlayerState state = self.vlcPlayer.state;
+    VLCMediaPlayer *player = self.vlcPlayer;
+    if (notification.object != player) return;
+    VLCMediaPlayerState state = player.state;
     if (self.lastReportedState == state) return;
     self.lastReportedState = state;
     BrowserDebugLog(@"[TorrentVLC] state=%ld", (long)state);
     dispatch_async(dispatch_get_main_queue(), ^{
+        if (self.vlcPlayer != player) return;
         switch (state) {
             case VLCMediaPlayerStateOpening: self.statusLabel.text = @"Opening media…"; break;
             case VLCMediaPlayerStateBuffering:
@@ -723,15 +845,18 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
                 break;
             case VLCMediaPlayerStatePlaying: self.statusLabel.text = @""; [self showControls]; break;
             case VLCMediaPlayerStatePaused: self.statusLabel.text = @"Paused"; break;
-            case VLCMediaPlayerStateError: self.statusLabel.text = @"Playback failed. Check torrent availability or file format."; break;
+            case VLCMediaPlayerStateError: self.statusLabel.text = self.webVideoURL
+                ? @"Playback failed. Return to the page to use its player." : @"Playback failed. Check torrent availability or file format."; break;
             case VLCMediaPlayerStateEnded:
+                self.playbackEnded = YES;
                 self.statusLabel.text = @"Playback finished";
                 [self savePlaybackPosition];
                 break;
             default: break;
         }
         if (state == VLCMediaPlayerStateOpening || state == VLCMediaPlayerStateBuffering ||
-            state == VLCMediaPlayerStatePaused || state == VLCMediaPlayerStateError) [self showControls];
+            state == VLCMediaPlayerStatePaused || state == VLCMediaPlayerStateError ||
+            state == VLCMediaPlayerStateEnded) [self showControls];
         [self refreshProgress];
     });
 }

@@ -383,6 +383,7 @@ static NSString *BrowserFrameClickBridgeScript(NSString *secret, NSString *nativ
                     "element.style.cssText += ';position:fixed!important;left:0!important;top:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;z-index:2147483647!important;background:#000!important';"
                     "sendFullscreenToParent('enter');"
                     "notifyFullscreenChange();"
+                    "requestVLCFullscreen(element);"
                 "}"
                 "function exitFullscreen() {"
                     "if (!fullscreenTarget) { return false; }"
@@ -504,6 +505,7 @@ static NSString *BrowserFrameClickBridgeScript(NSString *secret, NSString *nativ
                         "return true;"
                     "}"
                     "var target = element.closest ? (element.closest('a, button, input, label, select, [role=button], [onclick], [tabindex]') || element) : element;"
+                    "if (window.__browserTVOpenControlledVideo && window.__browserTVOpenControlledVideo(element)) { return true; }"
                     "if (isFullscreenButton(target) || isFullscreenButton(element)) {"
                         "if (!exitFullscreen()) { enterFullscreen(videoContainer(target)); }"
                         "return true;"
@@ -545,6 +547,8 @@ static NSString *BrowserFrameClickBridgeScript(NSString *secret, NSString *nativ
                 "try { Object.defineProperty(document, 'fullscreenElement', {configurable:true, get:fullscreenElement}); } catch (error) {}"
                 "try { Object.defineProperty(document, 'webkitFullscreenElement', {configurable:true, get:fullscreenElement}); } catch (error) {}"
                 "try { Object.defineProperty(document, 'webkitIsFullScreen', {configurable:true, get:function() { return !!fullscreenElement(); }}); } catch (error) {}"
+                "try { Object.defineProperty(document, 'fullscreenEnabled', {configurable:true, get:function() { return true; }}); } catch (error) {}"
+                "try { Object.defineProperty(document, 'webkitFullscreenEnabled', {configurable:true, get:function() { return true; }}); } catch (error) {}"
                 "function overrideMethod(object, name, implementation) {"
                     "try { Object.defineProperty(object, name, {configurable:true, writable:true, value:implementation}); } catch (error) {}"
                 "}"
@@ -732,6 +736,25 @@ static id BrowserPersistentWebsiteDataStore(void) {
     id body = [message valueForKey:@"body"];
     if (![body isKindOfClass:NSDictionary.class] || ![body[@"token"] isEqual:self.token]) return;
     if (![body[@"session"] isKindOfClass:NSString.class] || [body[@"session"] length] > 128) return;
+    if ([body[@"vlcRequest"] boolValue]) {
+        NSString *URLString = [body[@"url"] isKindOfClass:NSString.class] ? body[@"url"] : nil;
+        NSURL *URL = URLString.length > 0 && URLString.length <= 8192 ? [NSURL URLWithString:URLString] : nil;
+        if (!URL.host.length || ![@[@"http", @"https"] containsObject:URL.scheme.lowercaseString]) return;
+        double time = [body[@"currentTime"] isKindOfClass:NSNumber.class] ? [body[@"currentTime"] doubleValue] : 0;
+        double volume = [body[@"volume"] isKindOfClass:NSNumber.class] ? [body[@"volume"] doubleValue] : 1;
+        NSDictionary *info = @{@"session": body[@"session"], @"url": URLString,
+            @"title": [body[@"title"] isKindOfClass:NSString.class] && [body[@"title"] length] <= 512 ? body[@"title"] : @"Video",
+            @"currentTime": @(isfinite(time) && time >= 0 && time < 1e9 ? time : 0),
+            @"volume": @(isfinite(volume) ? MIN(1, MAX(0, volume)) : 1),
+            @"muted": @([body[@"muted"] isKindOfClass:NSNumber.class] && [body[@"muted"] boolValue]),
+            @"documentURL": [body[@"documentURL"] isKindOfClass:NSString.class] && [body[@"documentURL"] length] <= 8192 ? body[@"documentURL"] : @"",
+            @"referrerPolicy": [body[@"referrerPolicy"] isKindOfClass:NSString.class] && [body[@"referrerPolicy"] length] <= 64 ? body[@"referrerPolicy"] : @"",
+            @"crossOrigin": [body[@"crossOrigin"] isKindOfClass:NSString.class] && [body[@"crossOrigin"] length] <= 32 ? body[@"crossOrigin"] : @""};
+        if ([owner.delegate respondsToSelector:@selector(webView:didRequestVLCPlayback:)]) {
+            [owner.delegate webView:owner didRequestVLCPlayback:info];
+        }
+        return;
+    }
     if ([body[@"loadVolume"] boolValue]) {
         NSNumber *volume = [[BrowserPreferencesStore new] playerVolumeForURL:request.URL];
         NSData *data = [NSJSONSerialization dataWithJSONObject:@[body[@"session"], volume ?: NSNull.null] options:0 error:nil];
@@ -1444,7 +1467,7 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     self.runtimeWebView = webViewObject;
 #if DEBUG
     // Allow Safari to inspect the authorized development build on TV.
-    BrowserSetBooleanSelectorIfAvailable(webViewObject, @"setInspectable:", YES);
+    BrowserSetBooleanSelectorIfAvailable(webViewObject, @"setInspectable:", BrowserPreferencesStore.debugEnabled);
 #endif
     [webViewObject addObserver:self forKeyPath:@"URL" options:0 context:&kBrowserNavigationURLObservationContext];
     [webViewObject addObserver:self forKeyPath:@"loading" options:0 context:&kBrowserNavigationURLObservationContext];
@@ -1481,6 +1504,9 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
         return;
     }
     BOOL enabled = BrowserPreferencesStore.websiteLoggingEnabled;
+#if DEBUG
+    BrowserSetBooleanSelectorIfAvailable(self.runtimeWebView, @"setInspectable:", enabled);
+#endif
     // Replace only the diagnostics bootstrap for future documents; retain every other script.
     SEL scriptsSelector = NSSelectorFromString(@"userScripts");
     SEL removeSelector = NSSelectorFromString(@"removeAllUserScripts");
@@ -2350,6 +2376,18 @@ windowFeatures:(id)windowFeatures {
         return nil;
     }
     return ((id (*)(id, SEL))objc_msgSend)(dataStore, selector);
+}
+
+// Async access includes HttpOnly cookies without exposing them to page JavaScript.
++ (void)fetchCookiesWithCompletion:(void (^)(NSArray<NSHTTPCookie *> *))completion {
+    id store = [self defaultCookieStore];
+    SEL selector = NSSelectorFromString(@"getAllCookies:");
+    void (^deliver)(NSArray *) = ^(NSArray *cookies) {
+        dispatch_async(dispatch_get_main_queue(), ^{ completion(cookies ?: @[]); });
+    };
+    if (store && [store respondsToSelector:selector]) {
+        ((void (*)(id, SEL, id))objc_msgSend)(store, selector, deliver);
+    } else deliver(NSHTTPCookieStorage.sharedHTTPCookieStorage.cookies);
 }
 
 + (NSArray<NSHTTPCookie *> *)allCookies {
