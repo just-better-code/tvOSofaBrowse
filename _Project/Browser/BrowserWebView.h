@@ -40,6 +40,7 @@ FOUNDATION_EXPORT NSString * const BrowserAdBlockSourceStatusDidChangeNotificati
 - (void)loadRequest:(NSURLRequest * _Nullable)request;
 - (void)loadHTMLString:(NSString *)HTMLString;
 - (void)reload;
+- (void)stopLoading;
 - (void)goBack;
 - (void)goForward;
 - (nullable NSDictionary *)navigationHistorySnapshot;

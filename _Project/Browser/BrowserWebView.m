@@ -1652,6 +1652,15 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     }
 }
 
+- (void)stopLoading {
+    self.documentGeneration += 1;
+    SEL selector = NSSelectorFromString(@"stopLoading");
+    if (self.runtimeWebView != nil && [self.runtimeWebView respondsToSelector:selector]) {
+        ((void (*)(id, SEL))objc_msgSend)(self.runtimeWebView, selector);
+    }
+    self.loading = NO;
+}
+
 - (void)goBack {
     self.documentGeneration += 1;
     SEL selector = NSSelectorFromString(@"goBack");

@@ -66,12 +66,14 @@ The magnifier is also available through Settings → Magnifier. It turns off aft
 
 - Open the overview with **Tabs** or Double Left.
 - Select a tab card and press Center to open it.
-- The **+** card opens New Tab; an empty New Tab does not occupy a saved tab slot.
+- The round **+** button opens New Tab; an empty New Tab does not occupy a saved tab slot.
 - Play/Pause closes the focused ordinary tab in the overview.
 - Hold Center on a tab card for Open and Close actions.
 - Double Up also closes the focused overview tab; repeated Up presses on a page scroll it.
 
 The native New Tab page shows **Favorites** and recent history across the available screen width. Center opens an entry. **Play/Pause or Hold Center opens the selected entry's options**: Favorite actions or recent-visit actions.
+
+After switching to another tab, the previous tab keeps its webpage in memory for five minutes. Returning before that time keeps the live page; leaving again starts a new five-minute interval. After expiry, the browser releases the page while retaining the tab, navigation list, scroll position and preview. Selecting it reloads the saved page and attempts to restore its scroll position; unsaved page-only state may be lost. The active tab stays loaded. If tvOS suspends the app, overdue inactive pages are released when the app becomes active again.
 
 The overview uses cached previews without loading inactive websites. A tab without a cached preview shows its domain and title; select it to load the page. Previews may be cleared by tvOS without removing saved tabs or history.
 

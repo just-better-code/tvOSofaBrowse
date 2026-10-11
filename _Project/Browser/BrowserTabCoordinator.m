@@ -1,5 +1,7 @@
 #import "BrowserTabCoordinator.h"
 
+#include <float.h>
+
 #import "BrowserNavigationService.h"
 #import "BrowserPreferencesStore.h"
 #import "BrowserSessionStore.h"
@@ -7,6 +9,7 @@
 #import "BrowserViewModel.h"
 #import "BrowserWebView.h"
 
+static NSTimeInterval const kInactiveTabWebViewTTL = 5.0 * 60.0;
 static CGFloat const kThumbnailStagingOffset = 4096.0;
 static NSString * const kBrowserNewTabURL = @"about:blank";
 static NSUInteger const kMaximumWebContentProcessReloads = 2;
@@ -28,7 +31,9 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
 @property (nonatomic) UIView *thumbnailStagingView;
 @property (nonatomic, strong) dispatch_queue_t thumbnailCacheQueue;
 @property (nonatomic) NSMutableSet<NSString *> *pendingThumbnailReads;
-@property (nonatomic) NSMutableSet<NSString *> *pendingSnapshots;
+@property (nonatomic) NSMutableDictionary<NSString *, NSUUID *> *pendingSnapshots;
+@property (nonatomic) NSMutableDictionary<NSString *, NSNumber *> *inactiveTabSince;
+@property (nonatomic) NSTimer *inactiveTabExpiryTimer;
 @property (nonatomic, readwrite, nullable) BrowserWebView *activeWebView;
 @property (nonatomic, copy) NSString *pendingNewTabSelectionGroup;
 @property (nonatomic) NSUInteger pendingNewTabSelectionIndex;
@@ -66,11 +71,81 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
         _webViewsByTabIdentifier = [NSMutableDictionary dictionary];
         _thumbnailCacheQueue = dispatch_queue_create("browser.tab-thumbnails", DISPATCH_QUEUE_SERIAL);
         _pendingThumbnailReads = [NSMutableSet set];
-        _pendingSnapshots = [NSMutableSet set];
+        _pendingSnapshots = [NSMutableDictionary dictionary];
+        _inactiveTabSince = [NSMutableDictionary dictionary];
+        [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(applicationDidBecomeActive:)
+            name:UIApplicationDidBecomeActiveNotification object:nil];
+        [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(applicationWillResignActive:)
+            name:UIApplicationWillResignActiveNotification object:nil];
         [_preferencesStore ensureUserAgentConsistency];
         [self ensureThumbnailStagingView];
     }
     return self;
+}
+
+- (void)dealloc {
+    [self.inactiveTabExpiryTimer invalidate];
+    [NSNotificationCenter.defaultCenter removeObserver:self];
+}
+
+- (void)applicationWillResignActive:(NSNotification *)notification {
+    [self.inactiveTabExpiryTimer invalidate];
+    self.inactiveTabExpiryTimer = nil;
+}
+
+- (void)applicationDidBecomeActive:(NSNotification *)notification {
+    [self unloadExpiredInactiveTabs];
+}
+
+- (void)scheduleInactiveTabExpiry {
+    [self.inactiveTabExpiryTimer invalidate];
+    self.inactiveTabExpiryTimer = nil;
+    if (UIApplication.sharedApplication.applicationState != UIApplicationStateActive) return;
+
+    NSTimeInterval now = NSProcessInfo.processInfo.systemUptime;
+    NSTimeInterval delay = DBL_MAX;
+    for (NSNumber *since in self.inactiveTabSince.allValues) {
+        delay = MIN(delay, since.doubleValue + kInactiveTabWebViewTTL - now);
+    }
+    if (delay == DBL_MAX) return;
+    __weak typeof(self) weakSelf = self;
+    NSTimer *timer = [NSTimer timerWithTimeInterval:MAX(delay, 0.01) repeats:NO block:^(NSTimer *timer) {
+        [weakSelf unloadExpiredInactiveTabs];
+    }];
+    self.inactiveTabExpiryTimer = timer;
+    [NSRunLoop.mainRunLoop addTimer:timer forMode:NSRunLoopCommonModes];
+}
+
+- (void)unloadExpiredInactiveTabs {
+    NSTimeInterval now = NSProcessInfo.processInfo.systemUptime;
+    BOOL unloaded = NO;
+    for (NSString *identifier in self.inactiveTabSince.allKeys) {
+        BrowserWebView *webView = self.webViewsByTabIdentifier[identifier];
+        BrowserTabViewModel *tab = webView != nil ? [self tabForWebView:webView] : nil;
+        if (webView == nil || tab == nil || tab == self.activeTab || webView == self.activeWebView) {
+            [self.inactiveTabSince removeObjectForKey:identifier];
+            continue;
+        }
+        if (now - self.inactiveTabSince[identifier].doubleValue < kInactiveTabWebViewTTL) continue;
+
+        if (!webView.loading && tab.pendingNavigationIndex == NSNotFound) {
+            [self updateNavigationHistoryForTab:tab webView:webView];
+        }
+        if (!tab.needsScrollRestore) [self updateStoredScrollOffsetForTab:tab];
+        tab.navigationHistoryRestored = tab.navigationURLs.count > 0;
+        tab.pendingNavigationIndex = NSNotFound;
+        tab.needsScrollRestore = tab.hasSavedScrollOffset;
+        webView.delegate = nil;
+        [self.webViewsByTabIdentifier removeObjectForKey:identifier];
+        [self.inactiveTabSince removeObjectForKey:identifier];
+        [self.pendingSnapshots removeObjectForKey:identifier];
+        [webView stopLoading];
+        [webView removeFromSuperview];
+        unloaded = YES;
+        BrowserLog(@"[Tabs] inactive web view unloaded after TTL");
+    }
+    if (unloaded) [self persistSession];
+    [self scheduleInactiveTabExpiry];
 }
 
 - (BrowserTabViewModel *)activeTab {
@@ -284,11 +359,16 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
         return;
     }
 
+    [self.inactiveTabSince removeObjectForKey:tab.identifier];
+    NSTimeInterval now = NSProcessInfo.processInfo.systemUptime;
     [self updateThumbnailStagingViewFrame];
     for (BrowserTabViewModel *candidate in self.viewModel.tabs) {
         BrowserWebView *candidateWebView = self.webViewsByTabIdentifier[candidate.identifier];
         if (candidateWebView == nil || candidateWebView == activeWebView) {
             continue;
+        }
+        if (self.inactiveTabSince[candidate.identifier] == nil) {
+            self.inactiveTabSince[candidate.identifier] = @(now);
         }
         [self parkWebViewForThumbnailing:candidateWebView];
     }
@@ -312,10 +392,11 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
     self.activeWebView.userInteractionEnabled = shouldAllowWebInteraction;
 
     [self refreshActiveTabUI];
+    [self scheduleInactiveTabExpiry];
 }
 
 - (void)updateStoredScrollOffsetForTab:(BrowserTabViewModel *)tab {
-    if (tab == nil) {
+    if (tab == nil || tab.needsScrollRestore) {
         return;
     }
 
@@ -452,9 +533,14 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
         return;
     }
 
-    UIScrollView *scrollView = webView.scrollView;
+    __weak BrowserWebView *weakWebView = webView;
+    NSUInteger generation = webView.documentGeneration;
     CGPoint savedScrollOffset = tab.savedScrollOffset;
     dispatch_async(dispatch_get_main_queue(), ^{
+        BrowserWebView *currentWebView = weakWebView;
+        if (currentWebView == nil || self.webViewsByTabIdentifier[tab.identifier] != currentWebView ||
+            currentWebView.documentGeneration != generation) return;
+        UIScrollView *scrollView = currentWebView.scrollView;
         [scrollView layoutIfNeeded];
         CGFloat maxOffsetY = MAX(0.0, scrollView.contentSize.height - CGRectGetHeight(scrollView.bounds));
         CGPoint clampedScrollOffset = CGPointMake(0.0,
@@ -462,10 +548,10 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
         [scrollView setContentOffset:clampedScrollOffset animated:NO];
         tab.savedScrollOffset = clampedScrollOffset;
         tab.hasSavedScrollOffset = YES;
+        tab.needsScrollRestore = NO;
         [self captureSnapshotForTab:tab];
         [self persistSession];
     });
-    tab.needsScrollRestore = NO;
 }
 
 // Disposable previews live outside the session and history stores.
@@ -533,7 +619,7 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
 }
 
 - (void)captureSnapshotForTab:(BrowserTabViewModel *)tab {
-    if (tab == nil || [self.pendingSnapshots containsObject:tab.identifier]) return;
+    if (tab == nil || self.pendingSnapshots[tab.identifier] != nil) return;
     if (!tab.needsScrollRestore) [self updateStoredScrollOffsetForTab:tab];
     BrowserWebView *webView = self.webViewsByTabIdentifier[tab.identifier];
     if (webView == nil || webView.loading || CGRectIsEmpty(webView.bounds) ||
@@ -541,16 +627,19 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
 
     NSUInteger generation = webView.documentGeneration;
     NSString *URLString = [tab.URLString copy] ?: @"";
-    [self.pendingSnapshots addObject:tab.identifier];
+    NSUUID *snapshotToken = NSUUID.UUID;
+    self.pendingSnapshots[tab.identifier] = snapshotToken;
+    __weak BrowserWebView *weakWebView = webView;
     __weak typeof(self) weakSelf = self;
     [webView captureSnapshotInRect:webView.bounds width:584.0 completion:^(UIImage *snapshotImage) {
         dispatch_async(dispatch_get_main_queue(), ^{
             BrowserTabCoordinator *strongSelf = weakSelf;
-            if (strongSelf == nil) return;
-            [strongSelf.pendingSnapshots removeObject:tab.identifier];
-            if (snapshotImage == nil || snapshotImage.size.width <= 0 || snapshotImage.size.height <= 0 ||
-                strongSelf.webViewsByTabIdentifier[tab.identifier] != webView ||
-                webView.documentGeneration != generation || ![tab.URLString isEqual:URLString] ||
+            if (strongSelf == nil || strongSelf.pendingSnapshots[tab.identifier] != snapshotToken) return;
+            [strongSelf.pendingSnapshots removeObjectForKey:tab.identifier];
+            BrowserWebView *currentWebView = weakWebView;
+            if (currentWebView == nil || snapshotImage == nil || snapshotImage.size.width <= 0 || snapshotImage.size.height <= 0 ||
+                strongSelf.webViewsByTabIdentifier[tab.identifier] != currentWebView ||
+                currentWebView.documentGeneration != generation || ![tab.URLString isEqual:URLString] ||
                 [strongSelf.viewModel.tabs indexOfObjectIdenticalTo:tab] == NSNotFound) return;
 
             // Keep memory and disk previews at the card's pixel size, regardless of display scale.
@@ -646,6 +735,7 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
         return;
     }
 
+    [self unloadExpiredInactiveTabs];
     BrowserTabViewModel *currentTab = self.activeTab;
     BOOL discardCurrentTab = [currentTab.URLString isEqualToString:kBrowserNewTabURL];
     if (!discardCurrentTab) self.lastActiveTabIdentifier = currentTab.identifier;
@@ -699,9 +789,12 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
         return;
     }
 
+    [self unloadExpiredInactiveTabs];
     BOOL closingActiveTab = tabIndex == self.viewModel.activeTabIndex;
     BrowserTabViewModel *tab = self.viewModel.tabs[tabIndex];
     [self removeCachedThumbnailForTab:tab];
+    [self.inactiveTabSince removeObjectForKey:tab.identifier];
+    [self.pendingSnapshots removeObjectForKey:tab.identifier];
     [self.webViewsByTabIdentifier[tab.identifier] removeFromSuperview];
     [self.webViewsByTabIdentifier removeObjectForKey:tab.identifier];
     [self.viewModel removeTabAtIndex:tabIndex];
@@ -720,6 +813,7 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
 
     [self refreshActiveTabUI];
     [self persistSession];
+    [self scheduleInactiveTabExpiry];
 }
 
 - (void)recreateActiveWebViewPreservingCurrentURL {
@@ -729,6 +823,7 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
     }
 
     NSString *currentURL = self.activeWebView.request.URL.absoluteString;
+    [self.pendingSnapshots removeObjectForKey:tab.identifier];
     [self.webViewsByTabIdentifier[tab.identifier] removeFromSuperview];
     [self.webViewsByTabIdentifier removeObjectForKey:tab.identifier];
     tab.requestURL = currentURL ?: @"";

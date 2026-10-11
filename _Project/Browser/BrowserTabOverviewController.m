@@ -19,6 +19,8 @@ static CGFloat const kTabOverviewFooterHeight = 28.0;
 static CGFloat const kTabCardWidth = 584.0;
 static CGFloat const kTabCardHeight = 535.0;
 static CGFloat const kTabCardThumbnailHeight = 347.0;
+static CGFloat const kAddTabButtonDiameter = 144.0;
+static CGFloat const kAddTabButtonLeftOffset = 144.0;
 static CGFloat const kTabCardSpacing = 50.4;
 static CGFloat const kTabCardGlowInset = 18.0;
 static CGFloat const kTabCardTitleTop = 369.0;
@@ -119,13 +121,19 @@ static CGFloat const kTabCardURLHeight = 64.0;
         _previewPlaceholderLabel.lineBreakMode = NSLineBreakByTruncatingMiddle;
         [_cardBackgroundView addSubview:_previewPlaceholderLabel];
 
-        _addIconBackdropView = [[UIView alloc] initWithFrame:CGRectMake((kTabCardWidth - 144.0) / 2.0, (kTabCardHeight - 144.0) / 2.0, 144.0, 144.0)];
-        _addIconBackdropView.backgroundColor = UIColor.clearColor;
+        _addIconBackdropView = [[UIView alloc] initWithFrame:CGRectMake((kTabCardWidth - kAddTabButtonDiameter) / 2.0 - kAddTabButtonLeftOffset,
+            (kTabCardHeight - kAddTabButtonDiameter) / 2.0, kAddTabButtonDiameter, kAddTabButtonDiameter)];
+        _addIconBackdropView.backgroundColor = BrowserTVRestingSurfaceColor();
+        _addIconBackdropView.layer.cornerRadius = kAddTabButtonDiameter / 2.0;
+        _addIconBackdropView.layer.shadowColor = UIColor.whiteColor.CGColor;
+        _addIconBackdropView.layer.shadowOffset = CGSizeZero;
+        _addIconBackdropView.layer.shadowRadius = 22.0;
+        _addIconBackdropView.layer.shadowPath = [UIBezierPath bezierPathWithOvalInRect:_addIconBackdropView.bounds].CGPath;
         _addIconBackdropView.hidden = YES;
-        [_cardBackgroundView addSubview:_addIconBackdropView];
+        [self.contentView addSubview:_addIconBackdropView];
 
-        _addIconView = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"plus"]];
-        _addIconView.frame = CGRectMake(12.0, 12.0, 120.0, 120.0);
+        _addIconView = [[UIImageView alloc] initWithImage:[[UIImage imageNamed:@"plus"] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]];
+        _addIconView.frame = CGRectMake(40.0, 40.0, 64.0, 64.0);
         _addIconView.contentMode = UIViewContentModeScaleAspectFit;
         [_addIconBackdropView addSubview:_addIconView];
 
@@ -162,9 +170,10 @@ static CGFloat const kTabCardURLHeight = 64.0;
     self.previewPlaceholderLabel.hidden = YES;
     self.thumbnailView.hidden = YES;
     self.thumbnailView.image = nil;
+    self.cardBackgroundView.hidden = YES;
     self.addIconBackdropView.hidden = NO;
-    self.titleLabel.text = @"New Tab";
-    self.urlLabel.text = @"Favorites and recents";
+    self.accessibilityLabel = @"New Tab";
+    self.accessibilityTraits = UIAccessibilityTraitButton;
     self.hintLabel.hidden = YES;
     [self updateAppearance];
 }
@@ -172,6 +181,9 @@ static CGFloat const kTabCardURLHeight = 64.0;
 - (void)configureWithTab:(BrowserTabViewModel *)tab activeTab:(BOOL)activeTab {
     self.addCard = NO;
     self.activeTab = activeTab;
+    self.cardBackgroundView.hidden = NO;
+    self.accessibilityLabel = tab.title.length > 0 ? tab.title : tab.URLString;
+    self.accessibilityTraits = UIAccessibilityTraitButton;
     self.thumbnailView.hidden = NO;
     self.thumbnailView.image = tab.snapshotImage;
     NSString *domain = [NSURL URLWithString:tab.URLString].host;
@@ -194,6 +206,20 @@ static CGFloat const kTabCardURLHeight = 64.0;
 
 - (void)updateAppearance {
     BOOL focused = self.isFocused;
+    if (self.addCard) {
+        self.layer.shadowOpacity = 0;
+        self.transform = CGAffineTransformIdentity;
+        self.addIconBackdropView.backgroundColor = focused ? BrowserTVFocusedSurfaceColor()
+                                                         : BrowserTVRestingSurfaceColor();
+        self.addIconView.tintColor = focused ? BrowserTVFocusedTextColor() : UIColor.whiteColor;
+        self.addIconBackdropView.layer.shadowOpacity = focused ? 0.35 : 0;
+        self.addIconBackdropView.transform = focused ? CGAffineTransformMakeScale(1.12, 1.12)
+                                                    : CGAffineTransformIdentity;
+        self.hintLabel.hidden = YES;
+        return;
+    }
+    self.addIconBackdropView.layer.shadowOpacity = 0;
+    self.addIconBackdropView.transform = CGAffineTransformIdentity;
     self.cardBackgroundView.backgroundColor = focused ? BrowserTVFocusedSurfaceColor()
                                                      : BrowserTVRestingSurfaceColor();
     self.cardBackgroundView.layer.borderWidth = self.activeTab && !focused ? 2 : 0;

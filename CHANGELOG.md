@@ -1,5 +1,213 @@
 # Changelog
 
+This personal-use project's retrospective versions do not correspond to published releases or Git tags.
+
+## 2.18.30 - 2026-10-11
+
+### Changed
+
+- Shift the round New Tab button farther left by half its diameter for clearer separation from the tab previews ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.29 - 2026-10-11
+
+### Changed
+
+- Move the round New Tab button farther left by half the plus icon width ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.28 - 2026-10-11
+
+### Changed
+
+- Shift the round New Tab button slightly left in the tab overview ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.27 - 2026-10-11
+
+### Changed
+
+- Show New Tab as a compact round plus button in its existing overview position, with focus highlighting on the button instead of a full preview card ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.26 - 2026-10-11
+
+### Changed
+
+- Release inactive webpages five minutes after switching away while retaining their tabs, navigation lists, scroll positions and cached previews, and reload them when selected ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.25 - 2026-10-11
+
+### Changed
+
+- Open the tab overview without loading inactive websites, reuse disposable card-sized previews across launches, and show the domain and title when a preview is unavailable ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.24 - 2026-10-10
+
+### Changed
+
+- Activate website diagnostic polling and storage interception only while Debug is enabled, and apply toggles to open pages and frames without reloading ([User Guide](docs/USER_GUIDE.md)).
+
+### Removed
+
+- Remove storage key names from website diagnostic messages and log entries ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.23 - 2026-10-10
+
+### Removed
+
+- Remove the disabled YouTube native-stream extractor and its request-capture script to avoid injecting unused interception code into webpages ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.22 - 2026-10-10
+
+### Changed
+
+- Request media diagnostics, fallback media pause, and YouTube page configuration asynchronously, and discard delayed diagnostics or playback results after the originating page or tab changes ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.21 - 2026-10-10
+
+### Changed
+
+- Shorten the Up/Down hold acceleration and moderately increase its maximum speed while preserving the initial speed and short-press scroll step ([User Guide](docs/USER_GUIDE.md)).
+
+### Removed
+
+- Remove touchpad swipe scrolling and release inertia, retaining touchpad pointer control and arrow-button page scrolling ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.20 - 2026-10-10
+
+### Removed
+
+- Remove disabled fullscreen experiments, the unreachable WKWebView proof of concept, unused helpers, and the retired AVPlayer torrent loader while retaining current VLC playback ([User Guide](docs/USER_GUIDE.md)).
+
+### Fixed
+
+- Reload the active webpage after WebKit process termination with at most two automatic attempts per crash burst and a renewed budget after 60 seconds without termination ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.19 - 2026-10-10
+
+### Fixed
+
+- Expand option report titles across the available row width instead of reserving empty badge and detail space ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.18 - 2026-10-10
+
+### Fixed
+
+- Control all app-owned logs, website diagnostics and Background Probe with the single Debug switch, stop active probes when off, and place the same master button above report actions in Ad Block-style options ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.17 - 2026-10-10
+
+### Changed
+
+- Toggle diagnostics directly with Center on the Debug menu tile and open its existing options by holding Center, matching Ad Block controls ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.16 - 2026-10-10
+
+### Fixed
+
+- Remember page zoom separately for each domain across navigation, tabs and launches, and reset only the current domain to 100% ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.15 - 2026-10-10
+
+### Changed
+
+- Replace Purge All with Delete All to remove every listed torrent and its cached files after confirmation ([User Guide](docs/USER_GUIDE.md)).
+
+### Added
+
+- Add Reset All beside Delete All to reset every torrent through the existing per-torrent operation while retaining sources with all files skipped ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.14 - 2026-10-10
+
+### Fixed
+
+- Highlight the entire Ad Block master toggle in Options as a compact button beside the Settings heading so remote focus is easier to see ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.13 - 2026-10-10
+
+### Fixed
+
+- Restore compiled Ad Block rules before converting filters again on subsequent launches, falling back to preparation when filters change or compiled chunks are missing ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.12 - 2026-10-08
+
+### Fixed
+
+- Center Ad Block Options again and increase its height by one and a half filter rows as requested ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.11 - 2026-10-08
+
+### Changed
+
+- Move the Ad Block Options panel upward by one and a half filter rows ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.10 - 2026-10-08
+
+### Changed
+
+- Use the browser menu's shared ON/OFF badge for filter controls and the guide preference, align filter toggles at the row edge, and remove the extra container around the Settings toggle ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.9 - 2026-10-08
+
+### Changed
+
+- Match the Settings Ad Block toggle to the browser menu's green ON and gray OFF indicators ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.8 - 2026-10-08
+
+### Changed
+
+- Put the master Ad Block switch beside the Settings heading and leave only individual filters in the list below ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.7 - 2026-10-08
+
+### Changed
+
+- Place Update Filters Now beside Done below the Ad Block filter controls ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.6 - 2026-10-08
+
+### Changed
+
+- Narrow the Ad Block settings panel by half and place Done in a compact button below the filter controls ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.5 - 2026-10-08
+
+### Changed
+
+- Show each Ad Block filter's version or update date beside its switch instead of listing filter status above the controls ([User Guide](docs/USER_GUIDE.md)).
+
+### Fixed
+
+- Keep six selected AdGuard sources, preserve working rules when another source fails to compile, and block the observed Hraimo banner source across websites ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.4 - 2026-10-07
+
+### Added
+
+- Add four separately controlled AdGuard sources for wider ad, tracking, and annoyance coverage ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.3 - 2026-10-07
+
+### Fixed
+
+- Refresh Ad Block filter status inside the open settings popup as downloads finish, and show failed updates without hiding the cached copy ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.2 - 2026-10-07
+
+### Changed
+
+- Convert AdGuard Base and Ukrainian filters on Apple TV for broader network and cosmetic blocking, and open filter settings by holding Center on Ad Block ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.1 - 2026-10-07
+
+### Fixed
+
+- Download and cache a broader advertising and tracking filter, reserve bundled custom rules for gaps in that filter, and suppress script-opened external popups when Ad Block is enabled ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.18.0 - 2026-10-07
+
+### Added
+
+- Synchronize Favorites and visit history across Apple TVs through a private Google Drive app folder, and open tabs published by another TV ([User Guide](docs/USER_GUIDE.md#google-drive-sync)).
+
 ## 2.17.17 - 2026-10-04
 
 ### Fixed
@@ -52,130 +260,128 @@
 
 ### Added
 
-- Rewind or fast-forward continuously while holding a player seek button, with larger steps after holding the 30-second button for ten seconds ([user guide](USER_GUIDE.md#torrents)).
+- Rewind or fast-forward continuously while holding a player seek button, with larger steps after holding the 30-second button for ten seconds ([user guide](docs/USER_GUIDE.md#torrents)).
 
 ## 2.17.8 - 2026-10-04
 
 ### Added
 
-- Resume each torrent media file from its saved playback position and clear that position when playback finishes or its torrent data is removed ([user guide](USER_GUIDE.md#torrents), [torrent architecture](TORRENTS.md)).
+- Resume each torrent media file from its saved playback position and clear that position when playback finishes or its torrent data is removed ([user guide](docs/USER_GUIDE.md#torrents)).
 
 ## 2.17.7 - 2026-10-04
 
 ### Fixed
 
-- Pause torrent playback when the app becomes inactive, ignore touchpad direction gestures while player controls are hidden, and hide the status header with the controls during playback ([user guide](USER_GUIDE.md#torrents)).
+- Pause torrent playback when the app becomes inactive, ignore touchpad direction gestures while player controls are hidden, and hide the status header with the controls during playback ([user guide](docs/USER_GUIDE.md#torrents)).
 
 ## 2.17.6 - 2026-10-04
 
 ### Fixed
 
-- Show the selected file's completion percentage while buffering or streaming, and label files and torrents Complete only when their selected bytes are fully downloaded ([user guide](USER_GUIDE.md#torrents)).
+- Show the selected file's completion percentage while buffering or streaming, and label files and torrents Complete only when their selected bytes are fully downloaded ([user guide](docs/USER_GUIDE.md#torrents)).
 
 ## 2.17.5 - 2026-10-04
 
 ### Fixed
 
-- Prioritize playback and requested torrent pieces so streaming can start before the selected file finishes downloading ([torrent architecture](TORRENTS.md), [development history](DEVELOPMENT_HISTORY.md#2026-10-04--torrent-streaming-and-player-controls)).
+- Prioritize playback and requested torrent pieces so streaming can start before the selected file finishes downloading ([User Guide](docs/USER_GUIDE.md)).
 
 ## 2.17.4 - 2026-10-04
 
 ### Added
 
-- Reset a torrent from its context actions by deleting its cached files and restoring its source with every file skipped ([user guide](USER_GUIDE.md#torrents)).
+- Reset a torrent from its context actions by deleting its cached files and restoring its source with every file skipped ([user guide](docs/USER_GUIDE.md#torrents)).
 
 ## 2.17.3 - 2026-10-04
 
 ### Changed
 
-- Show a download symbol for starting all files in a torrent and move Remove into the torrent's context actions ([user guide](USER_GUIDE.md#torrents)).
+- Show a download symbol for starting all files in a torrent and move Remove into the torrent's context actions ([user guide](docs/USER_GUIDE.md#torrents)).
 
 ### Added
 
-- Browse torrent folders and choose an individual file or whole folder from a focusable download icon without starting playback or every file ([user guide](USER_GUIDE.md#torrents)).
+- Browse torrent folders and choose an individual file or whole folder from a focusable download icon without starting playback or every file ([user guide](docs/USER_GUIDE.md#torrents)).
 
 ## 2.17.2 - 2026-10-04
 
 ### Changed
 
-- Move the background runtime probe result into Debug and add a master diagnostic switch with ten recent numeric log entries ([user guide](USER_GUIDE.md#torrents)).
+- Move the background runtime probe result into Debug and add a master diagnostic switch with ten recent numeric log entries ([user guide](docs/USER_GUIDE.md#torrents)).
 
 ## 2.17.1 - 2026-10-04
 
 ### Added
 
-- Offer system-managed background refresh and processing opportunities for manually started torrents, and show a torrent-free runtime probe to measure actual execution after leaving the browser ([user guide](USER_GUIDE.md#torrents)).
+- Offer system-managed background refresh and processing opportunities for manually started torrents, and show a torrent-free runtime probe to measure actual execution after leaving the browser ([user guide](docs/USER_GUIDE.md#torrents)).
 
 ## 2.17.0 - 2026-10-04
 
 ### Changed
 
-- Show the native New Tab, History, Torrents, and playback controls with a shared tvOS page style and remote focus behavior ([user guide](USER_GUIDE.md)).
-- Open newly imported torrents in the overall list with the new row focused, richer transfer details, and a saved priority order ([user guide](USER_GUIDE.md#torrents)).
+- Show the native New Tab, History, Torrents, and playback controls with a shared tvOS page style and remote focus behavior ([user guide](docs/USER_GUIDE.md)).
+- Open newly imported torrents in the overall list with the new row focused, richer transfer details, and a saved priority order ([user guide](docs/USER_GUIDE.md#torrents)).
 
 ### Added
 
-- Control a focused torrent with Start, priority, and Delete icons, and purge downloaded data without removing torrent entries ([user guide](USER_GUIDE.md#torrents)).
+- Control a focused torrent with Start, priority, and Delete icons, and purge downloaded data without removing torrent entries ([user guide](docs/USER_GUIDE.md#torrents)).
 
 ### Removed
 
-- Remove the manual Add Torrent and unlisted-file Clean Cache actions while keeping website link import and the cache-size hint ([user guide](USER_GUIDE.md#torrents)).
+- Remove the manual Add Torrent and unlisted-file Clean Cache actions while keeping website link import and the cache-size hint ([user guide](docs/USER_GUIDE.md#torrents)).
 
 ### Fixed
 
-- Continue manually started torrent downloads while browsing websites with Torrents closed, and apply saved file choices when metadata arrives ([user guide](docs/USER_GUIDE.md#background-downloads), [development history](docs/agent/DEVELOPMENT_HISTORY.md#2026-10-04--native-tvos-pages-and-torrent-library-follow-up)).
-- Return from a torrent's file list to the overall list with Back and preserve the proportions of VLC control symbols ([user guide](USER_GUIDE.md#torrents)).
+- Continue manually started torrent downloads while browsing websites with Torrents closed, and apply saved file choices when metadata arrives ([user guide](docs/USER_GUIDE.md#background-downloads)).
+- Return from a torrent's file list to the overall list with Back and preserve the proportions of VLC control symbols ([user guide](docs/USER_GUIDE.md#torrents)).
 
 ## 2.16.0 - 2026-10-04
 
 ### Changed
 
-- Wait for file selection before downloading payloads of newly imported torrents so unwanted files stay skipped ([user guide](USER_GUIDE.md#torrents), [development history](DEVELOPMENT_HISTORY.md#2026-10-04--built-in-torrent-playback-on-apple-tv)).
+- Wait for file selection before downloading payloads of newly imported torrents so unwanted files stay skipped ([user guide](docs/USER_GUIDE.md#torrents)).
 
 ### Added
 
-- Open the built-in torrent library from website magnet and `.torrent` links, including new windows and recognized torrent download responses ([user guide](USER_GUIDE.md#torrents)).
-- Play selected torrent media through embedded TVVLCKit with buffering, remote controls, file navigation and direct opening of completed files ([user guide](USER_GUIDE.md#torrents), [torrent architecture](TORRENTS.md)).
-- Continue manually started torrent downloads after leaving the browser with experimental Keep Alive enabled; a 2 GB torrent completed after five minutes with another video app playing on Apple TV ([user guide](docs/USER_GUIDE.md#background-downloads), [development history](docs/agent/DEVELOPMENT_HISTORY.md#2026-10-04--tvos-background-task-experiment)).
-- Resume verified torrent pieces across app launches to avoid repeating full checks of cached files ([torrent architecture](TORRENTS.md)).
-- Reclaim unlisted torrent cache files with a confirmation action and remove cached payloads when deleting a torrent ([user guide](USER_GUIDE.md#torrents)).
+- Open the built-in torrent library from website magnet and `.torrent` links, including new windows and recognized torrent download responses ([user guide](docs/USER_GUIDE.md#torrents)).
+- Play selected torrent media through embedded TVVLCKit with buffering, remote controls, file navigation and direct opening of completed files ([user guide](docs/USER_GUIDE.md#torrents)).
+- Continue manually started torrent downloads after leaving the browser with experimental Keep Alive enabled; a 2 GB torrent completed after five minutes with another video app playing on Apple TV ([user guide](docs/USER_GUIDE.md#background-downloads)).
+- Resume verified torrent pieces across app launches to avoid repeating full checks of cached files ([User Guide](docs/USER_GUIDE.md)).
+- Reclaim unlisted torrent cache files with a confirmation action and remove cached payloads when deleting a torrent ([user guide](docs/USER_GUIDE.md#torrents)).
 
 ## 2.15.26 - 2026-10-04
 
 ### Fixed
 
-- Show the saved zoom percentage on Reset Zoom and refresh it immediately after Zoom In, Zoom Out, or Reset Zoom while the menu stays open ([user guide](USER_GUIDE.md#main-menu)).
+- Show the saved zoom percentage on Reset Zoom and refresh it immediately after Zoom In, Zoom Out, or Reset Zoom while the menu stays open ([user guide](docs/USER_GUIDE.md#main-menu)).
 
 ## 2.15.25 - 2026-10-02
 
 ### Fixed
 
-- Enlarge page text and content together with WebKit view scale while keeping the page aligned from the left after zoom and relaunch ([user guide](USER_GUIDE.md#main-menu), [development history](DEVELOPMENT_HISTORY.md#2026-10-02--page-zoom-for-reading)).
+- Enlarge page text and content together with WebKit view scale while keeping the page aligned from the left after zoom and relaunch ([user guide](docs/USER_GUIDE.md#main-menu)).
 
 ## 2.15.24 - 2026-10-01
 
 ### Fixed
 
-- Prevent Zoom Out at 50% from wrapping to 200% and discard stale horizontal offsets when restoring a tab ([development history](DEVELOPMENT_HISTORY.md#2026-10-02--page-zoom-for-reading)).
+- Prevent Zoom Out at 50% from wrapping to 200% and discard stale horizontal offsets when restoring a tab ([User Guide](docs/USER_GUIDE.md)).
 
 ## 2.15.23 - 2026-10-01
 
 ### Fixed
 
-- Prevent native video diagnostics from writing object payloads containing request headers, signed URLs, page content, or detailed errors to logs ([diagnostic privacy](USER_GUIDE.md#native-video-diagnostic-privacy)).
+- Prevent native video diagnostics from writing object payloads containing request headers, signed URLs, page content, or detailed errors to logs ([diagnostic privacy](docs/USER_GUIDE.md#native-video-diagnostic-privacy)).
 
 ## 2.15.22 - 2026-10-01
-
-_Retrospective numbering for tvOSofaBrowse, without published releases or Git tags; see the [development history](DEVELOPMENT_HISTORY.md) for implementation dates, decisions, verification and reversals, and the [roadmap](ROADMAP.md) for future work._
 
 ### Changed
 
 - Focus the domain button when opening the menu so address entry or search is immediately available ([`1008e01`][1008e01]).
-- Update the in-app guide for video arrows, history buttons beside the domain, and Double Up closing a card only in the tab overview ([user guide](USER_GUIDE.md)).
+- Update the in-app guide for video arrows, history buttons beside the domain, and Double Up closing a card only in the tab overview ([user guide](docs/USER_GUIDE.md)).
 
 ### Added
 
-- Document remote controls, custom players, tabs, history, local recovery and diagnostics in a detailed user guide ([user guide](USER_GUIDE.md)).
+- Document remote controls, custom players, tabs, history, local recovery and diagnostics in a detailed user guide ([user guide](docs/USER_GUIDE.md)).
 
 ### Fixed
 
