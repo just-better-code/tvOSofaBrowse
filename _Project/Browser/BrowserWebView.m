@@ -570,6 +570,7 @@ static NSString *BrowserFrameClickBridgeScript(NSString *secret, NSString *nativ
                         "if (data.action === 'toggle') { toggleVideo(); }"
                         "if (data.action === 'seek') { handleMediaHorizontalPress(data.direction); }"
                         "if (data.action === 'media') { performMediaCommand(data.command, data.value, data.request); }"
+                        "if (data.action === 'resetVolume') { window.__browserTVResetMediaVolume(); }"
                     "} else if (data.browserTVMediaState === secret) {"
                         "receiveMediaState(event, data);"
                     "} else if (data.browserTVFrameFullscreen === secret) {"
@@ -731,6 +732,14 @@ static id BrowserPersistentWebsiteDataStore(void) {
     id body = [message valueForKey:@"body"];
     if (![body isKindOfClass:NSDictionary.class] || ![body[@"token"] isEqual:self.token]) return;
     if (![body[@"session"] isKindOfClass:NSString.class] || [body[@"session"] length] > 128) return;
+    if ([body[@"loadVolume"] boolValue]) {
+        NSNumber *volume = [[BrowserPreferencesStore new] playerVolumeForURL:request.URL];
+        NSData *data = [NSJSONSerialization dataWithJSONObject:@[body[@"session"], volume ?: NSNull.null] options:0 error:nil];
+        NSString *arguments = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+        if (arguments) [owner evaluateJavaScript:[NSString stringWithFormat:@"window.__browserTVRestoreFullscreenVolume && window.__browserTVRestoreFullscreenVolume.apply(null,%@)", arguments]
+                            completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
+        return;
+    }
     NSMutableDictionary *state = [NSMutableDictionary dictionaryWithObject:body[@"session"] forKey:@"session"];
     for (NSString *key in @[@"active", @"available", @"paused", @"canSeekBack", @"canSeekForward", @"canPrevious", @"canNext", @"canRestart", @"canEnd", @"muted", @"canMute", @"canVolume"]) {
         state[key] = @([body[key] isKindOfClass:NSNumber.class] && [body[key] boolValue]);
@@ -741,6 +750,10 @@ static id BrowserPersistentWebsiteDataStore(void) {
     }
     double volume = [body[@"volume"] isKindOfClass:NSNumber.class] ? [body[@"volume"] doubleValue] : 0;
     state[@"volume"] = @(isfinite(volume) ? MIN(1, MAX(0, volume)) : 0);
+    if ([state[@"active"] boolValue] && [state[@"canVolume"] boolValue] &&
+        [body[@"volume"] isKindOfClass:NSNumber.class] && isfinite(volume)) {
+        [[BrowserPreferencesStore new] setPlayerVolume:volume forURL:request.URL];
+    }
     if ([owner.delegate respondsToSelector:@selector(webView:didUpdateFullscreenMediaState:)]) {
         [owner.delegate webView:owner didUpdateFullscreenMediaState:state];
     }
@@ -2042,6 +2055,12 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     self.pageZoomFactor = [[BrowserPreferencesStore new] pageZoomPercentForURL:URL] / 100.0;
 }
 
+- (void)resetSitePlaybackPreferences {
+    self.pageZoomFactor = 1.0;
+    [self evaluateJavaScript:@"window.__browserTVResetMediaVolume && window.__browserTVResetMediaVolume()"
+          completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
+}
+
 - (void)setPageZoomFactor:(CGFloat)pageZoomFactor {
     CGFloat nextFactor = MIN(2.0, MAX(0.5, pageZoomFactor));
     if (fabs(_pageZoomFactor - nextFactor) < 0.001) {
@@ -2421,7 +2440,31 @@ windowFeatures:(id)windowFeatures {
 }
 
 + (void)clearCachedDataWithCompletion:(void (^)(void))completion {
-    [[NSURLCache sharedURLCache] removeAllCachedResponses];
+    [self clearCachedDataForURL:nil completion:completion];
+}
+
++ (NSString *)siteHostForURL:(NSURL *)URL {
+    if (![@[@"http", @"https"] containsObject:URL.scheme.lowercaseString]) return nil;
+    NSString *host = URL.host.lowercaseString;
+    while ([host hasSuffix:@"."]) host = [host substringToIndex:host.length - 1];
+    return host.length ? host : nil;
+}
+
++ (BOOL)siteHost:(NSString *)host matchesDomain:(NSString *)domain {
+    domain = domain.lowercaseString;
+    while ([domain hasPrefix:@"."]) domain = [domain substringFromIndex:1];
+    while ([domain hasSuffix:@"."]) domain = [domain substringToIndex:domain.length - 1];
+    if (!host.length || !domain.length) return NO;
+    return [host isEqualToString:domain] ||
+        [host hasSuffix:[@"." stringByAppendingString:domain]] ||
+        [domain hasSuffix:[@"." stringByAppendingString:host]];
+}
+
++ (void)clearCachedDataForURL:(NSURL *)URL completion:(void (^)(void))completion {
+    NSString *host = URL ? [self siteHostForURL:URL] : nil;
+    if (URL && !host) { if (completion) completion(); return; }
+    if (!URL) [[NSURLCache sharedURLCache] removeAllCachedResponses];
+    else [[NSURLCache sharedURLCache] removeCachedResponseForRequest:[NSURLRequest requestWithURL:URL]];
 
     NSMutableSet<NSString *> *websiteDataTypes = [NSMutableSet set];
     for (NSString *dataType in [self allWebsiteDataTypes]) {
@@ -2430,17 +2473,44 @@ windowFeatures:(id)windowFeatures {
         }
     }
 
-    [self removeWebsiteDataTypes:websiteDataTypes completion:completion];
+    if (!URL) { [self removeWebsiteDataTypes:websiteDataTypes completion:completion]; return; }
+    id dataStore = [self defaultWebsiteDataStore];
+    SEL fetch = NSSelectorFromString(@"fetchDataRecordsOfTypes:completionHandler:");
+    SEL remove = NSSelectorFromString(@"removeDataOfTypes:forDataRecords:completionHandler:");
+    // Never fall back to clearing every site when scoped deletion is unavailable.
+    if (![dataStore respondsToSelector:fetch] || ![dataStore respondsToSelector:remove]) {
+        if (completion) completion();
+        return;
+    }
+    ((void (*)(id, SEL, id, id))objc_msgSend)(dataStore, fetch, websiteDataTypes, ^(NSArray *records) {
+        NSMutableArray *matching = [NSMutableArray array];
+        for (id record in records) {
+            if ([self siteHost:host matchesDomain:[record valueForKey:@"displayName"]]) [matching addObject:record];
+        }
+        if (!matching.count) {
+            if (completion) dispatch_async(dispatch_get_main_queue(), completion);
+            return;
+        }
+        ((void (*)(id, SEL, id, id, id))objc_msgSend)(dataStore, remove, websiteDataTypes, matching, ^{
+            if (completion) dispatch_async(dispatch_get_main_queue(), completion);
+        });
+    });
 }
 
 + (void)clearCookiesWithCompletion:(void (^)(void))completion {
+    [self clearCookiesForURL:nil completion:completion];
+}
+
++ (void)clearCookiesForURL:(NSURL *)URL completion:(void (^)(void))completion {
+    NSString *host = URL ? [self siteHostForURL:URL] : nil;
+    if (URL && !host) { if (completion) completion(); return; }
     id cookieStore = [self defaultCookieStore];
     SEL getAllCookiesSelector = NSSelectorFromString(@"getAllCookies:");
     SEL deleteCookieSelector = NSSelectorFromString(@"deleteCookie:completionHandler:");
     if (cookieStore == nil || ![cookieStore respondsToSelector:getAllCookiesSelector] || ![cookieStore respondsToSelector:deleteCookieSelector]) {
         NSHTTPCookieStorage *storage = NSHTTPCookieStorage.sharedHTTPCookieStorage;
         for (NSHTTPCookie *cookie in storage.cookies) {
-            [storage deleteCookie:cookie];
+            if (!URL || [self siteHost:host matchesDomain:cookie.domain]) [storage deleteCookie:cookie];
         }
         if (completion != nil) {
             completion();
@@ -2449,6 +2519,11 @@ windowFeatures:(id)windowFeatures {
     }
 
     ((void (*)(id, SEL, id))objc_msgSend)(cookieStore, getAllCookiesSelector, ^(NSArray<NSHTTPCookie *> *cookies) {
+        if (URL) {
+            cookies = [cookies filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(NSHTTPCookie *cookie, NSDictionary *bindings) {
+                return [self siteHost:host matchesDomain:cookie.domain];
+            }]];
+        }
         if (cookies.count == 0) {
             if (completion != nil) {
                 dispatch_async(dispatch_get_main_queue(), ^{

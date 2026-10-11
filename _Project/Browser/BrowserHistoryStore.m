@@ -417,6 +417,22 @@ static BOOL RestoreDatabase(NSString *path) {
     [self syncHistoryBackup];
 }
 
+- (void)deleteVisitsForSiteURL:(NSURL *)URL {
+    if (![@[@"http", @"https"] containsObject:URL.scheme.lowercaseString]) return;
+    NSString *host = URL.host.lowercaseString;
+    while ([host hasSuffix:@"."]) host = [host substringToIndex:host.length - 1];
+    if (!host.length) return;
+    NSMutableArray<NSNumber *> *identifiers = [NSMutableArray array];
+    for (NSDictionary *visit in [self allVisits]) {
+        NSString *visitHost = [NSURL URLWithString:visit[@"url"]].host.lowercaseString;
+        while ([visitHost hasSuffix:@"."]) visitHost = [visitHost substringToIndex:visitHost.length - 1];
+        if ([visitHost isEqualToString:host] || [visitHost hasSuffix:[@"." stringByAppendingString:host]]) {
+            [identifiers addObject:visit[@"id"]];
+        }
+    }
+    [self deleteVisitsWithIdentifiers:identifiers];
+}
+
 - (void)deleteAllVisits {
     if (self.database == NULL) return;
     [self beginBackupMutation];

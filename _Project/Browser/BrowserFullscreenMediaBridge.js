@@ -9,6 +9,24 @@ var mediaRequestSerial = 0;
 var mediaAcceptedSerial = 0;
 var mediaActive = false;
 var mediaSuspended = false;
+var mediaSavedVolume = null;
+var mediaVolumeReady = false;
+var mediaVolumeVideos = new WeakMap();
+document.addEventListener('loadedmetadata', function(event) {
+    if (event.target && event.target.tagName === 'VIDEO') mediaVolumeVideos.delete(event.target);
+}, true);
+function restoreMediaVideoVolume(preference) {
+    var v = mediaVideo();
+    var value = preference && preference.volume;
+    if (!v || !Number.isFinite(value) || value < 0 || value > 1) return;
+    var source = v.currentSrc || v.src || '';
+    var restored = mediaVolumeVideos.get(v);
+    if (restored && restored.source === source && restored.session === preference.session) return;
+    try {
+        v.volume = value;
+        mediaVolumeVideos.set(v, {source: source, session: preference.session});
+    } catch (error) {}
+}
 function mediaFrame() {
     return fullscreenFrame || (fullscreenTarget && fullscreenTarget.tagName === 'IFRAME' ? fullscreenTarget : null);
 }
@@ -53,11 +71,12 @@ function publishNativeMedia(state) {
             Object.assign({token: nativeToken, session: mediaSessionID, active: mediaActive}, state || {}));
     } catch (error) {}
 }
-function requestMediaState(request) {
+function requestMediaState(request, volume) {
     var frame = mediaFrame();
     if (frame && frame.isConnected && frame.contentWindow) {
-        frame.contentWindow.postMessage({browserTVFullscreenCommand: secret, action: 'media', command: 'status', request: request}, '*');
+        frame.contentWindow.postMessage({browserTVFullscreenCommand: secret, action: 'media', command: 'status', value: volume, request: request}, '*');
     } else if (window !== window.top) {
+        restoreMediaVideoVolume(volume);
         window.parent.postMessage({browserTVMediaState: secret, request: request, state: mediaState()}, '*');
     }
 }
@@ -69,11 +88,13 @@ function refreshFullscreenMedia() {
     clearInterval(mediaTimer); mediaTimer = null;
     mediaObservedFrame = active ? frame : null;
     mediaActive = active;
+    mediaVolumeReady = false;
     mediaFrameState = null; mediaFrameStateTime = 0;
     mediaSessionID = active ? secret + ':' + Date.now() + ':' + (++mediaRequestSerial) : '';
     mediaAcceptedSerial = mediaRequestSerial;
     publishNativeMedia();
     if (!active) return;
+    publishNativeMedia({loadVolume: true});
     function tick() {
         if (!frame.isConnected) {
             window.__browserTVExitFullscreen();
@@ -83,7 +104,8 @@ function refreshFullscreenMedia() {
         if (mediaFrameState && Date.now() - mediaFrameStateTime > 2000) {
             mediaFrameState = null; publishNativeMedia();
         }
-        requestMediaState(++mediaRequestSerial);
+        if (mediaVolumeReady) requestMediaState(++mediaRequestSerial, {volume: mediaSavedVolume, session: mediaSessionID});
+        else publishNativeMedia({loadVolume: true});
     }
     tick(); mediaTimer = setInterval(tick, 500);
 }
@@ -95,11 +117,12 @@ function receiveMediaState(event, data) {
     } else if (mediaActive && Number.isInteger(data.request) && data.request > mediaAcceptedSerial && data.request <= mediaRequestSerial) {
         mediaAcceptedSerial = data.request;
         mediaFrameState = data.state; mediaFrameStateTime = Date.now();
+        if (data.state.canVolume && Number.isFinite(data.state.volume)) mediaSavedVolume = data.state.volume;
         publishNativeMedia(data.state);
     }
 }
 function performMediaCommand(command, value, request) {
-    if (command === 'status') { requestMediaState(request); return true; }
+    if (command === 'status') { requestMediaState(request, value); return true; }
     // Hardware media actions may belong to the embedding page, not the video frame.
     var trackAction = command === 'previous' ? 'previoustrack' : command === 'next' ? 'nexttrack' : null;
     if (trackAction && mediaHandlers[trackAction]) {
@@ -107,7 +130,7 @@ function performMediaCommand(command, value, request) {
     }
     var frame = mediaFrame();
     if (frame && frame.isConnected && frame.contentWindow) {
-        frame.contentWindow.postMessage({browserTVFullscreenCommand: secret, action: 'media', command: command, value: value}, '*');
+        frame.contentWindow.postMessage({browserTVFullscreenCommand: secret, action: 'media', command: command, value: value, request: request}, '*');
         return true;
     }
     var v = mediaVideo();
@@ -115,7 +138,11 @@ function performMediaCommand(command, value, request) {
     var action, details = {};
     if (command === 'volume' && Number.isFinite(value) && Math.abs(value) <= 1) {
         if (!v) return false;
-        try { v.volume = Math.max(0, Math.min(1, Math.round((v.volume + value) * 100) / 100)); return true; }
+        try {
+            v.volume = Math.max(0, Math.min(1, Math.round((v.volume + value) * 100) / 100));
+            requestMediaState(request);
+            return true;
+        }
         catch (error) { return false; }
     }
     if (command === 'mute') {
@@ -156,10 +183,35 @@ window.__browserTVSetFullscreenMediaSuspended = function(suspended) {
     if (mediaSuspended === !!suspended) return;
     mediaSuspended = !!suspended; refreshFullscreenMedia();
 };
+window.__browserTVResetMediaVolume = function() {
+    mediaSavedVolume = 1;
+    mediaVolumeVideos = new WeakMap();
+    mediaFrameState = null;
+    mediaAcceptedSerial = ++mediaRequestSerial;
+    function reset(root) {
+        Array.prototype.forEach.call(root.querySelectorAll('video'), function(video) {
+            try { video.volume = 1; } catch (error) {}
+        });
+        Array.prototype.forEach.call(root.querySelectorAll('*'), function(element) {
+            if (element.tagName === 'IFRAME' && element.contentWindow) {
+                element.contentWindow.postMessage({browserTVFullscreenCommand: secret, action: 'resetVolume'}, '*');
+            }
+            if (element.shadowRoot) reset(element.shadowRoot);
+        });
+    }
+    reset(document);
+};
+window.__browserTVRestoreFullscreenVolume = function(session, volume) {
+    if (window !== window.top || !mediaActive || session !== mediaSessionID || mediaVolumeReady) return;
+    mediaSavedVolume = Number.isFinite(volume) ? volume : null;
+    mediaVolumeReady = true;
+    requestMediaState(++mediaRequestSerial, {volume: mediaSavedVolume, session: mediaSessionID});
+};
 window.__browserTVSendFullscreenMediaCommand = function(command, value, session) {
     if (window !== window.top || mediaSuspended || !mediaActive || session !== mediaSessionID) return false;
     if (command === 'exit') return window.__browserTVExitFullscreen();
-    return performMediaCommand(command, value);
+    if (command === 'volume' && !mediaVolumeReady) return false;
+    return performMediaCommand(command, value, ++mediaRequestSerial);
 };
 window.addEventListener('pagehide', function() {
     clearInterval(mediaTimer); mediaTimer = null;

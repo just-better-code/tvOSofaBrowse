@@ -1,10 +1,10 @@
 #import "BrowserPreferencesStore.h"
+#import <math.h>
 
 static NSString * const kUserAgentDefaultsKey = @"UserAgent";
 static NSString * const kMobileModeDefaultsKey = @"MobileMode";
 static NSString * const kTextFontSizeDefaultsKey = @"TextFontSize";
 static NSString * const kPageZoomByHostDefaultsKey = @"PageZoomByHost";
-static NSString * const kEnableFullscreenVideoPlaybackDefaultsKey = @"EnableFullscreenVideoPlayback";
 static NSString * const kAdBlockEnabledDefaultsKey = @"AdBlockEnabled";
 static NSString * const kCursorMagnifierEnabledDefaultsKey = @"CursorMagnifierEnabled";
 static NSString * const kDontShowHintsOnLaunchDefaultsKey = @"DontShowHintsOnLaunch";
@@ -132,13 +132,37 @@ NSNotificationName const BrowserDebugEnabledDidChangeNotification = @"BrowserDeb
     [[self defaults] synchronize];
 }
 
-- (BOOL)fullscreenVideoPlaybackEnabled {
-    return [[self defaults] boolForKey:kEnableFullscreenVideoPlaybackDefaultsKey];
+- (NSNumber *)playerVolumeForURL:(NSURL *)URL {
+    NSString *host = [self pageZoomHostForURL:URL];
+    id value = host ? [[self defaults] dictionaryForKey:@"PlayerVolumeByHost"][host] : nil;
+    return [value isKindOfClass:NSNumber.class] && isfinite([value doubleValue])
+        ? @(MIN(1, MAX(0, [value doubleValue]))) : nil;
 }
 
-- (void)setFullscreenVideoPlaybackEnabled:(BOOL)fullscreenVideoPlaybackEnabled {
-    [[self defaults] setBool:fullscreenVideoPlaybackEnabled forKey:kEnableFullscreenVideoPlaybackDefaultsKey];
-    [[self defaults] synchronize];
+- (void)setPlayerVolume:(double)volume forURL:(NSURL *)URL {
+    NSString *host = [self pageZoomHostForURL:URL];
+    if (!host || !isfinite(volume)) return;
+    NSNumber *value = @(MIN(1, MAX(0, volume)));
+    if ([[self playerVolumeForURL:URL] isEqual:value]) return;
+    NSMutableDictionary *values = [[[self defaults] dictionaryForKey:@"PlayerVolumeByHost"] mutableCopy]
+        ?: [NSMutableDictionary dictionary];
+    values[host] = value;
+    [[self defaults] setObject:values forKey:@"PlayerVolumeByHost"];
+}
+
+- (void)clearSitePreferencesForURL:(NSURL *)URL {
+    NSString *host = URL ? [self pageZoomHostForURL:URL] : nil;
+    if (URL && !host) return;
+    for (NSString *key in @[kPageZoomByHostDefaultsKey, @"PlayerVolumeByHost"]) {
+        if (!URL) { [[self defaults] removeObjectForKey:key]; continue; }
+        NSMutableDictionary *values = [[[self defaults] dictionaryForKey:key] mutableCopy];
+        for (NSString *savedHost in values.allKeys) {
+            if ([savedHost isEqualToString:host] || [savedHost hasSuffix:[@"." stringByAppendingString:host]]) {
+                [values removeObjectForKey:savedHost];
+            }
+        }
+        if (values) [[self defaults] setObject:values forKey:key];
+    }
 }
 
 - (BOOL)adBlockEnabled {

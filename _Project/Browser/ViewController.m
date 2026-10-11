@@ -22,7 +22,6 @@
 #import "BrowserTorrentLibraryViewController.h"
 #import "BrowserTorrentManager.h"
 #import "BrowserUsageGuideViewController.h"
-#import "BrowserVideoPlaybackCoordinator.h"
 #import "BrowserViewModel.h"
 #import "ViewController.h"
 
@@ -37,7 +36,7 @@ static UIColor *kTextColor(void) {
     }
 }
 
-@interface ViewController () <BrowserMenuCoordinatorHost, BrowserPageActionCoordinatorHost, BrowserRemoteInputControllerHost, BrowserTabCoordinatorHost, BrowserTabOverviewControllerHost, BrowserVideoPlaybackCoordinatorHost>
+@interface ViewController () <BrowserMenuCoordinatorHost, BrowserPageActionCoordinatorHost, BrowserRemoteInputControllerHost, BrowserTabCoordinatorHost, BrowserTabOverviewControllerHost>
 
 @property (nonatomic) BrowserFullscreenMediaControlsController *fullscreenMediaControls;
 @property (nonatomic, weak) BrowserWebView *fullscreenMediaWebView;
@@ -54,7 +53,6 @@ static UIColor *kTextColor(void) {
 @property (nonatomic) BrowserSessionStore *sessionStore;
 @property (nonatomic) BrowserTabCoordinator *tabCoordinator;
 @property (nonatomic) BrowserTabOverviewController *tabOverviewController;
-@property (nonatomic) BrowserVideoPlaybackCoordinator *videoPlaybackCoordinator;
 @property (nonatomic) BrowserViewModel *viewModel;
 @property (nonatomic) BOOL displayedHintsOnLaunch;
 @property (nonatomic) BOOL scrollViewAllowBounces;
@@ -76,7 +74,6 @@ static UIColor *kTextColor(void) {
 
     self.viewModel = [BrowserViewModel new];
     self.viewModel.textFontSize = 100;
-    self.viewModel.fullscreenVideoPlaybackEnabled = self.preferencesStore.fullscreenVideoPlaybackEnabled;
 
     self.domInteractionService = [BrowserDOMInteractionService new];
     self.navigationService = [[BrowserNavigationService alloc] initWithPreferencesStore:self.preferencesStore];
@@ -90,8 +87,6 @@ static UIColor *kTextColor(void) {
         if (visible && owner.fullscreenMediaControls) [owner.view bringSubviewToFront:owner.remoteInputController.cursorView];
     };
     [self.view addSubview:self.remoteInputController.cursorView];
-    self.videoPlaybackCoordinator = [[BrowserVideoPlaybackCoordinator alloc] initWithHost:self
-                                                                      domInteractionService:self.domInteractionService];
     self.tabCoordinator = [[BrowserTabCoordinator alloc] initWithHost:self
                                                              viewModel:self.viewModel
                                                       preferencesStore:self.preferencesStore
@@ -108,8 +103,7 @@ static UIColor *kTextColor(void) {
                                                                            cursorView:self.remoteInputController.cursorView];
     self.pageActionCoordinator = [[BrowserPageActionCoordinator alloc] initWithHost:self
                                                                domInteractionService:self.domInteractionService
-                                                                   navigationService:self.navigationService
-                                                            videoPlaybackCoordinator:self.videoPlaybackCoordinator];
+                                                                   navigationService:self.navigationService];
 
     self.remoteInputController.cursorView.hidden = NO;
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleApplicationDidBecomeActive:)
@@ -351,15 +345,6 @@ static UIColor *kTextColor(void) {
     self.preferencesStore.textFontSize = self.viewModel.textFontSize;
 }
 
-- (BOOL)browserFullscreenVideoPlaybackEnabled {
-    return self.viewModel.fullscreenVideoPlaybackEnabled;
-}
-
-- (void)setBrowserFullscreenVideoPlaybackEnabled:(BOOL)browserFullscreenVideoPlaybackEnabled {
-    self.viewModel.fullscreenVideoPlaybackEnabled = browserFullscreenVideoPlaybackEnabled;
-    self.preferencesStore.fullscreenVideoPlaybackEnabled = browserFullscreenVideoPlaybackEnabled;
-}
-
 - (BOOL)browserCursorMagnifierEnabled {
     return self.preferencesStore.cursorMagnifierEnabled;
 }
@@ -464,6 +449,10 @@ static UIColor *kTextColor(void) {
     [self.tabCoordinator captureSnapshotForCurrentTab];
 }
 
+- (void)browserClearSitePreviewsAndSettingsForURL:(NSURL *)URL {
+    [self.tabCoordinator clearSitePreviewsAndSettingsForURL:URL];
+}
+
 - (void)browserRecreateActiveWebViewPreservingCurrentURL {
     [self.tabCoordinator recreateActiveWebViewPreservingCurrentURL];
 }
@@ -472,30 +461,8 @@ static UIColor *kTextColor(void) {
     [self.view bringSubviewToFront:self.remoteInputController.cursorView];
 }
 
-- (void)browserPlayVideoUnderCursorIfAvailable {
-    [self.videoPlaybackCoordinator playVideoUnderCursorIfAvailable];
-}
-
 - (void)browserSetAdBlockEnabled:(BOOL)enabled {
     [self.tabCoordinator setAdBlockEnabledForAllWebViews:enabled];
-}
-
-#pragma mark - BrowserVideoPlaybackCoordinatorHost
-
-- (BOOL)browserIsCursorModeEnabled {
-    return self.remoteInputController.cursorModeEnabled;
-}
-
-- (CGPoint)browserDOMCursorPoint {
-    return [self browserDOMPointForCursor];
-}
-
-- (UIViewController *)browserPresentedViewController {
-    return self.presentedViewController;
-}
-
-- (NSString *)browserCurrentPageTitle {
-    return self.webview.title;
 }
 
 #pragma mark - BrowserTabCoordinatorHost

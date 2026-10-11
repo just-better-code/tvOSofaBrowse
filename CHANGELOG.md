@@ -2,6 +2,18 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.20.0 - 2026-10-11
+
+### Added
+
+- Choose This Site, All or Cancel before clearing cache, cookies or history, and reset saved volume, zoom and tab previews alongside cache in the selected scope ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.19.18 - 2026-10-11
+
+### Fixed
+
+- Preserve player volume for each page domain across fullscreen iframe sessions, episode changes and native video playback ([User Guide](docs/USER_GUIDE.md)).
+
 ## 2.19.17 - 2026-10-11
 
 ### Changed

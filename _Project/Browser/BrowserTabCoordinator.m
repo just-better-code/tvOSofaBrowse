@@ -31,6 +31,7 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
 @property (nonatomic) UIView *thumbnailStagingView;
 @property (nonatomic, strong) dispatch_queue_t thumbnailCacheQueue;
 @property (nonatomic) NSMutableSet<NSString *> *pendingThumbnailReads;
+@property (nonatomic) NSUInteger thumbnailCacheGeneration;
 @property (nonatomic) NSMutableDictionary<NSString *, NSUUID *> *pendingSnapshots;
 @property (nonatomic) NSMutableDictionary<NSString *, NSNumber *> *inactiveTabSince;
 @property (nonatomic) NSTimer *inactiveTabExpiryTimer;
@@ -576,6 +577,7 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
     NSURL *cacheURL = [self thumbnailCacheURLForTab:tab];
     if (cacheURL == nil) return;
     NSString *URLString = [tab.URLString copy] ?: @"";
+    NSUInteger cacheGeneration = self.thumbnailCacheGeneration;
     [self.pendingThumbnailReads addObject:tab.identifier];
     __weak typeof(self) weakSelf = self;
     dispatch_async(self.thumbnailCacheQueue, ^{
@@ -587,7 +589,7 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
             BrowserTabCoordinator *strongSelf = weakSelf;
             if (strongSelf == nil) return;
             [strongSelf.pendingThumbnailReads removeObject:tab.identifier];
-            if (image == nil || tab.snapshotImage != nil || ![tab.URLString isEqual:URLString] ||
+            if (cacheGeneration != strongSelf.thumbnailCacheGeneration || image == nil || tab.snapshotImage != nil || ![tab.URLString isEqual:URLString] ||
                 [strongSelf.viewModel.tabs indexOfObjectIdenticalTo:tab] == NSNotFound) return;
             tab.snapshotImage = image;
             [strongSelf.host browserTabCoordinatorSnapshotDidUpdateForTab:tab];
@@ -676,6 +678,36 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
 
 - (void)captureSnapshotForCurrentTab {
     [self captureSnapshotForTab:self.activeTab];
+}
+
+- (void)clearSitePreviewsAndSettingsForURL:(NSURL *)URL {
+    NSString *host = URL.host.lowercaseString;
+    while ([host hasSuffix:@"."]) host = [host substringToIndex:host.length - 1];
+    if (URL && (!host.length || ![@[@"http", @"https"] containsObject:URL.scheme.lowercaseString])) return;
+    BOOL (^matches)(NSString *) = ^BOOL(NSString *URLString) {
+        if (!URL) return YES;
+        NSString *candidate = [NSURL URLWithString:URLString].host.lowercaseString;
+        while ([candidate hasSuffix:@"."]) candidate = [candidate substringToIndex:candidate.length - 1];
+        return [candidate isEqualToString:host] || [candidate hasSuffix:[@"." stringByAppendingString:host]];
+    };
+    self.thumbnailCacheGeneration++;
+    for (BrowserTabViewModel *tab in self.viewModel.tabs) {
+        if (!matches(tab.URLString)) continue;
+        [self.pendingSnapshots removeObjectForKey:tab.identifier];
+        tab.snapshotImage = nil;
+        [self.webViewsByTabIdentifier[tab.identifier] resetSitePlaybackPreferences];
+        [self.host browserTabCoordinatorSnapshotDidUpdateForTab:tab];
+    }
+    NSURL *directory = [self thumbnailCacheDirectory];
+    if (!directory) return;
+    dispatch_async(self.thumbnailCacheQueue, ^{
+        NSFileManager *manager = NSFileManager.defaultManager;
+        for (NSURL *file in [manager contentsOfDirectoryAtURL:directory includingPropertiesForKeys:nil options:0 error:nil]) {
+            NSDictionary *entry = URL ? [NSDictionary dictionaryWithContentsOfURL:file] : nil;
+            NSString *savedURL = [entry[@"URL"] isKindOfClass:NSString.class] ? entry[@"URL"] : nil;
+            if (!URL || (savedURL && matches(savedURL))) [manager removeItemAtURL:file error:nil];
+        }
+    });
 }
 
 - (void)prepareTabOverviewThumbnails {
