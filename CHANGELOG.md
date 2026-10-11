@@ -2,6 +2,12 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.21.20 - 2026-10-11
+
+### Added
+
+- Support pinned legacy uBlock scriptlet surrogates and aliases, including anti-adblock and advertisement API stubs, while preserving trusted-source restrictions ([Pinned resources](_Project/Vendor/UBlock/src/web_accessible_resources), [Scriptlet builder](scripts/build-ublock-assets.mjs)).
+
 ## 2.21.19 - 2026-10-11
 
 ### Added

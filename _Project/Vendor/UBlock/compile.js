@@ -44,7 +44,7 @@ globalThis.browserCompileUBlock = function(lists, library) {
                     record.kind='scriptlet'; record.key='*'; record.args=[]; records.push(record); continue;
                 }
                 const token = args[0]?.endsWith('.js') ? args[0] : `${args[0]}.js`;
-                const entry = resources.get(aliases.get(token) || token);
+                const entry = resources.get(aliases.get(args[0]) || aliases.get(token) || token);
                 if (!entry || !entry.name.endsWith('.js')) { reject('scriptlet-name'); continue; }
                 if (entry.trusted && list.trusted !== true && !record.exception) { reject('untrusted-scriptlet'); continue; }
                 record.kind='scriptlet'; record.name=entry.name; record.args=args.slice(1);

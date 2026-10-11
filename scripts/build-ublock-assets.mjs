@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import redirectResources from '../_Project/Vendor/UBlock/src/js/redirect-resources.js';
 import publicSuffixList from '../_Project/Vendor/UBlock/src/lib/publicsuffixlist/publicsuffixlist.js';
 import punycode from '../_Project/Vendor/UBlock/src/lib/punycode.js';
 import { builtinScriptlets } from '../_Project/Vendor/UBlock/src/js/resources/scriptlets.js';
@@ -40,6 +41,16 @@ const parser = `(function(){const modules={${[...modules.values()].map(m => `${m
 const adapter = fs.readFileSync(path.join(root, 'compile.js'), 'utf8');
 fs.writeFileSync(path.join(root, 'UBlockParser.js'), parser + adapter + '\n})();\n');
 const library = builtinScriptlets.map(d => ({ name:d.name, aliases:d.aliases || [], world:d.world || 'MAIN', trusted:d.requiresTrust === true, dependencies:d.dependencies || [], functionName:d.fn.name, code:d.fn.toString() }));
+// Upstream text-injectable legacy resources are also valid +js tokens. Keep
+// their pinned code/aliases/trust metadata, rather than silently rejecting them.
+let surrogateIndex = 0;
+for (const [name, details] of redirectResources) {
+    if (!name.endsWith('.js') || details.data !== 'text') continue;
+    const functionName = `browserSurrogate${surrogateIndex++}`;
+    const aliases = details.alias ? (Array.isArray(details.alias) ? details.alias : [details.alias]) : [];
+    library.push({name, aliases, world:'MAIN', trusted:details.requiresTrust === true,
+        dependencies:[], functionName, code:`function ${functionName}(){\n${fs.readFileSync(path.join(root, 'src/web_accessible_resources', name), 'utf8')}\n}`});
+}
 const names = new Set(library.map(d => d.name));
 if (names.size !== library.length) throw new Error('Duplicate scriptlet registration');
 for (const entry of library) for (const dependency of entry.dependencies) {
