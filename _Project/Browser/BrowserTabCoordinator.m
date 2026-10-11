@@ -219,6 +219,7 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
         [self.thumbnailStagingView addSubview:webView];
     }
     webView.frame = self.thumbnailStagingView.bounds;
+    [webView setFullscreenMediaControlsSuspended:YES];
 }
 
 - (BOOL)isWebViewStaged:(BrowserWebView *)webView {
@@ -377,6 +378,8 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
     [self.activeWebView removeFromSuperview];
     [self.browserContainerView addSubview:self.activeWebView];
     self.activeWebView.frame = self.rootView.bounds;
+    [self.activeWebView setFullscreenMediaControlsSuspended:UIApplication.sharedApplication.applicationState != UIApplicationStateActive];
+    [self.host browserTabCoordinatorDidChangeActiveWebView];
 
     UIScrollView *scrollView = self.activeWebView.scrollView;
     [scrollView setNeedsLayout];
@@ -991,6 +994,7 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
     if (tab == self.activeTab) {
         [self refreshActiveTabUI];
     } else if ([self isWebViewStaged:webView]) {
+        [webView setFullscreenMediaControlsSuspended:YES];
         [webView pauseAllMediaPlayback];
     }
     [self restoreSavedScrollOffsetForTab:tab webView:webView];

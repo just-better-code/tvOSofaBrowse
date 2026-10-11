@@ -2,6 +2,72 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.19.10 - 2026-10-11
+
+### Changed
+
+- Add Go to End immediately after Play/Pause to seek two seconds before the end, and use reference icons seven, ten and eight for Beginning, Play/Pause and End in iframe and VLC controls ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.19.9 - 2026-10-11
+
+### Changed
+
+- Place Go to Beginning before Play/Pause and enlarge both buttons and icons by 20% while preserving centered row alignment in iframe and VLC playback controls ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.19.8 - 2026-10-11
+
+### Changed
+
+- Move Go to Beginning immediately after Play/Pause and show a right-facing triangle with a leading bar in both fullscreen iframe and VLC controls ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.19.7 - 2026-10-11
+
+### Changed
+
+- Use the combined Play/Pause triangle-and-bars icon in fullscreen iframe and VLC controls ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.19.6 - 2026-10-11
+
+### Changed
+
+- Unify fullscreen iframe and VLC playback icons with classic transport triangles and bars using consistent vector proportions ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.19.5 - 2026-10-11
+
+### Changed
+
+- Match Play/Pause to the seek transport symbols, remove redundant Close controls, and place Previous and Next at opposite ends of the fullscreen iframe and VLC control rows ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.19.4 - 2026-10-11
+
+### Changed
+
+- Separate Go to Beginning from Previous and use classic transport triangles for 5- and 10-second seeks in fullscreen iframe and VLC playback controls ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.19.3 - 2026-10-11
+
+### Fixed
+
+- Route fullscreen Previous and Next through system Now Playing media commands so WebKit can select the active media session instead of receiving synthetic keyboard events ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.19.2 - 2026-10-11
+
+### Changed
+
+- Keep Previous and Next active in fullscreen iframe controls and attempt media commands regardless of detected support, while hiding the cursor during native fullscreen control use ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.19.1 - 2026-10-11
+
+### Fixed
+
+- Keep fullscreen iframe playback controls visible while the video is paused or the browser cursor is visible, and retain cursor movement with the panel open ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.19.0 - 2026-10-11
+
+### Added
+
+- Add a native VLC-style playback panel to expanded fullscreen iframe players with progress, playback and seek controls routed to the website's media handlers or HTML video, without audio or subtitle selectors ([User Guide](docs/USER_GUIDE.md)).
+
 ## 2.18.30 - 2026-10-11
 
 ### Changed

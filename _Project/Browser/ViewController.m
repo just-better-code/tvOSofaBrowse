@@ -7,6 +7,7 @@
 //
 
 #import "BrowserMenuCoordinator.h"
+#import "BrowserFullscreenMediaControlsController.h"
 #import "BrowserDOMInteractionService.h"
 #import "BrowserHistoryStore.h"
 #import "BrowserNavigationService.h"
@@ -38,6 +39,12 @@ static UIColor *kTextColor(void) {
 
 @interface ViewController () <BrowserMenuCoordinatorHost, BrowserPageActionCoordinatorHost, BrowserRemoteInputControllerHost, BrowserTabCoordinatorHost, BrowserTabOverviewControllerHost, BrowserVideoPlaybackCoordinatorHost>
 
+@property (nonatomic) BrowserFullscreenMediaControlsController *fullscreenMediaControls;
+@property (nonatomic, weak) BrowserWebView *fullscreenMediaWebView;
+@property (nonatomic, copy) NSString *fullscreenMediaSession;
+@property (nonatomic) NSUInteger fullscreenMediaGeneration;
+@property (nonatomic) BOOL mediaRevealPress;
+@property (nonatomic) NSTimeInterval mediaSelectIgnoreUntil;
 @property (nonatomic) BrowserDOMInteractionService *domInteractionService;
 @property (nonatomic) BrowserMenuCoordinator *menuCoordinator;
 @property (nonatomic) BrowserNavigationService *navigationService;
@@ -76,6 +83,12 @@ static UIColor *kTextColor(void) {
     self.sessionStore = [BrowserSessionStore new];
     self.menuCoordinator = [[BrowserMenuCoordinator alloc] initWithHost:self preferencesStore:self.preferencesStore];
     self.remoteInputController = [[BrowserRemoteInputController alloc] initWithHost:self rootView:self.view];
+    __weak typeof(self) cursorOwner = self;
+    self.remoteInputController.cursorVisibilityDidChange = ^(BOOL visible) {
+        typeof(self) owner = cursorOwner;
+        owner.fullscreenMediaControls.cursorVisible = visible;
+        if (visible && owner.fullscreenMediaControls) [owner.view bringSubviewToFront:owner.remoteInputController.cursorView];
+    };
     [self.view addSubview:self.remoteInputController.cursorView];
     self.videoPlaybackCoordinator = [[BrowserVideoPlaybackCoordinator alloc] initWithHost:self
                                                                       domInteractionService:self.domInteractionService];
@@ -99,6 +112,8 @@ static UIColor *kTextColor(void) {
                                                             videoPlaybackCoordinator:self.videoPlaybackCoordinator];
 
     self.remoteInputController.cursorView.hidden = NO;
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleApplicationDidBecomeActive:)
+                                               name:UIApplicationDidBecomeActiveNotification object:nil];
 
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(handleApplicationWillResignActive:)
@@ -145,8 +160,14 @@ static UIColor *kTextColor(void) {
 #pragma mark - Notifications
 
 - (void)handleApplicationWillResignActive:(NSNotification *)notification {
+    [self.webview setFullscreenMediaControlsSuspended:YES];
+    [self removeFullscreenMediaControls];
     (void)notification;
     [self.tabCoordinator persistSession];
+}
+
+- (void)handleApplicationDidBecomeActive:(NSNotification *)notification {
+    [self.webview setFullscreenMediaControlsSuspended:NO];
 }
 
 - (void)handleApplicationDidEnterBackground:(NSNotification *)notification {
@@ -161,11 +182,19 @@ static UIColor *kTextColor(void) {
 
 - (void)handleGlobalSelectPressEndedNotification:(NSNotification *)notification {
     (void)notification;
+    if (NSDate.timeIntervalSinceReferenceDate < self.mediaSelectIgnoreUntil) return;
+    if ([self fullscreenMediaInputActive]) {
+        if (self.fullscreenMediaControls.controlsVisible) return;
+        if (self.remoteInputController.cursorView.hidden) {
+            [self.fullscreenMediaControls showControls]; [self setNeedsFocusUpdate]; [self updateFocusIfNeeded]; return;
+        }
+    }
     [self.remoteInputController handleGlobalSelectPressEndedNotification];
 }
 
 - (void)handleGlobalDirectionalPressBeganNotification:(NSNotification *)notification {
     (void)notification;
+    if ([self fullscreenMediaInputActive]) return;
     [self.remoteInputController hideCursorForDirectionalNavigation];
 }
 
@@ -362,6 +391,7 @@ static UIColor *kTextColor(void) {
 }
 
 - (void)browserShowTabOverview {
+    [self removeFullscreenMediaControls];
     [self.tabCoordinator prepareTabOverviewThumbnails];
     [self.tabOverviewController show];
 }
@@ -469,6 +499,10 @@ static UIColor *kTextColor(void) {
 }
 
 #pragma mark - BrowserTabCoordinatorHost
+
+- (void)browserTabCoordinatorDidChangeActiveWebView {
+    if (self.fullscreenMediaWebView != self.webview) [self removeFullscreenMediaControls];
+}
 
 - (void)browserTabCoordinatorPresentViewController:(UIViewController *)viewController {
     [self browserPresentViewController:viewController];
@@ -631,6 +665,7 @@ static UIColor *kTextColor(void) {
 }
 
 - (void)browserRemoteInputControllerHandleMenuPress {
+    if ([self fullscreenMediaInputActive]) { [self.fullscreenMediaControls closePlayer]; return; }
     if (self.webview == nil) {
         [self handleMenuPressOutsideFullscreen];
         return;
@@ -658,6 +693,7 @@ static UIColor *kTextColor(void) {
 }
 
 - (void)browserRemoteInputControllerHandlePlayPausePress {
+    if ([self fullscreenMediaInputActive]) { [self.fullscreenMediaControls togglePlayback]; return; }
     __weak typeof(self) weakSelf = self;
     [self.webview evaluateJavaScript:@"window.__browserTVToggleVideo ? window.__browserTVToggleVideo() : false"
                            completion:^(NSString *result) {
@@ -755,6 +791,78 @@ static UIColor *kTextColor(void) {
         @"window.__browserTVHandleMediaHorizontalPress ? window.__browserTVHandleMediaHorizontalPress('%@') : false",
         direction];
     [self.webview evaluateJavaScript:script completion:^(__unused NSString *result) {}];
+}
+
+#pragma mark - Fullscreen iframe media controls
+
+- (void)removeFullscreenMediaControls {
+    if (!self.fullscreenMediaControls) return;
+    [self.fullscreenMediaControls stopSeeking];
+    [self.fullscreenMediaControls willMoveToParentViewController:nil];
+    [self.fullscreenMediaControls.view removeFromSuperview];
+    [self.fullscreenMediaControls removeFromParentViewController];
+    self.fullscreenMediaControls = nil;
+    self.fullscreenMediaWebView = nil; self.fullscreenMediaSession = nil;
+    self.mediaRevealPress = NO;
+    self.remoteInputController.cursorSuppressed = NO;
+    [self.remoteInputController refreshInteractionState];
+    [self setNeedsFocusUpdate];
+}
+
+- (BOOL)fullscreenMediaInputActive {
+    if (self.fullscreenMediaControls && (self.fullscreenMediaWebView != self.webview ||
+        self.fullscreenMediaGeneration != self.webview.documentGeneration)) [self removeFullscreenMediaControls];
+    return self.fullscreenMediaControls && !self.presentedViewController && !self.tabOverviewController.visible;
+}
+
+- (NSArray<id<UIFocusEnvironment>> *)preferredFocusEnvironments {
+    if ([self fullscreenMediaInputActive] && self.fullscreenMediaControls.controlsVisible) return @[self.fullscreenMediaControls];
+    return [super preferredFocusEnvironments];
+}
+
+- (void)webView:(id)webView didUpdateFullscreenMediaState:(NSDictionary *)state {
+    if (webView != self.webview) {
+        [webView setFullscreenMediaControlsSuspended:YES];
+        if (webView == self.fullscreenMediaWebView) [self removeFullscreenMediaControls];
+        return;
+    }
+    if (![state[@"active"] boolValue] || UIApplication.sharedApplication.applicationState != UIApplicationStateActive) {
+        [self removeFullscreenMediaControls]; return;
+    }
+    if (self.presentedViewController || self.tabOverviewController.visible) {
+        [self removeFullscreenMediaControls]; return;
+    }
+    NSString *session = state[@"session"];
+    if (self.fullscreenMediaControls && (![session isEqual:self.fullscreenMediaSession] ||
+        self.fullscreenMediaWebView != webView || self.fullscreenMediaGeneration != self.webview.documentGeneration)) [self removeFullscreenMediaControls];
+    if (!self.fullscreenMediaControls) {
+        BrowserFullscreenMediaControlsController *controls = [BrowserFullscreenMediaControlsController new];
+        self.fullscreenMediaControls = controls; self.fullscreenMediaWebView = webView;
+        self.fullscreenMediaSession = session; self.fullscreenMediaGeneration = self.webview.documentGeneration;
+        __weak typeof(self) weakSelf = self;
+        controls.sendCommand = ^(NSString *command, double value) {
+            typeof(self) owner = weakSelf;
+            if (![owner fullscreenMediaInputActive]) return;
+            owner.mediaSelectIgnoreUntil = NSDate.timeIntervalSinceReferenceDate + 0.4;
+            if ([command isEqualToString:@"previous"] || [command isEqualToString:@"next"]) {
+                if ([owner.fullscreenMediaWebView sendSystemMediaTrackCommand:[command isEqualToString:@"next"]]) return;
+            }
+            NSArray *arguments = @[command, @(value), owner.fullscreenMediaSession ?: @""];
+            NSData *data = [NSJSONSerialization dataWithJSONObject:arguments options:0 error:nil];
+            NSString *json = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+            if (!json) return;
+            NSString *script = [NSString stringWithFormat:@"window.__browserTVSendFullscreenMediaCommand ? window.__browserTVSendFullscreenMediaCommand.apply(null,%@) : false", json];
+            [owner.fullscreenMediaWebView evaluateJavaScript:script completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
+        };
+        [self addChildViewController:controls];
+        controls.view.frame = self.view.bounds;
+        controls.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        [self.view addSubview:controls.view]; [controls didMoveToParentViewController:self];
+        self.remoteInputController.cursorSuppressed = YES;
+        controls.cursorVisible = NO;
+        [controls updateMediaState:state]; [controls showControls];
+        [self setNeedsFocusUpdate]; [self updateFocusIfNeeded];
+    } else [self.fullscreenMediaControls updateMediaState:state];
 }
 
 #pragma mark - BrowserWebViewDelegate
@@ -855,10 +963,12 @@ static UIColor *kTextColor(void) {
 }
 
 - (void)webViewDidStartLoad:(id)webView {
+    if (webView == self.fullscreenMediaWebView) [self removeFullscreenMediaControls];
     [self.tabCoordinator webViewDidStartLoad:webView];
 }
 
 - (void)webViewWebContentProcessDidTerminate:(id)webView {
+    if (webView == self.fullscreenMediaWebView) [self removeFullscreenMediaControls];
     [self.tabCoordinator webViewWebContentProcessDidTerminate:webView];
 }
 
@@ -955,11 +1065,29 @@ static UIColor *kTextColor(void) {
 #pragma mark - Presses / Touches
 
 - (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
+    if ([self fullscreenMediaInputActive]) {
+        UIPress *press = presses.anyObject;
+        if (press.type == UIPressTypeMenu || press.type == UIPressTypePlayPause) return;
+        if (!self.fullscreenMediaControls.controlsVisible && self.remoteInputController.cursorView.hidden &&
+            (press.type == UIPressTypeSelect || press.type == UIPressTypeUpArrow || press.type == UIPressTypeDownArrow ||
+             press.type == UIPressTypeLeftArrow || press.type == UIPressTypeRightArrow)) {
+            self.mediaRevealPress = YES; [self.fullscreenMediaControls showControls];
+            [self setNeedsFocusUpdate]; [self updateFocusIfNeeded]; return;
+        }
+        if (self.fullscreenMediaControls.controlsVisible) { [super pressesBegan:presses withEvent:event]; return; }
+    }
     [self.remoteInputController handlePressesBegan:presses withEvent:event];
     [super pressesBegan:presses withEvent:event];
 }
 
 - (void)pressesEnded:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
+    if ([self fullscreenMediaInputActive]) {
+        UIPress *press = presses.anyObject;
+        if (press.type == UIPressTypeMenu) { [self.fullscreenMediaControls closePlayer]; return; }
+        if (press.type == UIPressTypePlayPause) { [self.fullscreenMediaControls togglePlayback]; return; }
+        if (self.mediaRevealPress) { self.mediaRevealPress = NO; return; }
+        if (self.fullscreenMediaControls.controlsVisible) { [super pressesEnded:presses withEvent:event]; return; }
+    }
     if ([self.remoteInputController handlePressesEnded:presses withEvent:event]) {
         return;
     }
@@ -967,11 +1095,14 @@ static UIColor *kTextColor(void) {
 }
 
 - (void)pressesCancelled:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
+    self.mediaRevealPress = NO;
+    [self.fullscreenMediaControls stopSeeking];
     [self.remoteInputController handlePressesCancelled:presses];
     [super pressesCancelled:presses withEvent:event];
 }
 
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    if ([self fullscreenMediaInputActive]) { [super touchesBegan:touches withEvent:event]; return; }
     if ([self.remoteInputController handleTouchesBegan:touches withEvent:event]) {
         return;
     }
@@ -979,6 +1110,7 @@ static UIColor *kTextColor(void) {
 }
 
 - (void)touchesMoved:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    if ([self fullscreenMediaInputActive]) { [super touchesMoved:touches withEvent:event]; return; }
     if ([self.remoteInputController handleTouchesMoved:touches withEvent:event]) {
         return;
     }

@@ -1,4 +1,5 @@
 #import "BrowserWebView.h"
+#import <math.h>
 #import "BrowserPreferencesStore.h"
 
 @interface BrowserAdBlockConverter : NSObject
@@ -324,7 +325,9 @@ static void BrowserConfigurePrivateMediaPreferences(id configuration) {
     BrowserSetBooleanSelectorIfAvailable(preferences, @"_setVideoQualityIncludesDisplayCompositingEnabled:", YES);
 }
 
-static NSString *BrowserFrameClickBridgeScript(NSString *secret) {
+static NSString *BrowserFrameClickBridgeScript(NSString *secret, NSString *nativeToken) {
+    NSString *path = [NSBundle.mainBundle pathForResource:@"BrowserFullscreenMediaBridge" ofType:@"js"];
+    NSString *mediaBridge = path ? [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:nil] : @"";
     return [NSString stringWithFormat:
             @"(function(){"
                 "if (window.__browserTVFrameClick) { return; }"
@@ -336,7 +339,10 @@ static NSString *BrowserFrameClickBridgeScript(NSString *secret) {
                 "var theaterBackdrop = null;"
                 "var raisedAncestors = [];"
                 "var lastActiveFrame = null;"
+                "var nativeToken = '%@';"
+                "%@"
                 "function notifyFullscreenChange() {"
+                    "refreshFullscreenMedia();"
                     "try { document.dispatchEvent(new Event('fullscreenchange')); } catch (error) {}"
                     "try { document.dispatchEvent(new Event('webkitfullscreenchange')); } catch (error) {}"
                 "}"
@@ -563,6 +569,9 @@ static NSString *BrowserFrameClickBridgeScript(NSString *secret) {
                         "if (data.action === 'exit') { window.__browserTVExitFullscreen(); }"
                         "if (data.action === 'toggle') { toggleVideo(); }"
                         "if (data.action === 'seek') { handleMediaHorizontalPress(data.direction); }"
+                        "if (data.action === 'media') { performMediaCommand(data.command, data.value, data.request); }"
+                    "} else if (data.browserTVMediaState === secret) {"
+                        "receiveMediaState(event, data);"
                     "} else if (data.browserTVFrameFullscreen === secret) {"
                         "var frame = frameForSource(event.source);"
                         "if (!frame) { return; }"
@@ -578,9 +587,10 @@ static NSString *BrowserFrameClickBridgeScript(NSString *secret) {
                             "fullscreenFrameStyle = '';"
                         "}"
                         "sendFullscreenToParent(data.action);"
+                        "refreshFullscreenMedia();"
                     "}"
                 "});"
-            "})();", secret];
+            "})();", secret, nativeToken, mediaBridge ?: @"function refreshFullscreenMedia() {} function receiveMediaState() {} function performMediaCommand() {}"];
 }
 
 static void BrowserWriteWebsiteDiagnostic(NSDictionary *entry) {
@@ -701,7 +711,41 @@ static id BrowserPersistentWebsiteDataStore(void) {
     return store;
 }
 
-static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToken) {
+// WebKit retains its handler; retain only a weak owner to avoid a cycle.
+@interface BrowserFullscreenMediaHandler : NSObject
+@property (nonatomic, weak) BrowserWebView *owner;
+@property (nonatomic, copy) NSString *token;
+@end
+@implementation BrowserFullscreenMediaHandler
+- (void)userContentController:(id)controller didReceiveScriptMessage:(id)message {
+    BrowserWebView *owner = self.owner;
+    if (!owner || owner.loading) return;
+    if (!owner.window) {
+        [owner setFullscreenMediaControlsSuspended:YES];
+        return;
+    }
+    id frame = [message valueForKey:@"frameInfo"];
+    if (![[frame valueForKey:@"isMainFrame"] boolValue]) return;
+    NSURLRequest *request = [frame valueForKey:@"request"];
+    if (![request.URL isEqual:owner.request.URL]) return;
+    id body = [message valueForKey:@"body"];
+    if (![body isKindOfClass:NSDictionary.class] || ![body[@"token"] isEqual:self.token]) return;
+    if (![body[@"session"] isKindOfClass:NSString.class] || [body[@"session"] length] > 128) return;
+    NSMutableDictionary *state = [NSMutableDictionary dictionaryWithObject:body[@"session"] forKey:@"session"];
+    for (NSString *key in @[@"active", @"available", @"paused", @"canSeekBack", @"canSeekForward", @"canPrevious", @"canNext", @"canRestart", @"canEnd"]) {
+        state[key] = @([body[key] isKindOfClass:NSNumber.class] && [body[key] boolValue]);
+    }
+    for (NSString *key in @[@"currentTime", @"duration"]) {
+        double value = [body[key] isKindOfClass:NSNumber.class] ? [body[key] doubleValue] : 0;
+        state[key] = @(isfinite(value) && value >= 0 && value < 1e12 ? value : 0);
+    }
+    if ([owner.delegate respondsToSelector:@selector(webView:didUpdateFullscreenMediaState:)]) {
+        [owner.delegate webView:owner didUpdateFullscreenMediaState:state];
+    }
+}
+@end
+
+static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToken, BrowserWebView *owner) {
     if (configuration == nil) {
         return;
     }
@@ -734,6 +778,9 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 
     SEL addHandler = NSSelectorFromString(@"addScriptMessageHandler:name:");
     if ([userContentController respondsToSelector:addHandler]) {
+        BrowserFullscreenMediaHandler *mediaHandler = [BrowserFullscreenMediaHandler new];
+        mediaHandler.owner = owner; mediaHandler.token = diagnosticToken;
+        ((void (*)(id, SEL, id, id))objc_msgSend)(userContentController, addHandler, mediaHandler, @"browserFullscreenMedia");
         static BrowserWebsiteDiagnosticsHandler *handler;
         static dispatch_once_t handlerToken;
         dispatch_once(&handlerToken, ^{ handler = [BrowserWebsiteDiagnosticsHandler new]; });
@@ -745,7 +792,7 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 
     NSString *frameClickSecret = [NSUUID UUID].UUIDString;
     id frameClickScript = ((id (*)(id, SEL))objc_msgSend)((id)userScriptClass, @selector(alloc));
-    frameClickScript = ((id (*)(id, SEL, id, NSInteger, BOOL))objc_msgSend)(frameClickScript, userScriptInitializer, BrowserFrameClickBridgeScript(frameClickSecret), 0, NO);
+    frameClickScript = ((id (*)(id, SEL, id, NSInteger, BOOL))objc_msgSend)(frameClickScript, userScriptInitializer, BrowserFrameClickBridgeScript(frameClickSecret, diagnosticToken), 0, NO);
     if (frameClickScript != nil) {
         ((void (*)(id, SEL, id))objc_msgSend)(userContentController, addUserScriptSelector, frameClickScript);
     }
@@ -1220,6 +1267,51 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 
 @implementation BrowserWebView
 
+- (void)didMoveToWindow {
+    [super didMoveToWindow];
+    if (!self.window) [self setFullscreenMediaControlsSuspended:YES];
+}
+
+// ABI and command values follow WebKit's MediaRemoteSPI.h and its MediaSession
+// sendMediaRemoteCommand helper. Send to system Now Playing, letting WebKit select
+// the actual media session rather than guessing which DOM frame owns its handler.
+- (BOOL)sendSystemMediaTrackCommand:(BOOL)nextTrack {
+    if (!self.runtimeWebView || !self.window || self.loading ||
+        UIApplication.sharedApplication.applicationState != UIApplicationStateActive) return NO;
+    typedef Boolean (*SendCommandFunction)(uint32_t, CFDictionaryRef, void *, CFStringRef,
+                                           uint32_t, dispatch_queue_t, void (^)(uint32_t, CFArrayRef));
+    static SendCommandFunction sendCommand;
+    static void *framework;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        framework = dlopen("/System/Library/PrivateFrameworks/MediaRemote.framework/MediaRemote", RTLD_NOW | RTLD_LOCAL);
+        if (framework) sendCommand = (SendCommandFunction)dlsym(framework, "MRMediaRemoteSendCommandToApp");
+    });
+    uint32_t command = nextTrack ? 4 : 5; // MRMediaRemoteCommandNextTrack / PreviousTrack.
+    if (!sendCommand) {
+        BrowserLog(@"[FullscreenMedia] systemRoute=0 command=%u", command);
+        return NO;
+    }
+    // NULL origin/app matches WebKit's test helper: the current Now Playing client
+    // can be WebKit's GPU process, so targeting our app bundle would miss it.
+    Boolean accepted = sendCommand(command, NULL, NULL, NULL, 0, dispatch_get_main_queue(),
+        ^(uint32_t error, CFArrayRef statuses) {
+            NSArray *results = (__bridge NSArray *)statuses;
+            NSNumber *status = [results.firstObject isKindOfClass:NSNumber.class] ? results.firstObject : nil;
+            BrowserLog(@"[FullscreenMedia] systemReply command=%u error=%u status=%ld", command, error,
+                       status ? (long)status.integerValue : -1L);
+        });
+    BrowserLog(@"[FullscreenMedia] systemRoute=1 command=%u accepted=%d", command, accepted);
+    // Do not send a second JS command after an ambiguous system result: that can
+    // advance twice if the first command already reached the player.
+    return YES;
+}
+
+- (void)setFullscreenMediaControlsSuspended:(BOOL)suspended {
+    NSString *script = [NSString stringWithFormat:@"window.__browserTVSetFullscreenMediaSuspended && window.__browserTVSetFullscreenMediaSuspended(%@)", suspended ? @"true" : @"false"];
+    [self evaluateJavaScript:script completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
+}
+
 + (NSArray<NSDictionary<NSString *, NSString *> *> *)adBlockSources {
     return BrowserAdBlockSources();
 }
@@ -1315,7 +1407,7 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
         ((void (*)(id, SEL, id))objc_msgSend)(configuration, dataStoreSetter, dataStore);
     BrowserConfigurePrivateMediaPreferences(configuration);
     self.diagnosticToken = [@"browserDiagnostics_" stringByAppendingString:NSUUID.UUID.UUIDString];
-    BrowserInstallUserScripts(configuration, self.diagnosticToken);
+    BrowserInstallUserScripts(configuration, self.diagnosticToken, self);
     SEL userContentControllerSelector = NSSelectorFromString(@"userContentController");
     if ([configuration respondsToSelector:userContentControllerSelector]) {
         self.userContentController = ((id (*)(id, SEL))objc_msgSend)(configuration, userContentControllerSelector);

@@ -10,6 +10,7 @@ FOUNDATION_EXPORT NSString * const BrowserAdBlockSourceStatusDidChangeNotificati
 - (BOOL)webView:(id _Nonnull)webView shouldStartLoadWithRequest:(NSURLRequest * _Nullable)request navigationType:(NSInteger)navigationType;
 - (BOOL)webView:(id _Nonnull)webView shouldCreateNewTabWithRequest:(NSURLRequest * _Nullable)request navigationType:(NSInteger)navigationType;
 - (BOOL)webView:(id _Nonnull)webView shouldImportTorrentResponse:(NSURLResponse * _Nonnull)response request:(NSURLRequest * _Nullable)request;
+- (void)webView:(id)webView didUpdateFullscreenMediaState:(NSDictionary *)state;
 - (void)webViewDidStartLoad:(id _Nonnull)webView;
 - (void)webViewDidFinishLoad:(id _Nonnull)webView;
 - (void)webViewDidChangeNavigationHistory:(id _Nonnull)webView;
@@ -54,6 +55,9 @@ FOUNDATION_EXPORT NSString * const BrowserAdBlockSourceStatusDidChangeNotificati
 - (NSString * _Nonnull)runtimeMediaPreferenceReport;
 - (void)setUserAgent:(NSString * _Nullable)userAgent;
 - (void)pauseAllMediaPlayback;
+- (void)setFullscreenMediaControlsSuspended:(BOOL)suspended;
+// YES means the system route was attempted, not that the player switched tracks.
+- (BOOL)sendSystemMediaTrackCommand:(BOOL)nextTrack;
 - (void)captureSnapshotWithCompletion:(void (^)(UIImage * _Nullable snapshot))completion;
 - (void)captureSnapshotInRect:(CGRect)rect
                        width:(CGFloat)width
