@@ -50,6 +50,8 @@ FOUNDATION_EXPORT NSString * const BrowserAdBlockSourceStatusDidChangeNotificati
                completion:(void (^ _Nullable)(NSString * _Nullable result))completion;
 // Completion runs on the main queue; navigation invalidates pending results.
 @property (nonatomic, readonly) NSUInteger documentGeneration;
+@property (nonatomic, readonly) NSUInteger javaScriptGeneration;
+- (void)invalidatePendingJavaScript;
 @property (nonatomic, readonly) BOOL pageFullscreenActive;
 - (void)evaluateJavaScript:(NSString *)script
         completionHandler:(void (^ _Nullable)(NSString * _Nullable result, NSError * _Nullable error))completion;

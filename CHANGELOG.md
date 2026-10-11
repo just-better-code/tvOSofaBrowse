@@ -2,6 +2,13 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.21.13 - 2026-10-11
+
+### Fixed
+
+- Discard delayed page-control results after switching tabs or revisiting the same URL through page history ([BrowserWebView](_Project/Browser/BrowserWebView.m)).
+- Keep text dialogs attached to their original field and prevent stale dialogs from editing replacement fields ([Page actions](_Project/Browser/BrowserPageActionCoordinator.m)).
+
 ## 2.21.12 - 2026-10-11
 
 ### Fixed

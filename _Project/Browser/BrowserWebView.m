@@ -1416,6 +1416,7 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 
 @property (nullable, nonatomic, strong) id runtimeWebView;
 @property (nonatomic, readwrite) NSUInteger documentGeneration;
+@property (nonatomic, readwrite) NSUInteger javaScriptGeneration;
 @property (nonatomic, readwrite) BOOL pageFullscreenActive;
 @property (nullable, nonatomic, strong) NSURLRequest *lastRequest;
 @property (nonatomic) BOOL adBlockRefreshAfterNavigation;
@@ -2055,6 +2056,9 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
         [super observeValueForKeyPath:keyPath ofObject:object change:change context:context];
         return;
     }
+    // Same-document history can leave and return to the same URL without a
+    // provisional navigation. Invalidate before queued JS replies are delivered.
+    if ([keyPath isEqualToString:@"URL"] && object == self.runtimeWebView) self.documentGeneration += 1;
     __weak typeof(self) weakSelf = self;
     dispatch_async(dispatch_get_main_queue(), ^{
         BrowserWebView *webView = weakSelf;
@@ -2203,6 +2207,11 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     }];
 }
 
+- (void)invalidatePendingJavaScript {
+    // Tab changes invalidate UI replies without canceling page network requests.
+    self.javaScriptGeneration += 1;
+}
+
 - (void)evaluateJavaScript:(NSString *)script
         completionHandler:(void (^)(NSString *result, NSError *error))completion {
     if (![NSThread isMainThread]) {
@@ -2213,6 +2222,7 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     }
     id runtime = self.runtimeWebView;
     NSUInteger generation = self.documentGeneration;
+    NSUInteger javaScriptGeneration = self.javaScriptGeneration;
     NSURL *URL = [self request].URL;
     __weak typeof(self) weakSelf = self;
     __block BOOL finished = NO;
@@ -2224,7 +2234,7 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
         NSURL *currentURL = [webView request].URL;
         BOOL sameURL = URL == currentURL || [URL isEqual:currentURL];
         if (webView == nil || webView.runtimeWebView != runtime ||
-            webView.documentGeneration != generation || !sameURL) {
+            webView.documentGeneration != generation || webView.javaScriptGeneration != javaScriptGeneration || !sameURL) {
             error = [NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorCancelled userInfo:nil];
         }
         void (^reply)(NSString *, NSError *) = callback;

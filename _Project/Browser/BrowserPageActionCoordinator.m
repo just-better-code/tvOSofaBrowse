@@ -12,6 +12,14 @@ static UIColor *BrowserPageActionTextColor(void) {
     }
 }
 
+// A prompt owns one DOM node; never fall back to another focused field on Done.
+static NSString *BrowserEditablePromptTargetJavaScript(NSString *identifier) {
+    return [NSString stringWithFormat:@"var session=window.__browserEditablePromptTarget;"
+        "if(!session||session.identifier!=='%@')return 'false';"
+        "var target=session.element;window.__browserEditablePromptTarget=null;"
+        "if(!target||!target.isConnected)return 'false';", identifier];
+}
+
 @interface BrowserPageActionCoordinator ()
 
 @property (nonatomic) NSUInteger selectionGeneration;
@@ -39,8 +47,9 @@ static UIColor *BrowserPageActionTextColor(void) {
                                          point:(CGPoint)point
                                        webView:(BrowserWebView *)webView {
     NSUInteger selection = self.selectionGeneration;
+    NSString *identifier = NSUUID.UUID.UUIDString;
     [self.domInteractionService evaluateEditableElementJavaScriptAtPoint:point webView:webView
-        body:@"var target=browserEditableTarget();if(!target)return '';return JSON.stringify({title:target.title||target.getAttribute('aria-label')||target.name||target.placeholder||'',placeholder:target.placeholder||target.getAttribute('aria-label')||'',value:typeof target.value!=='undefined'?target.value:(target.textContent||''),submit:!!(target.form&&target.form.hasAttribute('onsubmit'))});"
+        body:[NSString stringWithFormat:@"var target=browserEditableTarget();if(!target)return '';window.__browserEditablePromptTarget={identifier:'%@',element:target};return JSON.stringify({title:target.title||target.getAttribute('aria-label')||target.name||target.placeholder||'',placeholder:target.placeholder||target.getAttribute('aria-label')||'',value:typeof target.value!=='undefined'?target.value:(target.textContent||''),submit:!!(target.form&&target.form.hasAttribute('onsubmit'))});", identifier]
         completion:^(NSString *result, NSError *error) {
         if (selection != self.selectionGeneration || error || ![self.host browserPageActionCoordinatorCanSelectInWebView:webView]) return;
         NSDictionary *metadata = result ? [NSJSONSerialization JSONObjectWithData:[result dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil] : nil;
@@ -52,6 +61,7 @@ static UIColor *BrowserPageActionTextColor(void) {
                                                                           preferredStyle:UIAlertControllerStyleAlert];
 
         NSUInteger generation = webView.documentGeneration;
+        NSUInteger javaScriptGeneration = webView.javaScriptGeneration;
         __weak typeof(self) weakSelf = self;
         [alertController addTextFieldWithConfigurationHandler:^(UITextField *textField) {
             if ([fieldType isEqualToString:@"url"]) {
@@ -79,13 +89,12 @@ static UIColor *BrowserPageActionTextColor(void) {
     UIAlertAction *submitAction = [UIAlertAction actionWithTitle:@"Submit"
                                                            style:UIAlertActionStyleDefault
                                                          handler:^(__unused UIAlertAction *action) {
-        if (![weakSelf.host browserPageActionCoordinatorIsActiveWebView:webView] || webView.documentGeneration != generation) return;
+        if (![weakSelf.host browserPageActionCoordinatorIsActiveWebView:webView] || webView.documentGeneration != generation || webView.javaScriptGeneration != javaScriptGeneration || selection != weakSelf.selectionGeneration) return;
         UITextField *inputTextField = alertController.textFields.firstObject;
         NSString *escapedText = [weakSelf.domInteractionService javaScriptEscapedString:inputTextField.text];
         [weakSelf.domInteractionService evaluateEditableElementJavaScriptAtPoint:point
                                                                          webView:webView
-                                                                            body:[NSString stringWithFormat:@"var target = browserEditableTarget();"
-                                                                                  "if (!target) { return 'false'; }"
+                                                                            body:[NSString stringWithFormat:@"%@"
                                                                                   "if (typeof target.value !== 'undefined') { target.value = '%@'; }"
                                                                                   "else { target.textContent = '%@'; }"
                                                                                   "if (target.dispatchEvent) {"
@@ -93,31 +102,33 @@ static UIColor *BrowserPageActionTextColor(void) {
                                                                                       "target.dispatchEvent(new Event('change', { bubbles: true }));"
                                                                                   "}"
                                                                                   "if (target.form) { target.form.submit(); }"
-                                                                                  "return 'true';", escapedText, escapedText] completion:nil];
+                                                                                  "return 'true';", BrowserEditablePromptTargetJavaScript(identifier), escapedText, escapedText] completion:nil];
     }];
     UIAlertAction *doneAction = [UIAlertAction actionWithTitle:@"Done"
                                                          style:UIAlertActionStyleDefault
                                                        handler:^(__unused UIAlertAction *action) {
-        if (![weakSelf.host browserPageActionCoordinatorIsActiveWebView:webView] || webView.documentGeneration != generation) return;
+        if (![weakSelf.host browserPageActionCoordinatorIsActiveWebView:webView] || webView.documentGeneration != generation || webView.javaScriptGeneration != javaScriptGeneration || selection != weakSelf.selectionGeneration) return;
         UITextField *inputTextField = alertController.textFields.firstObject;
         NSString *escapedText = [weakSelf.domInteractionService javaScriptEscapedString:inputTextField.text];
         [weakSelf.domInteractionService evaluateEditableElementJavaScriptAtPoint:point
                                                                          webView:webView
-                                                                            body:[NSString stringWithFormat:@"var target = browserEditableTarget();"
-                                                                                  "if (!target) { return 'false'; }"
+                                                                            body:[NSString stringWithFormat:@"%@"
                                                                                   "if (typeof target.value !== 'undefined') { target.value = '%@'; }"
                                                                                   "else { target.textContent = '%@'; }"
                                                                                   "if (target.dispatchEvent) {"
                                                                                       "target.dispatchEvent(new Event('input', { bubbles: true }));"
                                                                                       "target.dispatchEvent(new Event('change', { bubbles: true }));"
                                                                                   "}"
-                                                                                  "return 'true';", escapedText, escapedText] completion:nil];
+                                                                                  "return 'true';", BrowserEditablePromptTargetJavaScript(identifier), escapedText, escapedText] completion:nil];
     }];
     [alertController addAction:doneAction];
     if ([metadata[@"submit"] boolValue]) {
         [alertController addAction:submitAction];
     }
-    [alertController addAction:[UIAlertAction actionWithTitle:nil style:UIAlertActionStyleCancel handler:nil]];
+    [alertController addAction:[UIAlertAction actionWithTitle:nil style:UIAlertActionStyleCancel handler:^(__unused UIAlertAction *action) {
+        if (![weakSelf.host browserPageActionCoordinatorIsActiveWebView:webView] || webView.documentGeneration != generation || webView.javaScriptGeneration != javaScriptGeneration) return;
+        [webView evaluateJavaScript:[NSString stringWithFormat:@"(function(){%@})()", BrowserEditablePromptTargetJavaScript(identifier)] completion:nil];
+    }]];
     [self.host browserPageActionCoordinatorPresentViewController:alertController];
 
     UITextField *inputTextField = alertController.textFields.firstObject;
