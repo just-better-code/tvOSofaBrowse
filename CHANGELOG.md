@@ -2,6 +2,12 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.21.17 - 2026-10-11
+
+### Added
+
+- Apply uBlock entity, regex, URL-path and ancestor-frame scriptlet scopes with Public Suffix List-aware entities and matching exclusions ([Domain adapter](_Project/Vendor/UBlock/domains.js)).
+
 ## 2.21.16 - 2026-10-11
 
 ### Added

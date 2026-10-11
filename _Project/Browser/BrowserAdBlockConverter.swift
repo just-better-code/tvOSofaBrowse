@@ -63,6 +63,7 @@ extension BrowserAdBlockConverter {
               let libraryData = libraryText.data(using: .utf8),
               let library = (try? JSONSerialization.jsonObject(with: libraryData)) as? [[String: Any]],
               let runtime = resource("UBlockRuntime", "js"),
+              let domains = resource("UBlockDomains", "js"),
               let cosmetics = resource("UBlockCosmetics", "js"),
               let procedural = resource("UBlockProcedural", "js") else { return nil }
         context.exception = nil
@@ -101,6 +102,7 @@ extension BrowserAdBlockConverter {
                 functions.append("[\(json([name]).dropFirst().dropLast()),\(functionName)]")
             }
             var script = runtime.replacingOccurrences(of: "__BROWSER_RECORDS__", with: "JSON.parse(\(json([json(selected)]))[0])")
+            script = script.replacingOccurrences(of: "__BROWSER_DOMAINS__", with: domains)
             script = script.replacingOccurrences(of: "__BROWSER_FUNCTIONS__", with: declarations.joined(separator: "\n"))
             script = script.replacingOccurrences(of: "__BROWSER_FUNCTION_MAP__", with: "[\(functions.joined(separator: ","))]")
             script = script.replacingOccurrences(of: "__BROWSER_COSMETICS__", with: world == "ISOLATED" ? cosmetics.replacingOccurrences(of: "__BROWSER_PROCEDURAL__", with: procedural) : "")

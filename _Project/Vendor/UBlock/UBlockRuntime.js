@@ -5,12 +5,7 @@ const config = __BROWSER_CONFIG__;
 if (!config.enabled || globalThis.__browserUBlockInstalled) return;
 globalThis.__browserUBlockInstalled = true;
 const hostname = location.hostname.toLowerCase().replace(/\.$/, '') || config.topHost;
-const matchHost = (host, pattern) => pattern === '*' || host === pattern || host.endsWith('.' + pattern);
-const applies = rule => {
-    if (rule.domains.some(d => d.exclude && matchHost(hostname, d.host))) return false;
-    const positives = rule.domains.filter(d => !d.exclude);
-    return positives.length === 0 || positives.some(d => matchHost(hostname, d.host));
-};
+__BROWSER_DOMAINS__
 let emitted = 0;
 const emit = (event, rule, count = 0) => {
     if (!config.debug || emitted++ >= 128) return;

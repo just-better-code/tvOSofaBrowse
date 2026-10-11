@@ -2,6 +2,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import publicSuffixList from '../_Project/Vendor/UBlock/src/lib/publicsuffixlist/publicsuffixlist.js';
+import punycode from '../_Project/Vendor/UBlock/src/lib/punycode.js';
 import { builtinScriptlets } from '../_Project/Vendor/UBlock/src/js/resources/scriptlets.js';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../_Project/Vendor/UBlock');
 const modules = new Map();
@@ -59,3 +61,10 @@ const punycodeId = bundle(path.join(root, 'src/lib/punycode.js'));
 const network = `(function(){const modules={${[...modules.values()].map(m => `${m.id}:function(require){${m.code}\n}`).join(',')}};const cache={};function require(id){return cache[id]||(cache[id]=modules[id](require));}const snfe=require(${networkId}).default;const HostEngine=require(${hostId}).default;const URLEngine=require(${urlId}).default;const {FilteringContext}=require(${contextId});const {CompiledListReader,CompiledListWriter}=require(${ioId});const {AstFilterParser,utils}=require(${sfpId});const psl=require(${pslId}).default;const punycode=require(${punycodeId}).default;\n`;
 fs.writeFileSync(path.join(root, 'UBlockNetwork.js'), network + fs.readFileSync(path.join(root, 'network.js'), 'utf8') + '\n})();\n');
 console.log(`Generated full static/dynamic network core (${modules.size} modules).`);
+
+// Entity matching uses the same pinned PSL as the network core, precompiled at
+// asset generation so every frame avoids parsing the text suffix corpus.
+publicSuffixList.parse(fs.readFileSync(path.join(root, 'PublicSuffixList.dat'), 'utf8'), punycode.toASCII);
+const selfie = publicSuffixList.toSelfie();
+const suffixSource = fs.readFileSync(path.join(root, 'src/lib/publicsuffixlist/publicsuffixlist.js'), 'utf8').replace('export default', 'const browserSuffixes =');
+fs.writeFileSync(path.join(root, 'UBlockDomains.js'), suffixSource + `\nbrowserSuffixes.fromSelfie({magic:${JSON.stringify(selfie.magic)},buf32:new Uint32Array(${JSON.stringify(Array.from(selfie.buf32))})});\n` + fs.readFileSync(path.join(root, 'domains.js'), 'utf8'));

@@ -5279,9 +5279,6 @@ globalThis.browserCompileUBlock = function(lists, library) {
             const reject = reason => { counts.unsupported++; rejected[reason] = (rejected[reason] || 0) + 1; };
             if (parser.hasError() || parser.isUnsupported()) { reject('syntax'); continue; }
             const domains = parser.hasOptions() ? Array.from(parser.getExtFilterDomainIterator(), d => ({host:d.hn, exclude:d.not})) : [];
-            if (domains.some(d => d.host.includes('/') || d.host.endsWith('.*') || d.host.endsWith('>>'))) {
-                reject('domain-pattern'); continue;
-            }
             const record = { domains, source:list.id, line:lineNumber, exception:parser.isException() };
             if (parser.isScriptletFilter()) {
                 const args = parser.getScriptletArgs();
