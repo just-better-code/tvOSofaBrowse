@@ -1044,9 +1044,22 @@ static NSString *BrowserAdBlockRuleListIdentifier(BOOL includeOnlineHosts) {
         BOOL enabled = BrowserAdBlockSourceEnabled(source[@"id"]);
         NSDictionary *attributes = [NSFileManager.defaultManager attributesOfItemAtPath:
             BrowserAdBlockSourceURL(source).path error:nil];
-        [signature appendFormat:@"-%@-%d-%.9f-%lld", source[@"id"], enabled,
-            [attributes[NSFileModificationDate] timeIntervalSince1970],
-            [attributes[NSFileSize] longLongValue]];
+        if ([source[@"id"] isEqualToString:@"ubo"]) {
+            // Bundle timestamps change on delivery even when the pinned filters do not.
+            static NSString *bundledFingerprint;
+            static dispatch_once_t once;
+            dispatch_once(&once, ^{
+                NSData *data = [NSData dataWithContentsOfURL:BrowserAdBlockSourceURL(source)];
+                uint64_t hash = 14695981039346656037ULL;
+                const uint8_t *bytes = data.bytes;
+                for (NSUInteger index = 0; index < data.length; index++) hash = (hash ^ bytes[index]) * 1099511628211ULL;
+                bundledFingerprint = [NSString stringWithFormat:@"%016llx-%lu", hash, (unsigned long)data.length];
+            });
+            [signature appendFormat:@"-%@-%d-%@", source[@"id"], enabled, bundledFingerprint];
+        } else {
+            [signature appendFormat:@"-%@-%d-%.9f-%lld", source[@"id"], enabled,
+                [attributes[NSFileModificationDate] timeIntervalSince1970], [attributes[NSFileSize] longLongValue]];
+        }
     }
     // Use an explicit stable fingerprint for the cache shared by app launches.
     [signature appendString:[NSUserDefaults.standardUserDefaults stringForKey:kBrowserAdBlockUserFiltersKey] ?: @""];
@@ -1917,7 +1930,17 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     self.adBlockStatus = @"loading";
     BrowserLoadAdBlockRuleList(^(NSArray *ruleLists, NSError *error) {
         if (!weakSelf || policy != weakSelf.adBlockPolicyGeneration) { if (completion) completion(NO); return; }
-        BrowserLoadUBlockRuntime(^(NSDictionary *runtime) { apply(ruleLists ?: @[], runtime); });
+        // Enforce ready WebKit chunks now; full-core/advanced compilation is a later upgrade.
+        apply(ruleLists ?: @[], sBrowserUBlockRuntime);
+        BrowserLog(@"[AdBlock] native protection applied chunks=%lu", (unsigned long)ruleLists.count);
+        BrowserLoadUBlockRuntime(^(NSDictionary *runtime) {
+            BrowserWebView *owner = weakSelf;
+            if (!owner || policy != owner.adBlockPolicyGeneration || rulesGeneration != sBrowserAdBlockRulesGeneration ||
+                enabled != owner.adBlockEffectiveEnabled) return;
+            NSString *previous = owner.installedUBlockIdentity;
+            [owner replaceUBlockScripts:runtime forURL:URL enabled:enabled];
+            if (![previous isEqualToString:owner.installedUBlockIdentity]) [owner reloadWithPreparedAdBlock];
+        });
     });
 }
 

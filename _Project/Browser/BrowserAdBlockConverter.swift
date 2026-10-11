@@ -100,7 +100,7 @@ extension BrowserAdBlockConverter {
                 guard let entry = byName[name], let functionName = entry["functionName"] as? String else { continue }
                 functions.append("[\(json([name]).dropFirst().dropLast()),\(functionName)]")
             }
-            var script = runtime.replacingOccurrences(of: "__BROWSER_RECORDS__", with: json(selected))
+            var script = runtime.replacingOccurrences(of: "__BROWSER_RECORDS__", with: "JSON.parse(\(json([json(selected)]))[0])")
             script = script.replacingOccurrences(of: "__BROWSER_FUNCTIONS__", with: declarations.joined(separator: "\n"))
             script = script.replacingOccurrences(of: "__BROWSER_FUNCTION_MAP__", with: "[\(functions.joined(separator: ","))]")
             script = script.replacingOccurrences(of: "__BROWSER_COSMETICS__", with: world == "ISOLATED" ? cosmetics.replacingOccurrences(of: "__BROWSER_PROCEDURAL__", with: procedural) : "")

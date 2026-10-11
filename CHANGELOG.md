@@ -2,6 +2,13 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.24.1 - 2026-10-11
+
+### Fixed
+
+- Prevent large advanced-filter scripts from overflowing the JavaScript stack on injection ([Filter converter](_Project/Browser/BrowserAdBlockConverter.swift)).
+- Apply cached WebKit protection before the full uBlock runtime finishes preparing and reuse unchanged bundled-filter caches across app deliveries ([User Guide](docs/USER_GUIDE.md)).
+
 ## 2.24.0 - 2026-10-11
 
 ### Added
