@@ -2,6 +2,32 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.21.3 - 2026-10-11
+
+### Changed
+
+- Move VLC Audio and Subtitles selectors to the right edge of the playback panel ([User Guide](docs/USER_GUIDE.md)).
+
+### Added
+
+- Add Go to End beside Play/Pause in VLC to seek near the known media duration ([User Guide](docs/USER_GUIDE.md)).
+
+### Fixed
+
+- Keep iframe playback and episode navigation in the website player with its existing fullscreen controls ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.21.2 - 2026-10-11
+
+### Fixed
+
+- Compile generic uBO cosmetic rules without querying an absent domain iterator, keeping the advanced filtering runtime available ([uBO components](_Project/Vendor/UBlock/README.md)).
+
+## 2.21.0 - 2026-10-11
+
+### Added
+
+- Apply pinned full-uBO scriptlets and procedural cosmetic filters alongside WebKit protection, with a bundled uBlock list, remembered site exceptions, local custom filters and source-aware coverage diagnostics ([User Guide](docs/USER_GUIDE.md), [uBO components](_Project/Vendor/UBlock/README.md)).
+
 ## 2.20.3 - 2026-10-11
 
 ### Fixed

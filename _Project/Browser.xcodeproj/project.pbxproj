@@ -56,6 +56,14 @@
 		B002B8721BAE420500C744AF /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B002B8711BAE420500C744AF /* Assets.xcassets */; };
 		F51920261011000000000004 /* BrowserFullscreenMediaControlsController.m in Sources */ = {isa = PBXBuildFile; fileRef = F51920261011000000000002; };
 		F51920261011000000000005 /* BrowserFullscreenMediaBridge.js in Resources */ = {isa = PBXBuildFile; fileRef = F51920261011000000000003; };
+		ADBD00000000000000000000 /* UBlockParser.js in Resources */ = {isa = PBXBuildFile; fileRef = ADBC00000000000000000000 /* UBlockParser.js */; };
+		ADBD00000000000000000001 /* UBlockScriptlets.json in Resources */ = {isa = PBXBuildFile; fileRef = ADBC00000000000000000001 /* UBlockScriptlets.json */; };
+		ADBD00000000000000000002 /* UBlockProcedural.js in Resources */ = {isa = PBXBuildFile; fileRef = ADBC00000000000000000002 /* UBlockProcedural.js */; };
+		ADBD00000000000000000003 /* UBlockRuntime.js in Resources */ = {isa = PBXBuildFile; fileRef = ADBC00000000000000000003 /* UBlockRuntime.js */; };
+		ADBD00000000000000000004 /* UBlockCosmetics.js in Resources */ = {isa = PBXBuildFile; fileRef = ADBC00000000000000000004 /* UBlockCosmetics.js */; };
+		ADBD00000000000000000005 /* UBlockFilters.txt in Resources */ = {isa = PBXBuildFile; fileRef = ADBC00000000000000000005 /* UBlockFilters.txt */; };
+		ADBD00000000000000000006 /* LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = ADBC00000000000000000006 /* LICENSE.txt */; };
+		ADBD00000000000000000007 /* UAssets-LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = ADBC00000000000000000007 /* UAssets-LICENSE */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -151,6 +159,14 @@
 		F51920261011000000000002 /* BrowserFullscreenMediaControlsController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BrowserFullscreenMediaControlsController.m; sourceTree = "<group>"; };
 		F51920261011000000000003 /* BrowserFullscreenMediaBridge.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = BrowserFullscreenMediaBridge.js; sourceTree = "<group>"; };
 		F51920261011000000000006 /* BrowserPlaybackSymbols.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BrowserPlaybackSymbols.h; sourceTree = "<group>"; };
+		ADBC00000000000000000000 /* UBlockParser.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "UBlockParser.js"; path = "../Vendor/UBlock/UBlockParser.js"; sourceTree = "<group>"; };
+		ADBC00000000000000000001 /* UBlockScriptlets.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = "UBlockScriptlets.json"; path = "../Vendor/UBlock/UBlockScriptlets.json"; sourceTree = "<group>"; };
+		ADBC00000000000000000002 /* UBlockProcedural.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "UBlockProcedural.js"; path = "../Vendor/UBlock/UBlockProcedural.js"; sourceTree = "<group>"; };
+		ADBC00000000000000000003 /* UBlockRuntime.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "UBlockRuntime.js"; path = "../Vendor/UBlock/UBlockRuntime.js"; sourceTree = "<group>"; };
+		ADBC00000000000000000004 /* UBlockCosmetics.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "UBlockCosmetics.js"; path = "../Vendor/UBlock/UBlockCosmetics.js"; sourceTree = "<group>"; };
+		ADBC00000000000000000005 /* UBlockFilters.txt */ = {isa = PBXFileReference; lastKnownFileType = text; name = "UBlockFilters.txt"; path = "../Vendor/UBlock/UBlockFilters.txt"; sourceTree = "<group>"; };
+		ADBC00000000000000000006 /* LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; name = "LICENSE.txt"; path = "../Vendor/UBlock/LICENSE.txt"; sourceTree = "<group>"; };
+		ADBC00000000000000000007 /* UAssets-LICENSE */ = {isa = PBXFileReference; lastKnownFileType = text; name = "UAssets-LICENSE"; path = "../Vendor/UBlock/UAssets-LICENSE"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -298,6 +314,14 @@
 			isa = PBXGroup;
 			children = (
 				ADBB00000000000000000002 /* AdBlockCustomRules.json */,
+				ADBC00000000000000000007 /* UAssets-LICENSE */,
+				ADBC00000000000000000006 /* LICENSE.txt */,
+				ADBC00000000000000000005 /* UBlockFilters.txt */,
+				ADBC00000000000000000004 /* UBlockCosmetics.js */,
+				ADBC00000000000000000003 /* UBlockRuntime.js */,
+				ADBC00000000000000000002 /* UBlockProcedural.js */,
+				ADBC00000000000000000001 /* UBlockScriptlets.json */,
+				ADBC00000000000000000000 /* UBlockParser.js */,
 				ADBB00000000000000000004 /* BrowserAdBlockConverter.swift */,
 				A1B49A642D6A3900001D58A1 /* BrowserWebView.h */,
 				A1B49A622D6A3800001D58A1 /* BrowserWebView.m */,
@@ -449,6 +473,14 @@
 			files = (
 				F51920261011000000000005 /* BrowserFullscreenMediaBridge.js in Resources */,
 				ADBB00000000000000000001 /* AdBlockCustomRules.json in Resources */,
+				ADBD00000000000000000007 /* UAssets-LICENSE in Resources */,
+				ADBD00000000000000000006 /* LICENSE.txt in Resources */,
+				ADBD00000000000000000005 /* UBlockFilters.txt in Resources */,
+				ADBD00000000000000000004 /* UBlockCosmetics.js in Resources */,
+				ADBD00000000000000000003 /* UBlockRuntime.js in Resources */,
+				ADBD00000000000000000002 /* UBlockProcedural.js in Resources */,
+				ADBD00000000000000000001 /* UBlockScriptlets.json in Resources */,
+				ADBD00000000000000000000 /* UBlockParser.js in Resources */,
 				3A2A7C1C21E783D00083CB13 /* menu-button.png in Resources */,
 				3A2A7C2021E784760083CB13 /* resize-arrows.png in Resources */,
 				3A2A7C2221E790000083CB13 /* multi-tab.png in Resources */,
@@ -664,7 +696,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.20.3;
+				MARKETING_VERSION = 2.21.3;
 			PRODUCT_NAME = "$(TARGET_NAME)";
 			SCAN_ALL_SOURCE_FILES_FOR_INCLUDES = NO;
 			SWIFT_VERSION = 5.0;
@@ -695,7 +727,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.20.3;
+				MARKETING_VERSION = 2.21.3;
 			PRODUCT_NAME = "$(TARGET_NAME)";
 			SCAN_ALL_SOURCE_FILES_FOR_INCLUDES = NO;
 			SWIFT_VERSION = 5.0;

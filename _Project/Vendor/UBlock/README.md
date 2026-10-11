@@ -1,0 +1,13 @@
+# Pinned full uBlock Origin components
+
+Source: user-provided uBlock Origin snapshot, version metadata **1.75.1.10** (exact commit unavailable), upstream <https://github.com/gorhill/uBlock>. Original notices remain in source files; GPL-3.0-or-later license is in `LICENSE.txt`. CSS Tree's MIT license is in `src/lib/csstree/LICENSE`.
+
+`src/` retains the unmodified parser, scriptlet library and full procedural task engine required to regenerate shipped assets. Run `node scripts/build-ublock-assets.mjs` at the repository root after an intentional source update. Generated assets are committed; Xcode does not need Node.js.
+
+`compile.js`, `UBlockRuntime.js` and `UBlockCosmetics.js` are tvOSofaBrowse adapters. The host replaces extension registration/messaging with native preferences, JavaScriptCore compilation and document-start WKUserScript. Pinned scriptlet code is selected by parsed arguments; downloaded lists cannot supply executable JavaScript. Trusted scriptlets are enabled only for the pinned official uAssets copy; custom and remotely updated sources are untrusted.
+
+`UBlockFilters.txt` is a flattened official uAssets snapshot retrieved on 2026-10-11, with individual input digests in `uassets-pin.json` and GPL-3.0 license in `UAssets-LICENSE`. It includes all ten files referenced by `filters.txt`. It is bundled for immediate offline use; updates require a new pinned snapshot and app delivery. Existing AdGuard lists retain their weekly updates.
+
+Delivered coverage: hostname-specific scriptlets and exact-argument exceptions; full procedural task/action library; CSS cosmetics; per-site native policy; source/line diagnostics and rejection accounting. Domain entity/regex/ancestor matching, general network redirects, full dynamic network policy, response-header/body filtering outside page wrappers and every-request decision reporting remain pending. Broad network matching continues through SafariConverterLib and WebKit content rules. Network policy modifiers such as `$generichide` are not yet propagated into the advanced runtime. Cosmetic actions which remove nodes/attributes/classes are irreversible within a document; changing policy reloads it.
+
+MAIN scriptlets run in the page world; ISOLATED scriptlets and cosmetics use a named WKContentWorld when available. The isolated runtime is skipped with an explicit native status when the selector is absent. Observers stop on page destruction and pause/resume across page-cache navigation. Work is batched between selectors; individual DOM queries cannot be interrupted. Documents above 15,000 elements defer procedural scans until a later mutation, with diagnostic accounting.

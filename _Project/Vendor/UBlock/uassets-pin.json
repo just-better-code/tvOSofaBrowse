@@ -1,0 +1,17 @@
+{
+  "retrieved": "2026-10-11",
+  "source": "https://github.com/uBlockOrigin/uAssets",
+  "files": {
+    "filters.txt": "998bbf5a93077463a7121f4e8e36d53fa2e1659d8dd84596c873850e5c123484",
+    "filters-2020.txt": "3fc9634b4455e88f5cb71dbf2a4df03cae730bb06a3d0d1b50eb5245c79f019b",
+    "filters-2021.txt": "a5bff2ec6eca28776ac6244ae20d8dc4d2d88262de2d5eb13edb3bab3849704d",
+    "filters-2022.txt": "c8ad801eb3fe209a82a1f5d290a4d0094bd4b8beb9f9f07d2a5dfe19e9bca3c2",
+    "filters-2023.txt": "6640422ca68b18560eff180c1476acf7605621ee7899e657ebd289f010be1a3e",
+    "filters-2024.txt": "d13b75eac194463bc16020e5802a221d120c57179d32e0398b822bba9a1e1f40",
+    "filters-2025.txt": "724c5de4234c8dffb96354c2836984ae68eec8469c9d292ba41ccd932b4f6b4b",
+    "filters-2026.txt": "ac18f5c8269435db954990c671e9c418e5f3299dd92d7cfd5857f7616f98ea1d",
+    "filters-general.txt": "6a4e7bd5eebc3c4b53f4e6e811455093e1504c8118747968b161a93e481b4702",
+    "filters-mobile.txt": "d47b240a3305d4ff5d401dbe13297cac4500cb60c4758b46e33cc118e6cbe81e",
+    "ubo-link-shorteners.txt": "a0b56c20264b4885c1bc45bfdec4ca8cd5ba0da7532ead232f02e09460f12ddc"
+  }
+}

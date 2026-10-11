@@ -4,6 +4,7 @@
 
 @interface BrowserAdBlockConverter : NSObject
 + (NSDictionary *)convertRules:(NSString *)source;
++ (NSDictionary *)compileUBlockLists:(NSArray *)lists;
 @end
 
 #import <dlfcn.h>
@@ -16,7 +17,7 @@ static NSString * const kBrowserWebsiteDataStoreClassName = @"WKWebsiteDataStore
 static NSString * const kBrowserUserContentControllerClassName = @"WKUserContentController";
 static NSString * const kBrowserUserScriptClassName = @"WKUserScript";
 static NSString * const kBrowserAdBlockEnabledDefaultsKey = @"AdBlockEnabled";
-static NSString * const kBrowserAdBlockRuleListIdentifier = @"BrowserAdBlock-v10";
+static NSString * const kBrowserAdBlockRuleListIdentifier = @"BrowserAdBlock-v11";
 static NSString * const kBrowserAdBlockUpdateNotification = @"BrowserAdBlockRulesDidUpdate";
 NSString * const BrowserAdBlockSourceStatusDidChangeNotification = @"BrowserAdBlockSourceStatusDidChange";
 static NSString * const kBrowserAdBlockSourceEnabledKeyPrefix = @"AdBlockSourceEnabled.";
@@ -24,6 +25,25 @@ static NSString * const kBrowserAdBlockSourceLastCheckKeyPrefix = @"AdBlockSourc
 static NSArray *sBrowserAdBlockCachedRuleLists = nil;
 static NSSet<NSString *> *sBrowserAdBlockRuleFailures = nil;
 static NSUInteger sBrowserAdBlockRulesGeneration = 0;
+static NSString * const kBrowserAdBlockTrustedSitesKey = @"AdBlockTrustedSites";
+static NSString * const kBrowserAdBlockUserFiltersKey = @"AdBlockUserFilters";
+static NSDictionary *sBrowserUBlockRuntime;
+static NSString *sBrowserUBlockRuntimeIdentifier;
+static NSMutableArray *sBrowserUBlockPendingCallbacks;
+static NSDictionary *sBrowserUBlockStatistics;
+
+static NSString *BrowserAdBlockHost(NSURL *URL) {
+    NSString *host = URL.host.lowercaseString;
+    while ([host hasSuffix:@"."]) host = [host substringToIndex:host.length - 1];
+    return host ?: @"";
+}
+static BOOL BrowserAdBlockSiteEnabled(NSURL *URL) {
+    NSString *host = BrowserAdBlockHost(URL);
+    for (NSString *trusted in [NSUserDefaults.standardUserDefaults arrayForKey:kBrowserAdBlockTrustedSitesKey]) {
+        if ([host isEqualToString:trusted] || [host hasSuffix:[@"." stringByAppendingString:trusted]]) return NO;
+    }
+    return YES;
+}
 static char kBrowserNavigationURLObservationContext;
 
 static void BrowserEnsureWebKitRuntimeLoaded(void) {
@@ -737,6 +757,11 @@ static id BrowserPersistentWebsiteDataStore(void) {
     if (![body isKindOfClass:NSDictionary.class] || ![body[@"token"] isEqual:self.token]) return;
     if (![body[@"session"] isKindOfClass:NSString.class] || [body[@"session"] length] > 128) return;
     if ([body[@"vlcRequest"] boolValue]) {
+        // Only a direct video from the main document uses VLC. Iframes keep
+        // the website player and its existing episode lifecycle.
+        NSString *documentString = [body[@"documentURL"] isKindOfClass:NSString.class] ? body[@"documentURL"] : nil;
+        NSURL *documentURL = documentString.length > 0 && documentString.length <= 8192 ? [NSURL URLWithString:documentString] : nil;
+        if (![documentURL isEqual:request.URL]) return;
         NSString *URLString = [body[@"url"] isKindOfClass:NSString.class] ? body[@"url"] : nil;
         NSURL *URL = URLString.length > 0 && URLString.length <= 8192 ? [NSURL URLWithString:URLString] : nil;
         if (!URL.host.length || ![@[@"http", @"https"] containsObject:URL.scheme.lowercaseString]) return;
@@ -838,6 +863,8 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 
 static NSArray<NSDictionary<NSString *, NSString *> *> *BrowserAdBlockSources(void) {
     return @[
+        @{@"id": @"ubo", @"title": @"uBlock Origin", @"file": @"UBlockFilters.txt"},
+        @{@"id": @"custom", @"title": @"My Filters", @"file": @"UserFilters.txt"},
         @{@"id": @"dns", @"title": @"AdGuard DNS", @"file": @"AdGuardDNS.txt",
           @"url": @"https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt"},
         @{@"id": @"base", @"title": @"AdGuard Base", @"file": @"AdGuardBase.txt",
@@ -860,13 +887,19 @@ static BOOL BrowserAdBlockSourceEnabled(NSString *identifier) {
 }
 
 static NSURL *BrowserAdBlockSourceURL(NSDictionary<NSString *, NSString *> *source) {
+    if ([source[@"id"] isEqualToString:@"ubo"]) return [NSBundle.mainBundle URLForResource:@"UBlockFilters" withExtension:@"txt"];
     NSURL *cache = [NSFileManager.defaultManager URLsForDirectory:NSCachesDirectory inDomains:NSUserDomainMask].firstObject;
     return [[cache URLByAppendingPathComponent:@"BrowserContentRules" isDirectory:YES]
             URLByAppendingPathComponent:source[@"file"]];
 }
 
+static NSString *BrowserAdBlockSourceText(NSDictionary *source) {
+    if ([source[@"id"] isEqualToString:@"custom"]) return [NSUserDefaults.standardUserDefaults stringForKey:kBrowserAdBlockUserFiltersKey] ?: @"";
+    return [NSString stringWithContentsOfURL:BrowserAdBlockSourceURL(source) encoding:NSUTF8StringEncoding error:nil] ?: @"";
+}
 static NSURL *BrowserAdBlockOnlineHostsURL(void) {
-    return BrowserAdBlockSourceURL(BrowserAdBlockSources().firstObject);
+    for (NSDictionary *source in BrowserAdBlockSources()) if ([source[@"id"] isEqualToString:@"dns"]) return BrowserAdBlockSourceURL(source);
+    return nil;
 }
 
 static NSUInteger BrowserAddAdBlockHosts(NSMutableOrderedSet<NSString *> *domains, NSString *hosts) {
@@ -943,10 +976,10 @@ static NSArray<NSString *> *BrowserAdBlockRuleChunks(BOOL includeOnlineHosts,
     }
     for (NSDictionary<NSString *, NSString *> *source in BrowserAdBlockSources()) {
         if ([source[@"id"] isEqualToString:@"dns"] || !BrowserAdBlockSourceEnabled(source[@"id"])) continue;
-        NSString *filter = [NSString stringWithContentsOfURL:BrowserAdBlockSourceURL(source)
-                                                    encoding:NSUTF8StringEncoding error:nil];
+        NSString *filter = BrowserAdBlockSourceText(source);
         if (filter.length == 0) continue;
         NSDictionary *converted = [BrowserAdBlockConverter convertRules:filter];
+        if ([converted[@"rules"] integerValue] == 0 && [converted[@"advanced"] integerValue] > 0) continue;
         NSString *json = converted[@"json"];
         if (![json isKindOfClass:NSString.class] || json.length == 0) {
             [failedSources addObject:source[@"id"]];
@@ -980,6 +1013,7 @@ static NSString *BrowserAdBlockRuleListIdentifier(BOOL includeOnlineHosts) {
             [attributes[NSFileSize] longLongValue]];
     }
     // Use an explicit stable fingerprint for the cache shared by app launches.
+    [signature appendString:[NSUserDefaults.standardUserDefaults stringForKey:kBrowserAdBlockUserFiltersKey] ?: @""];
     NSData *signatureData = [signature dataUsingEncoding:NSUTF8StringEncoding];
     const uint8_t *signatureBytes = signatureData.bytes;
     uint64_t signatureFingerprint = 14695981039346656037ULL;
@@ -1182,6 +1216,36 @@ static void BrowserLoadAdBlockRuleList(BrowserAdBlockRuleListCompletion completi
     });
 }
 
+static void BrowserLoadUBlockRuntime(void (^completion)(NSDictionary *)) {
+    NSString *identifier = BrowserAdBlockRuleListIdentifier(YES);
+    if (sBrowserUBlockRuntime && [identifier isEqualToString:sBrowserUBlockRuntimeIdentifier]) { completion(sBrowserUBlockRuntime); return; }
+    if (sBrowserUBlockPendingCallbacks) { [sBrowserUBlockPendingCallbacks addObject:[completion copy]]; return; }
+    sBrowserUBlockPendingCallbacks = [NSMutableArray arrayWithObject:[completion copy]];
+    NSUInteger generation = sBrowserAdBlockRulesGeneration;
+    NSMutableArray *lists = [NSMutableArray array];
+    for (NSDictionary *source in BrowserAdBlockSources()) {
+        if ([source[@"id"] isEqualToString:@"dns"] || !BrowserAdBlockSourceEnabled(source[@"id"])) continue;
+        NSString *text = BrowserAdBlockSourceText(source);
+        if (text.length) [lists addObject:@{@"id":source[@"id"], @"text":text, @"trusted":@([source[@"id"] isEqualToString:@"ubo"])}];
+    }
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        NSDictionary *compiled = [BrowserAdBlockConverter compileUBlockLists:lists];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NSArray *callbacks = [sBrowserUBlockPendingCallbacks copy]; sBrowserUBlockPendingCallbacks = nil;
+            if (generation != sBrowserAdBlockRulesGeneration || ![identifier isEqualToString:BrowserAdBlockRuleListIdentifier(YES)]) {
+                for (id callback in callbacks) BrowserLoadUBlockRuntime(callback);
+                return;
+            }
+            sBrowserUBlockRuntime = compiled; sBrowserUBlockRuntimeIdentifier = identifier;
+            sBrowserUBlockStatistics = compiled[@"stats"];
+            [NSNotificationCenter.defaultCenter postNotificationName:BrowserAdBlockSourceStatusDidChangeNotification object:nil];
+            if (compiled == nil) BrowserLog(@"[AdBlock] uBO parser/runtime unavailable");
+            else BrowserLog(@"[AdBlock] advanced coverage=%@ rejected=%@", compiled[@"stats"], compiled[@"rejected"]);
+            for (void (^callback)(NSDictionary *) in callbacks) callback(compiled);
+        });
+    });
+}
+
 static NSMutableSet<NSString *> *sBrowserAdBlockCheckingSources = nil;
 static NSMutableSet<NSString *> *sBrowserAdBlockFailedSources = nil;
 static BOOL sBrowserAdBlockPendingDownloadChanges = NO;
@@ -1194,7 +1258,7 @@ static void BrowserCheckForAdBlockUpdate(BOOL force) {
     NSDate *now = NSDate.date;
     for (NSDictionary<NSString *, NSString *> *source in BrowserAdBlockSources()) {
         NSString *identifier = source[@"id"];
-        if (!BrowserAdBlockSourceEnabled(identifier) ||
+        if ([source[@"url"] length] == 0 || !BrowserAdBlockSourceEnabled(identifier) ||
             [sBrowserAdBlockCheckingSources containsObject:identifier]) continue;
         NSString *checkKey = [kBrowserAdBlockSourceLastCheckKeyPrefix stringByAppendingString:identifier];
         NSDate *lastSuccess = [NSUserDefaults.standardUserDefaults objectForKey:checkKey];
@@ -1285,6 +1349,11 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     return nil;
 }
 
+@interface BrowserUBlockHandler : NSObject
+@property (nonatomic, weak) BrowserWebView *owner;
+- (void)userContentController:(id)controller didReceiveScriptMessage:(id)message;
+@end
+
 @interface BrowserWebView ()
 
 @property (nullable, nonatomic, strong) id runtimeWebView;
@@ -1298,12 +1367,69 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 @property (nonatomic, strong) NSArray *appliedAdBlockRuleLists;
 @property (nonatomic, readwrite) BOOL adBlockEnabled;
 @property (nonatomic, readwrite, copy) NSString *adBlockStatus;
+@property (nonatomic, strong) BrowserUBlockHandler *uBlockHandler;
+@property (nonatomic) NSUInteger adBlockPolicyGeneration;
+@property (nonatomic, copy) NSString *adBlockDocumentToken;
+@property (nonatomic, strong) NSURL *adBlockPolicyURL;
+@property (nonatomic, strong) NSMutableArray<NSDictionary *> *adBlockEvents;
+@property (nonatomic) BOOL adBlockIsolatedAvailable;
+@property (nonatomic) BOOL adBlockRuntimeAvailable;
+@property (nonatomic, copy) NSString *installedUBlockIdentity;
 @property (nonatomic) CGFloat lastAppliedPageZoom;
 @property (nonatomic) CGFloat lastAppliedTextZoom;
 
+- (void)recordUBlockMessage:(NSDictionary *)body;
+- (void)handleUBlockPolicyMarker:(NSDictionary *)body;
+@property (nonatomic, copy) NSString *adBlockRecoveredPolicy;
+@end
+
+@implementation BrowserUBlockHandler
+- (void)userContentController:(id)controller didReceiveScriptMessage:(id)message {
+    id body = [message valueForKey:@"body"];
+    if (![body isKindOfClass:NSDictionary.class]) return;
+    if ([body[@"event"] isEqual:@"document-policy"]) {
+        id frame = [message valueForKey:@"frameInfo"];
+        if ([[frame valueForKey:@"mainFrame"] boolValue]) [self.owner handleUBlockPolicyMarker:body];
+        return;
+    }
+    [self.owner recordUBlockMessage:body];
+}
 @end
 
 @implementation BrowserWebView
+
+- (void)handleUBlockPolicyMarker:(NSDictionary *)body {
+    NSString *identity = body[@"identity"];
+    if (![identity isKindOfClass:NSString.class] || ![body[@"host"] isEqual:BrowserAdBlockHost(self.request.URL)]) return;
+    if ([identity isEqual:self.installedUBlockIdentity]) { self.adBlockRecoveredPolicy = nil; return; }
+    if ([self.adBlockRecoveredPolicy isEqual:self.installedUBlockIdentity]) return;
+    self.adBlockRecoveredPolicy = self.installedUBlockIdentity;
+    [self reload]; // A cached document can retain old wrappers; reload applies current policy.
+}
+
+- (void)recordUBlockMessage:(NSDictionary *)body {
+#if DEBUG
+    if (!BrowserPreferencesStore.websiteLoggingEnabled || ![body[@"token"] isEqual:self.adBlockDocumentToken]) return;
+    NSArray *events = @[@"scriptlet-installed", @"scriptlet-error", @"cosmetic-match", @"cosmetic-error", @"cosmetic-budget", @"cosmetic-deferred"];
+    if (![events containsObject:body[@"event"]]) return;
+    NSString *source = body[@"source"];
+    BOOL known = NO;
+    for (NSDictionary *entry in BrowserAdBlockSources()) if ([entry[@"id"] isEqual:source]) known = YES;
+    if (!known || ![body[@"line"] isKindOfClass:NSNumber.class] || ![body[@"count"] isKindOfClass:NSNumber.class]) return;
+    NSDictionary *event = @{@"event":body[@"event"], @"source":source, @"line":body[@"line"], @"count":body[@"count"]};
+    if (self.adBlockEvents.count >= 128) [self.adBlockEvents removeObjectAtIndex:0];
+    [self.adBlockEvents addObject:event];
+    BrowserLog(@"[AdBlock] observed=%@", event);
+#endif
+}
+
+- (NSString *)adBlockDiagnosticSummary {
+    NSUInteger scripts = 0, cosmetics = 0, unsupported = 0;
+    for (NSDictionary *count in sBrowserUBlockStatistics.allValues) {
+        scripts += [count[@"scriptlet"] unsignedIntegerValue]; cosmetics += [count[@"cosmetic"] unsignedIntegerValue]; unsupported += [count[@"unsupported"] unsignedIntegerValue];
+    }
+    return [NSString stringWithFormat:@"WebKit: %@ · Advanced runtime: %@ · Isolated world: %@\nCompiled: %lu scriptlet rules, %lu cosmetic rules, %lu unsupported advanced rules.\nDebug observations: %lu / 128. Network request decisions are not observed by this buffer.", self.adBlockStatus ?: @"off", self.adBlockRuntimeAvailable ? @"available" : @"inactive", self.adBlockIsolatedAvailable ? @"available" : @"inactive", (unsigned long)scripts, (unsigned long)cosmetics, (unsigned long)unsupported, (unsigned long)self.adBlockEvents.count];
+}
 
 - (void)didMoveToWindow {
     [super didMoveToWindow];
@@ -1374,6 +1500,8 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 + (NSString *)adBlockSourceStatus:(NSString *)identifier {
     for (NSDictionary *source in BrowserAdBlockSources()) {
         if (![source[@"id"] isEqualToString:identifier]) continue;
+        if ([identifier isEqualToString:@"ubo"]) return @"Pinned 2026-10-11";
+        if ([identifier isEqualToString:@"custom"]) return @"Local";
         NSDictionary *attributes = [NSFileManager.defaultManager attributesOfItemAtPath:
             BrowserAdBlockSourceURL(source).path error:nil];
         NSDate *date = attributes[NSFileModificationDate];
@@ -1394,6 +1522,17 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
         return [NSString stringWithFormat:@"Updated %@", [formatter stringFromDate:date]];
     }
     return @"Unknown source";
+}
+
++ (NSString *)adBlockUserFilters {
+    return [NSUserDefaults.standardUserDefaults stringForKey:kBrowserAdBlockUserFiltersKey] ?: @"";
+}
++ (void)setAdBlockUserFilters:(NSString *)text {
+    if (text.length > 1000000) return;
+    [NSUserDefaults.standardUserDefaults setObject:text ?: @"" forKey:kBrowserAdBlockUserFiltersKey];
+    sBrowserAdBlockRulesGeneration++; sBrowserAdBlockCachedRuleLists = nil;
+    [NSNotificationCenter.defaultCenter postNotificationName:kBrowserAdBlockUpdateNotification object:nil];
+    [NSNotificationCenter.defaultCenter postNotificationName:BrowserAdBlockSourceStatusDidChangeNotification object:nil];
 }
 
 + (void)refreshAdBlockSources {
@@ -1457,6 +1596,10 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
         self.userContentController = ((id (*)(id, SEL))objc_msgSend)(configuration, userContentControllerSelector);
     }
 
+    self.uBlockHandler = [BrowserUBlockHandler new]; self.uBlockHandler.owner = self;
+    SEL uBlockHandlerSelector = NSSelectorFromString(@"addScriptMessageHandler:name:");
+    if ([self.userContentController respondsToSelector:uBlockHandlerSelector])
+        ((void (*)(id, SEL, id, id))objc_msgSend)(self.userContentController, uBlockHandlerSelector, self.uBlockHandler, @"browserUBlock");
     id webViewObject = ((id (*)(id, SEL))objc_msgSend)((id)webViewClass, @selector(alloc));
     SEL initializer = NSSelectorFromString(@"initWithFrame:configuration:");
     webViewObject = ((id (*)(id, SEL, CGRect, id))objc_msgSend)(webViewObject, initializer, self.bounds, configuration);
@@ -1532,6 +1675,7 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
         ((void (*)(id, SEL))objc_msgSend)(controller, removeSelector);
         for (id script in updated) ((void (*)(id, SEL, id))objc_msgSend)(controller, addSelector, script);
     }
+    [self replaceUBlockScripts:sBrowserUBlockRuntime forURL:self.adBlockPolicyURL enabled:self.adBlockEffectiveEnabled];
     // Existing cross-origin frames receive the setting through the lightweight bootstrap.
     NSString *script = [NSString stringWithFormat:@"if(typeof window['%@']==='function')window['%@'](%@);",
         self.diagnosticToken, self.diagnosticToken, enabled ? @"true" : @"false"];
@@ -1545,87 +1689,129 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     }
 }
 
+- (BOOL)adBlockSiteEnabled { return BrowserAdBlockSiteEnabled(self.request.URL); }
+- (BOOL)adBlockEffectiveEnabled { return self.adBlockEnabled && BrowserAdBlockSiteEnabled(self.adBlockPolicyURL ?: self.request.URL); }
+- (void)setAdBlockSiteEnabled:(BOOL)enabled {
+    NSString *host = BrowserAdBlockHost(self.request.URL);
+    if (host.length == 0) return;
+    NSMutableArray *sites = [[NSUserDefaults.standardUserDefaults arrayForKey:kBrowserAdBlockTrustedSitesKey] mutableCopy] ?: [NSMutableArray array];
+    // Re-enabling an inherited exception removes the matching parent choice.
+    NSIndexSet *matching = [sites indexesOfObjectsPassingTest:^BOOL(NSString *site, NSUInteger index, BOOL *stop) {
+        return [host isEqualToString:site] || [host hasSuffix:[@"." stringByAppendingString:site]];
+    }];
+    [sites removeObjectsAtIndexes:matching];
+    if (!enabled) [sites addObject:host];
+    [NSUserDefaults.standardUserDefaults setObject:sites forKey:kBrowserAdBlockTrustedSitesKey];
+    [NSNotificationCenter.defaultCenter postNotificationName:kBrowserAdBlockUpdateNotification object:nil];
+    [NSNotificationCenter.defaultCenter postNotificationName:BrowserAdBlockSourceStatusDidChangeNotification object:nil];
+}
+
+- (void)replaceUBlockScripts:(NSDictionary *)runtime forURL:(NSURL *)URL enabled:(BOOL)enabled {
+    NSString *identity = [NSString stringWithFormat:@"%@-%@-%d-%d", sBrowserUBlockRuntimeIdentifier ?: @"", BrowserAdBlockHost(URL), enabled, BrowserPreferencesStore.websiteLoggingEnabled];
+    if ([self.installedUBlockIdentity isEqualToString:identity]) return;
+    self.installedUBlockIdentity = nil;
+    self.adBlockDocumentToken = NSUUID.UUID.UUIDString;
+    self.adBlockEvents = [NSMutableArray array];
+    SEL listSelector = NSSelectorFromString(@"userScripts"), removeSelector = NSSelectorFromString(@"removeAllUserScripts"), addSelector = NSSelectorFromString(@"addUserScript:");
+    id controller = self.userContentController;
+    if (![controller respondsToSelector:listSelector] || ![controller respondsToSelector:removeSelector] || ![controller respondsToSelector:addSelector]) return;
+    NSArray *scripts = [((id (*)(id, SEL))objc_msgSend)(controller, listSelector) copy];
+    NSMutableArray *retained = [NSMutableArray array];
+    for (id script in scripts) if (![[script valueForKey:@"source"] hasPrefix:@"/* BrowserUBlock"]) [retained addObject:script];
+    NSDictionary *markerData = @{@"identity":identity};
+    NSString *markerJSON = [[NSString alloc] initWithData:[NSJSONSerialization dataWithJSONObject:markerData options:0 error:nil] encoding:NSUTF8StringEncoding];
+    NSString *markerSource = [NSString stringWithFormat:@"/* BrowserUBlockPolicy */(function(){const policy=%@;addEventListener('pageshow',function(){try{webkit.messageHandlers.browserUBlock.postMessage({event:'document-policy',identity:policy.identity,host:location.hostname.toLowerCase().replace(/\\.$/,'')})}catch(e){}})})();", markerJSON];
+    Class markerClass = NSClassFromString(kBrowserUserScriptClassName);
+    id marker = ((id (*)(id, SEL))objc_msgSend)((id)markerClass, @selector(alloc));
+    marker = ((id (*)(id, SEL, id, NSInteger, BOOL))objc_msgSend)(marker, NSSelectorFromString(@"initWithSource:injectionTime:forMainFrameOnly:"), markerSource, 0, YES);
+    if (marker) [retained addObject:marker];
+    self.adBlockIsolatedAvailable = NO;
+    self.adBlockRuntimeAvailable = runtime != nil;
+    if (enabled && runtime) {
+        NSDictionary *configuration = @{@"enabled":@YES, @"topHost":BrowserAdBlockHost(URL), @"token":self.adBlockDocumentToken,
+            @"debug":@(BrowserPreferencesStore.websiteLoggingEnabled)};
+        NSString *JSON = [[NSString alloc] initWithData:[NSJSONSerialization dataWithJSONObject:configuration options:0 error:nil] encoding:NSUTF8StringEncoding];
+        Class scriptClass = NSClassFromString(kBrowserUserScriptClassName);
+        Class worldClass = NSClassFromString(@"WKContentWorld");
+        SEL worldSelector = NSSelectorFromString(@"worldWithName:");
+        SEL isolatedInitializer = NSSelectorFromString(@"initWithSource:injectionTime:forMainFrameOnly:inContentWorld:");
+        id isolatedWorld = nil;
+        if ([worldClass respondsToSelector:worldSelector] && [scriptClass instancesRespondToSelector:isolatedInitializer])
+            isolatedWorld = ((id (*)(id, SEL, id))objc_msgSend)((id)worldClass, worldSelector, @"BrowserUBlock");
+        SEL handlerSelector = NSSelectorFromString(@"addScriptMessageHandler:contentWorld:name:");
+        // The world handler is installed once for this controller.
+        if (isolatedWorld && [controller respondsToSelector:handlerSelector] && !objc_getAssociatedObject(controller, @selector(replaceUBlockScripts:forURL:enabled:))) {
+            ((void (*)(id, SEL, id, id, id))objc_msgSend)(controller, handlerSelector, self.uBlockHandler, isolatedWorld, @"browserUBlock");
+            objc_setAssociatedObject(controller, @selector(replaceUBlockScripts:forURL:enabled:), @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+        for (NSString *world in @[@"MAIN", @"ISOLATED"]) {
+            BOOL isolated = [world isEqualToString:@"ISOLATED"];
+            if (isolated && isolatedWorld == nil) { BrowserLog(@"[AdBlock] isolated-world injection unavailable"); continue; }
+            NSString *source = [runtime[@"scripts"][world] stringByReplacingOccurrencesOfString:@"__BROWSER_CONFIG__" withString:JSON];
+            if (source.length == 0) continue;
+            id script = ((id (*)(id, SEL))objc_msgSend)((id)scriptClass, @selector(alloc));
+            if (isolated) script = ((id (*)(id, SEL, id, NSInteger, BOOL, id))objc_msgSend)(script, isolatedInitializer, source, 0, NO, isolatedWorld);
+            else script = ((id (*)(id, SEL, id, NSInteger, BOOL))objc_msgSend)(script, NSSelectorFromString(@"initWithSource:injectionTime:forMainFrameOnly:"), source, 0, NO);
+            if (script) { [retained addObject:script]; if (isolated) self.adBlockIsolatedAvailable = YES; }
+        }
+    }
+    ((void (*)(id, SEL))objc_msgSend)(controller, removeSelector);
+    for (id script in retained) ((void (*)(id, SEL, id))objc_msgSend)(controller, addSelector, script);
+    self.installedUBlockIdentity = identity;
+}
+
+- (void)prepareAdBlockForURL:(NSURL *)URL completion:(void (^)(BOOL))completion {
+    NSUInteger policy = ++self.adBlockPolicyGeneration;
+    NSUInteger rulesGeneration = sBrowserAdBlockRulesGeneration;
+    self.adBlockPolicyURL = URL;
+    BOOL enabled = self.adBlockEnabled && BrowserAdBlockSiteEnabled(URL);
+    __weak typeof(self) weakSelf = self;
+    void (^apply)(NSArray *, NSDictionary *) = ^(NSArray *ruleLists, NSDictionary *runtime) {
+        BrowserWebView *owner = weakSelf;
+        if (!owner || policy != owner.adBlockPolicyGeneration) { if (completion) completion(NO); return; }
+        if (rulesGeneration != sBrowserAdBlockRulesGeneration) { [owner prepareAdBlockForURL:URL completion:completion]; return; }
+        SEL removeSelector = NSSelectorFromString(@"removeContentRuleList:");
+        SEL addSelector = NSSelectorFromString(@"addContentRuleList:");
+        if (![owner.appliedAdBlockRuleLists isEqualToArray:ruleLists]) {
+            if (owner.appliedAdBlockRuleLists.count && ![owner.userContentController respondsToSelector:removeSelector]) {
+                owner.adBlockStatus = @"removal-unavailable"; if (completion) completion(NO); return;
+            }
+            for (id rule in owner.appliedAdBlockRuleLists) ((void (*)(id, SEL, id))objc_msgSend)(owner.userContentController, removeSelector, rule);
+            owner.appliedAdBlockRuleLists = nil;
+            if ([owner.userContentController respondsToSelector:addSelector]) {
+                for (id rule in ruleLists) ((void (*)(id, SEL, id))objc_msgSend)(owner.userContentController, addSelector, rule);
+                owner.appliedAdBlockRuleLists = ruleLists;
+            }
+        }
+        [owner replaceUBlockScripts:runtime forURL:URL enabled:enabled];
+        owner.adBlockStatus = enabled ? (ruleLists.count ? @"on" : @"unavailable") : (owner.adBlockEnabled ? @"site-off" : @"off");
+        if (completion) completion(YES);
+    };
+    if (!enabled) { apply(@[], nil); return; }
+    self.adBlockStatus = @"loading";
+    BrowserLoadAdBlockRuleList(^(NSArray *ruleLists, NSError *error) {
+        if (!weakSelf || policy != weakSelf.adBlockPolicyGeneration) { if (completion) completion(NO); return; }
+        BrowserLoadUBlockRuntime(^(NSDictionary *runtime) { apply(ruleLists ?: @[], runtime); });
+    });
+}
+
 - (void)setAdBlockEnabled:(BOOL)enabled {
     _adBlockEnabled = enabled;
-    if (!enabled) {
-        NSArray *ruleLists = self.appliedAdBlockRuleLists;
-        SEL removeSelector = NSSelectorFromString(@"removeContentRuleList:");
-        SEL removeAllSelector = NSSelectorFromString(@"removeAllContentRuleLists");
-        if (ruleLists.count > 0) {
-            if ([self.userContentController respondsToSelector:removeAllSelector]) {
-                ((void (*)(id, SEL))objc_msgSend)(self.userContentController, removeAllSelector);
-            } else if ([self.userContentController respondsToSelector:removeSelector]) {
-                for (id ruleList in ruleLists) {
-                    ((void (*)(id, SEL, id))objc_msgSend)(self.userContentController, removeSelector, ruleList);
-                }
-            } else {
-                self.adBlockStatus = @"removal-unavailable";
-                BrowserLog(@"[AdBlock] cannot remove content rules from this WebKit view");
-                return;
-            }
-            self.appliedAdBlockRuleLists = nil;
-            if (self.request != nil) {
-                [self reload];
-            }
-        }
-        self.adBlockStatus = @"off";
-        return;
-    }
-
-    self.adBlockStatus = @"loading";
     __weak typeof(self) weakSelf = self;
-    BrowserLoadAdBlockRuleList(^(NSArray *ruleLists, NSError *error) {
-        BrowserWebView *strongSelf = weakSelf;
-        if (strongSelf == nil || !strongSelf.adBlockEnabled) {
-            return;
-        }
-        SEL addSelector = NSSelectorFromString(@"addContentRuleList:");
-        if (ruleLists == nil || ![strongSelf.userContentController respondsToSelector:addSelector]) {
-            strongSelf.adBlockStatus = @"unavailable";
-            BrowserLog(@"[AdBlock] unavailable: %@", error ?: @"WKUserContentController cannot install rule lists");
-            return;
-        }
-        if (ruleLists.count == 0) {
-            if (strongSelf.appliedAdBlockRuleLists.count > 0) {
-                SEL removeAllSelector = NSSelectorFromString(@"removeAllContentRuleLists");
-                if ([strongSelf.userContentController respondsToSelector:removeAllSelector]) {
-                    ((void (*)(id, SEL))objc_msgSend)(strongSelf.userContentController, removeAllSelector);
-                }
-                strongSelf.appliedAdBlockRuleLists = nil;
-                if (strongSelf.request != nil) [strongSelf reload];
-            }
-            strongSelf.adBlockStatus = @"loading";
-            BrowserCheckForAdBlockUpdateIfNeeded();
-            return;
-        }
-        if ([strongSelf.appliedAdBlockRuleLists isEqualToArray:ruleLists]) {
-            strongSelf.adBlockStatus = @"on";
-            BrowserCheckForAdBlockUpdateIfNeeded();
-            return;
-        }
-        NSArray *previousRuleLists = strongSelf.appliedAdBlockRuleLists;
-        SEL removeSelector = NSSelectorFromString(@"removeContentRuleList:");
-        SEL removeAllSelector = NSSelectorFromString(@"removeAllContentRuleLists");
-        if (previousRuleLists.count > 0 && [strongSelf.userContentController respondsToSelector:removeAllSelector]) {
-            ((void (*)(id, SEL))objc_msgSend)(strongSelf.userContentController, removeAllSelector);
-        } else if (previousRuleLists.count > 0 && [strongSelf.userContentController respondsToSelector:removeSelector]) {
-            for (id previousRuleList in previousRuleLists) {
-                ((void (*)(id, SEL, id))objc_msgSend)(strongSelf.userContentController, removeSelector, previousRuleList);
-            }
-        } else if (previousRuleLists.count > 0) {
-            strongSelf.adBlockStatus = @"removal-unavailable";
-            return;
-        }
-        for (id ruleList in ruleLists) {
-            ((void (*)(id, SEL, id))objc_msgSend)(strongSelf.userContentController, addSelector, ruleList);
-        }
-        strongSelf.appliedAdBlockRuleLists = ruleLists;
-        strongSelf.adBlockStatus = @"on";
-        BrowserCheckForAdBlockUpdateIfNeeded();
-        if (strongSelf.request != nil) {
-            [strongSelf reload];
-        }
-    });
+    NSURL *URL = self.adBlockPolicyURL ?: self.request.URL;
+    BOOL wasLoading = self.loading;
+    [self prepareAdBlockForURL:URL completion:^(BOOL ready) {
+        if (!ready || !URL) return;
+        if (wasLoading && ![URL isEqual:weakSelf.request.URL]) [weakSelf loadRequest:[NSURLRequest requestWithURL:URL]];
+        else [weakSelf reloadRuntimeWebView];
+    }];
+    if (enabled) BrowserCheckForAdBlockUpdateIfNeeded();
+}
+
+- (void)reloadRuntimeWebView {
+    self.documentGeneration += 1;
+    SEL selector = NSSelectorFromString(@"reload");
+    if ([self.runtimeWebView respondsToSelector:selector]) ((void (*)(id, SEL))objc_msgSend)(self.runtimeWebView, selector);
 }
 
 - (void)layoutSubviews {
@@ -1763,16 +1949,17 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 }
 
 - (void)loadRequest:(NSURLRequest *)request {
+    if (!request || !self.runtimeWebView) return;
     self.documentGeneration += 1;
-    if (request == nil || self.runtimeWebView == nil) {
-        return;
-    }
     self.lastRequest = request;
     [self applyDomainZoomForURL:request.URL];
-    SEL selector = NSSelectorFromString(@"loadRequest:");
-    if ([self.runtimeWebView respondsToSelector:selector]) {
-        ((id (*)(id, SEL, id))objc_msgSend)(self.runtimeWebView, selector, request);
-    }
+    __weak typeof(self) weakSelf = self;
+    [self prepareAdBlockForURL:request.URL completion:^(BOOL ready) {
+        BrowserWebView *owner = weakSelf;
+        if (!ready || !owner) return;
+        SEL selector = NSSelectorFromString(@"loadRequest:");
+        if ([owner.runtimeWebView respondsToSelector:selector]) ((id (*)(id, SEL, id))objc_msgSend)(owner.runtimeWebView, selector, request);
+    }];
 }
 
 - (void)loadHTMLString:(NSString *)HTMLString {
@@ -1783,19 +1970,18 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     SEL selector = NSSelectorFromString(@"loadHTMLString:baseURL:");
     if ([self.runtimeWebView respondsToSelector:selector]) {
         self.lastRequest = [NSURLRequest requestWithURL:[NSURL URLWithString:@"about:blank"]];
+        [self replaceUBlockScripts:nil forURL:self.lastRequest.URL enabled:NO];
         ((id (*)(id, SEL, id, id))objc_msgSend)(self.runtimeWebView, selector, HTMLString, nil);
     }
 }
 
 - (void)reload {
-    self.documentGeneration += 1;
-    SEL selector = NSSelectorFromString(@"reload");
-    if (self.runtimeWebView != nil && [self.runtimeWebView respondsToSelector:selector]) {
-        ((void (*)(id, SEL))objc_msgSend)(self.runtimeWebView, selector);
-    }
+    __weak typeof(self) weakSelf = self;
+    [self prepareAdBlockForURL:self.request.URL completion:^(BOOL ready) { if (ready) [weakSelf reloadRuntimeWebView]; }];
 }
 
 - (void)stopLoading {
+    self.adBlockPolicyGeneration += 1;
     self.documentGeneration += 1;
     SEL selector = NSSelectorFromString(@"stopLoading");
     if (self.runtimeWebView != nil && [self.runtimeWebView respondsToSelector:selector]) {
@@ -2300,9 +2486,11 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
         self.lastRequest = request;
     }
 
-    if (decisionHandler != nil) {
-        decisionHandler(shouldAllow ? 1 : 0);
+    if (shouldAllow && isMainFrameRequest && request) {
+        [self prepareAdBlockForURL:request.URL completion:^(BOOL ready) { if (decisionHandler) decisionHandler(ready ? 1 : 0); }];
+        return;
     }
+    if (decisionHandler) decisionHandler(shouldAllow ? 1 : 0);
 }
 
 - (void)webView:(id)webView decidePolicyForNavigationResponse:(id)navigationResponse decisionHandler:(void (^)(NSInteger policy))decisionHandler {
@@ -2322,6 +2510,10 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
         [self.delegate respondsToSelector:@selector(webView:shouldImportTorrentResponse:request:)]) {
         imported = [self.delegate webView:self shouldImportTorrentResponse:response request:self.lastRequest];
     }
+    if (!imported && isMainFrame && response.URL) {
+        [self prepareAdBlockForURL:response.URL completion:^(BOOL ready) { decisionHandler(ready ? 1 : 0); }];
+        return;
+    }
     decisionHandler(imported ? 0 : 1);
 }
 
@@ -2340,7 +2532,7 @@ windowFeatures:(id)windowFeatures {
     // windows and ordinary links available for sites that use them legitimately.
     NSString *currentHost = self.currentURL.host;
     NSString *destinationHost = request.URL.host;
-    if (self.adBlockEnabled && navigationType == -1 && currentHost.length > 0 &&
+    if (self.adBlockEffectiveEnabled && navigationType == -1 && currentHost.length > 0 &&
         destinationHost.length > 0 &&
         [currentHost caseInsensitiveCompare:destinationHost] != NSOrderedSame) {
         return nil;

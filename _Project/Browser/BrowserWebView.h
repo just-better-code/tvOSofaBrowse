@@ -65,6 +65,12 @@ FOUNDATION_EXPORT NSString * const BrowserAdBlockSourceStatusDidChangeNotificati
                        width:(CGFloat)width
                   completion:(void (^)(UIImage * _Nullable snapshot))completion;
 - (void)setAdBlockEnabled:(BOOL)enabled;
+@property (nonatomic, readonly) BOOL adBlockSiteEnabled;
+@property (nonatomic, readonly) BOOL adBlockEffectiveEnabled;
+- (void)setAdBlockSiteEnabled:(BOOL)enabled;
+- (NSString *)adBlockDiagnosticSummary;
++ (NSString *)adBlockUserFilters;
++ (void)setAdBlockUserFilters:(NSString *)text;
 
 + (nullable NSData *)cookieDataRepresentation;
 + (NSArray<NSHTTPCookie *> * _Nonnull)allCookies;
