@@ -2,6 +2,12 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.23.0 - 2026-10-11
+
+### Added
+
+- Compile full upstream uBlock static and dynamic network engines in the background and apply bounded navigation decisions to pages and frames ([User Guide](docs/USER_GUIDE.md), [Network adapter](_Project/Vendor/UBlock/README.md)).
+
 ## 2.22.0 - 2026-10-11
 
 ### Changed
