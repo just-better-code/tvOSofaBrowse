@@ -2,32 +2,33 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
-## 2.24.1 - 2026-10-11
+## 2.21.12 - 2026-10-11
 
 ### Fixed
 
 - Prevent large advanced-filter scripts from overflowing the JavaScript stack on injection ([Filter converter](_Project/Browser/BrowserAdBlockConverter.swift)).
 - Apply cached WebKit protection before the full uBlock runtime finishes preparing and reuse unchanged bundled-filter caches across app deliveries ([User Guide](docs/USER_GUIDE.md)).
+- Restore the UNSENT state after canceling a filtered XHR and require a fresh open before sending again ([Request adapter](_Project/Vendor/UBlock/UBlockRequests.js)).
 
-## 2.24.0 - 2026-10-11
+## 2.21.11 - 2026-10-11
 
 ### Added
 
 - Apply uBlock network decisions to page fetch and asynchronous XHR requests through a bounded WebKit reply bridge ([User Guide](docs/USER_GUIDE.md), [Network adapter](_Project/Vendor/UBlock/README.md)).
 
-## 2.23.1 - 2026-10-11
+## 2.21.10 - 2026-10-11
 
 ### Added
 
 - Scroll pages when continued pointer movement reaches the top or bottom edge, except in fullscreen ([User Guide](docs/USER_GUIDE.md)).
 
-## 2.23.0 - 2026-10-11
+## 2.21.9 - 2026-10-11
 
 ### Added
 
 - Compile full upstream uBlock static and dynamic network engines in the background and apply bounded navigation decisions to pages and frames ([User Guide](docs/USER_GUIDE.md), [Network adapter](_Project/Vendor/UBlock/README.md)).
 
-## 2.22.0 - 2026-10-11
+## 2.21.8 - 2026-10-11
 
 ### Changed
 

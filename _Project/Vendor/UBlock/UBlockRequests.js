@@ -124,7 +124,7 @@
             emit(xhr, event, true);
             if (!active()) return;
             emit(xhr, 'loadend', true);
-            if (active()) { state.terminating = false; if (event === 'abort') state.virtualReady = null; }
+            if (active()) { state.terminating = false; if (event === 'abort') state.virtualReady = 0; }
         }
         function armTimeout(xhr, state) {
             nativeClearTimeout(state.timer);
@@ -179,6 +179,9 @@
                 send: { ...descriptors.send, value: function (...args) {
                     const state = states.get(this);
                     if (state && state.pending) throw invalidState();
+                    // Synthetic completion leaves native XHR OPENED (it never sent).
+                    // Preserve the completed/UNSENT state until a fresh open().
+                    if (state && state.virtualReady != null) throw invalidState();
                     if (!state || !state.async || !/^https?:\/\//i.test(state.url) || apply(ready.get, this, []) !== 1 || state.nativeSent) {
                         if (state && !state.async) report('sync-bypass');
                         return apply(nativeSend, this, args);
@@ -212,7 +215,11 @@
                 abort: { ...descriptors.abort, value: function (...args) {
                     const state = states.get(this);
                     if (state && state.pending) { state.cancel(); return; }
-                    if (state) { state.terminating = false; state.virtualReady = null; }
+                    if (state) {
+                        const virtual = state.virtualReady;
+                        state.terminating = false;
+                        state.virtualReady = virtual != null ? 0 : null;
+                    }
                     return apply(nativeAbort, this, args);
                 } },
                 readyState: { ...ready, get: function () {
