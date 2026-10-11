@@ -2,6 +2,52 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.20.3 - 2026-10-11
+
+### Fixed
+
+- Pass matching browser cookies, User-Agent and policy-aware page or iframe Referer to direct web-video playback in VLC for cookie-authenticated sources ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.20.2 - 2026-10-11
+
+### Fixed
+
+- Reopen finished VLC media for replay, restart and seeking so controls remain usable after the first playback ends ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.20.1 - 2026-10-11
+
+### Changed
+
+- Enable Safari Web Inspector only while the Debug switch is on in a development build, and disconnect inspection when diagnostics are disabled ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.20.0 - 2026-10-11
+
+### Added
+
+- Play direct HTTP(S) web video in the shared embedded VLC player on fullscreen or Center on a standard video, preserving its position and domain volume when returning to the page ([User Guide](docs/USER_GUIDE.md)).
+
+### Removed
+
+- Remove torrent handoff to the external VLC app and its file action while retaining embedded VLC streaming ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.19.20 - 2026-10-11
+
+### Removed
+
+- Remove the separate native fullscreen web-video player and its Full Screen Player setting while retaining unified media controls and VLC torrent playback ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.19.19 - 2026-10-11
+
+### Added
+
+- Choose This Site, All or Cancel before clearing cache, cookies or history, and reset saved volume, zoom and tab previews alongside cache in the selected scope ([User Guide](docs/USER_GUIDE.md)).
+
+## 2.19.18 - 2026-10-11
+
+### Fixed
+
+- Preserve player volume for each page domain across fullscreen iframe sessions, episode changes and native video playback ([User Guide](docs/USER_GUIDE.md)).
+
 ## 2.19.17 - 2026-10-11
 
 ### Changed

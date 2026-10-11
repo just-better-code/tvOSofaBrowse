@@ -1427,40 +1427,46 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
     });
 }
 
-- (void)clearCacheAndReload {
+- (void)confirmClearData:(NSString *)kind {
+    BrowserWebView *webView = [self.host browserWebView];
+    NSURL *pageURL = webView.request.URL;
+    NSUInteger generation = webView.documentGeneration;
+    BOOL hasSite = pageURL.host.length && [@[@"http", @"https"] containsObject:pageURL.scheme.lowercaseString];
+    NSString *title = [NSString stringWithFormat:@"Clear %@?", kind];
+    NSString *message = hasSite
+        ? [NSString stringWithFormat:@"Choose this site (%@) or all sites.%@", pageURL.host,
+           [kind isEqualToString:@"History"] ? @" Favorites stay saved." :
+           [kind isEqualToString:@"Cache"] ? @" Also reset saved volume, zoom and tab previews." : @""]
+        : @"Open a website to use This Site.";
+    UIAlertController *alert = [self browserAlertControllerWithTitle:title message:message];
     __weak typeof(self) weakSelf = self;
-    [BrowserWebView clearCachedDataWithCompletion:^{
-        weakSelf.host.browserPreviousURL = @"";
-        [[weakSelf.host browserWebView] reload];
-    }];
-}
-
-- (void)clearCookiesAndReload {
-    __weak typeof(self) weakSelf = self;
-    [BrowserWebView clearCookiesWithCompletion:^{
-        weakSelf.host.browserPreviousURL = @"";
-        [[weakSelf.host browserWebView] reload];
-    }];
-}
-
-- (void)confirmClearHistory {
-    NSUInteger count = [[BrowserHistoryStore sharedStore] allVisits].count;
-    NSString *message = count > 0
-        ? [NSString stringWithFormat:@"This removes all %lu saved visits. Favorites stay saved.",
-                                     (unsigned long)count]
-        : @"History is already empty.";
-    UIAlertController *alert = [self browserAlertControllerWithTitle:@"Clear all history?" message:message];
-    if (count > 0) {
-        __weak typeof(self) weakSelf = self;
-        [alert addAction:[self browserActionWithTitle:@"Clear All History"
-                                              style:UIAlertActionStyleDestructive
-                                            handler:^(__unused UIAlertAction *action) {
-            [[BrowserHistoryStore sharedStore] deleteAllVisits];
+    void (^clear)(NSURL *) = ^(NSURL *siteURL) {
+        if ([kind isEqualToString:@"History"]) {
+            if (siteURL) [[BrowserHistoryStore sharedStore] deleteVisitsForSiteURL:siteURL];
+            else [[BrowserHistoryStore sharedStore] deleteAllVisits];
             [weakSelf.host browserRefreshNewTabPageSelectingGroup:@"history" index:0];
-        }]];
-    }
-    [alert addAction:[self browserActionWithTitle:count > 0 ? @"Cancel" : @"OK"
-                                          style:UIAlertActionStyleCancel handler:nil]];
+            return;
+        }
+        void (^reload)(void) = ^{
+            // Clear the selected scope even if navigation changed, but reload only the original document.
+            if (webView.documentGeneration != generation || ![webView.request.URL isEqual:pageURL]) return;
+            if ([weakSelf.host browserWebView] == webView) weakSelf.host.browserPreviousURL = @"";
+            [webView reload];
+        };
+        if ([kind isEqualToString:@"Cache"]) {
+            [weakSelf.preferencesStore clearSitePreferencesForURL:siteURL];
+            [weakSelf.host browserClearSitePreviewsAndSettingsForURL:siteURL];
+            [BrowserWebView clearCachedDataForURL:siteURL completion:reload];
+        }
+        else [BrowserWebView clearCookiesForURL:siteURL completion:reload];
+    };
+    UIAlertAction *siteAction = [self browserActionWithTitle:@"This Site" style:UIAlertActionStyleDestructive
+                                                   handler:^(__unused UIAlertAction *action) { clear(pageURL); }];
+    siteAction.enabled = hasSite;
+    [alert addAction:siteAction];
+    [alert addAction:[self browserActionWithTitle:@"All" style:UIAlertActionStyleDestructive
+                                        handler:^(__unused UIAlertAction *action) { clear(nil); }]];
+    [alert addAction:[self browserActionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
     [self.host browserPresentViewController:alert];
 }
 
@@ -1670,18 +1676,6 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
     }];
     item.toggleStateProvider = ^BOOL {
         return self.host.browserCursorMagnifierEnabled;
-    };
-    return item;
-}
-
-- (BrowserAdvancedMenuItem *)fullscreenVideoPlaybackToggleMenuItem {
-    BrowserAdvancedMenuItem *item = [self advancedMenuItemWithTitle:@"Full Screen Player"
-                                                               style:UIAlertActionStyleDefault
-                                                             handler:^{
-        self.host.browserFullscreenVideoPlaybackEnabled = !self.host.browserFullscreenVideoPlaybackEnabled;
-    }];
-    item.toggleStateProvider = ^BOOL {
-        return self.host.browserFullscreenVideoPlaybackEnabled;
     };
     return item;
 }
@@ -1904,17 +1898,17 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
     BrowserAdvancedMenuItem *clearCacheItem = [self advancedMenuItemWithTitle:@"Clear Cache"
                                                                          style:UIAlertActionStyleDestructive
                                                                        handler:^{
-        [self clearCacheAndReload];
+        [self confirmClearData:@"Cache"];
     }];
     BrowserAdvancedMenuItem *clearCookiesItem = [self advancedMenuItemWithTitle:@"Clear Cookies"
                                                                            style:UIAlertActionStyleDestructive
                                                                          handler:^{
-        [self clearCookiesAndReload];
+        [self confirmClearData:@"Cookies"];
     }];
     BrowserAdvancedMenuItem *clearHistoryItem = [self advancedMenuItemWithTitle:@"Clear History"
                                                                            style:UIAlertActionStyleDestructive
                                                                          handler:^{
-        [self confirmClearHistory];
+        [self confirmClearData:@"History"];
     }];
 
     return @[
@@ -1931,7 +1925,6 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
                                                items:@[
             [self tileItem:[self adBlockToggleMenuItem] title:@"Ad Block" symbol:@"hand.raised.fill"],
             [self tileItem:[self cursorMagnifierToggleMenuItem] title:@"Magnifier" symbol:@"magnifyingglass"],
-            [self tileItem:[self fullscreenVideoPlaybackToggleMenuItem] title:@"Full Screen Player" symbol:@"play.rectangle.fill"],
             [self tileItem:[self torrentKeepAliveToggleMenuItem] title:@"Keep Alive" symbol:@"waveform"],
             [self tileItem:[self userAgentModeMenuItem] title:@"Mobile Site" symbol:@"iphone"],
         ]],

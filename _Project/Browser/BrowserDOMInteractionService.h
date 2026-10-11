@@ -21,21 +21,8 @@ NS_ASSUME_NONNULL_BEGIN
                                 webView:(BrowserWebView *)webView
                              completion:(void (^)(BOOL isInteractive))completion;
 - (NSString *)javaScriptEscapedString:(NSString *)string;
-- (NSDictionary *)videoInfoAtDOMPoint:(CGPoint)point
-                               webView:(BrowserWebView *)webView;
 - (NSDictionary *)linkInfoAtDOMPoint:(CGPoint)point
                               webView:(BrowserWebView *)webView;
-- (NSDictionary *)directVideoInfoAtDOMPoint:(CGPoint)point
-                                     webView:(BrowserWebView *)webView;
-- (BOOL)isVideoActivationTargetAtDOMPoint:(CGPoint)point
-                                   webView:(BrowserWebView *)webView;
-- (BOOL)isVideoDismissTargetAtDOMPoint:(CGPoint)point
-                                webView:(BrowserWebView *)webView;
-- (NSDictionary *)primedVideoInfoAtDOMPoint:(CGPoint)point
-                                     webView:(BrowserWebView *)webView;
-- (NSDictionary *)activateVideoTargetAtDOMPoint:(CGPoint)point
-                                         webView:(BrowserWebView *)webView
-                                         timeout:(NSTimeInterval)timeout;
 
 @end
 

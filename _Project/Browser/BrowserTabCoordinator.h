@@ -55,6 +55,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)recreateActiveWebViewPreservingCurrentURL;
 - (void)setAdBlockEnabledForAllWebViews:(BOOL)enabled;
 - (void)captureSnapshotForCurrentTab;
+- (void)clearSitePreviewsAndSettingsForURL:(nullable NSURL *)URL;
 - (void)prepareTabOverviewThumbnails;
 - (void)persistSession;
 - (BOOL)canGoBack;

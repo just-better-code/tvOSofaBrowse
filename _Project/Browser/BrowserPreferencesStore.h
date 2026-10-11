@@ -15,7 +15,11 @@ NS_ASSUME_NONNULL_BEGIN
 // Page zoom belongs to the top-level HTTP(S) host, shared across its tabs.
 - (NSUInteger)pageZoomPercentForURL:(nullable NSURL *)URL;
 - (void)setPageZoomPercent:(NSUInteger)percent forURL:(nullable NSURL *)URL;
-@property (nonatomic) BOOL fullscreenVideoPlaybackEnabled;
+// Player volume belongs to the page host, including its embedded players.
+- (nullable NSNumber *)playerVolumeForURL:(nullable NSURL *)URL;
+- (void)setPlayerVolume:(double)volume forURL:(nullable NSURL *)URL;
+// nil clears the per-site preferences for every host.
+- (void)clearSitePreferencesForURL:(nullable NSURL *)URL;
 @property (nonatomic) BOOL adBlockEnabled;
 @property (nonatomic) BOOL cursorMagnifierEnabled;
 @property (nonatomic) BOOL dontShowHintsOnLaunch;

@@ -20,11 +20,52 @@
 #import "BrowserTabCoordinator.h"
 #import "BrowserTabOverviewController.h"
 #import "BrowserTorrentLibraryViewController.h"
+#import "BrowserVLCPlayerViewController.h"
 #import "BrowserTorrentManager.h"
 #import "BrowserUsageGuideViewController.h"
-#import "BrowserVideoPlaybackCoordinator.h"
 #import "BrowserViewModel.h"
 #import "ViewController.h"
+
+static BOOL BrowserMediaSameOrigin(NSURL *a, NSURL *b) {
+    NSInteger aPort = a.port ? a.port.integerValue : ([a.scheme.lowercaseString isEqualToString:@"https"] ? 443 : 80);
+    NSInteger bPort = b.port ? b.port.integerValue : ([b.scheme.lowercaseString isEqualToString:@"https"] ? 443 : 80);
+    return [a.scheme.lowercaseString isEqualToString:b.scheme.lowercaseString] &&
+        [a.host.lowercaseString isEqualToString:b.host.lowercaseString] && aPort == bPort;
+}
+static NSString *BrowserMediaReferrer(NSURL *document, NSURL *media, NSString *policy) {
+    if (!document.host.length || ![@[@"http", @"https"] containsObject:document.scheme.lowercaseString]) return nil;
+    BOOL sameOrigin = BrowserMediaSameOrigin(document, media);
+    BOOL downgrade = [document.scheme.lowercaseString isEqualToString:@"https"] && ![media.scheme.lowercaseString isEqualToString:@"https"];
+    if ([policy isEqualToString:@"no-referrer"] || ([policy isEqualToString:@"same-origin"] && !sameOrigin)) return nil;
+    BOOL full = NO;
+    if ([policy isEqualToString:@"unsafe-url"]) full = YES;
+    else if ([policy isEqualToString:@"no-referrer-when-downgrade"]) { if (downgrade) return nil; full = YES; }
+    else if ([policy isEqualToString:@"same-origin"]) full = YES;
+    else if ([policy isEqualToString:@"origin"]) full = NO;
+    else if ([policy isEqualToString:@"origin-when-cross-origin"]) full = sameOrigin;
+    else if ([policy isEqualToString:@"strict-origin"]) { if (downgrade) return nil; }
+    else { if (downgrade) return nil; full = sameOrigin; }
+    NSURLComponents *components = [NSURLComponents componentsWithURL:document resolvingAgainstBaseURL:NO];
+    components.user = nil; components.password = nil; components.fragment = nil;
+    if (!full) { components.path = @"/"; components.query = nil; }
+    return components.URL.absoluteString;
+}
+static NSArray<NSHTTPCookie *> *BrowserMediaCookies(NSArray<NSHTTPCookie *> *cookies, NSURL *URL) {
+    NSString *host = URL.host.lowercaseString;
+    NSString *path = URL.path.length ? URL.path : @"/";
+    return [cookies filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(NSHTTPCookie *cookie, NSDictionary *bindings) {
+        NSString *domain = cookie.domain.lowercaseString;
+        BOOL domainCookie = [domain hasPrefix:@"."];
+        if (domainCookie) domain = [domain substringFromIndex:1];
+        if (!domain.length || (![host isEqualToString:domain] &&
+            !(domainCookie && [host hasSuffix:[@"." stringByAppendingString:domain]]))) return NO;
+        NSString *cookiePath = cookie.path.length ? cookie.path : @"/";
+        BOOL matchesPath = [path isEqualToString:cookiePath] || ([path hasPrefix:cookiePath] &&
+            ([cookiePath hasSuffix:@"/"] || (path.length > cookiePath.length && [path characterAtIndex:cookiePath.length] == '/')));
+        return matchesPath && (!cookie.isSecure || [URL.scheme.lowercaseString isEqualToString:@"https"]) &&
+            (!cookie.expiresDate || [cookie.expiresDate timeIntervalSinceNow] > 0);
+    }]];
+}
 
 static NSString * const kBrowserGlobalSelectPressEndedNotification = @"BrowserGlobalSelectPressEndedNotification";
 static NSString * const kBrowserGlobalDirectionalPressBeganNotification = @"BrowserGlobalDirectionalPressBeganNotification";
@@ -37,7 +78,7 @@ static UIColor *kTextColor(void) {
     }
 }
 
-@interface ViewController () <BrowserMenuCoordinatorHost, BrowserPageActionCoordinatorHost, BrowserRemoteInputControllerHost, BrowserTabCoordinatorHost, BrowserTabOverviewControllerHost, BrowserVideoPlaybackCoordinatorHost>
+@interface ViewController () <BrowserMenuCoordinatorHost, BrowserPageActionCoordinatorHost, BrowserRemoteInputControllerHost, BrowserTabCoordinatorHost, BrowserTabOverviewControllerHost>
 
 @property (nonatomic) BrowserFullscreenMediaControlsController *fullscreenMediaControls;
 @property (nonatomic, weak) BrowserWebView *fullscreenMediaWebView;
@@ -54,7 +95,6 @@ static UIColor *kTextColor(void) {
 @property (nonatomic) BrowserSessionStore *sessionStore;
 @property (nonatomic) BrowserTabCoordinator *tabCoordinator;
 @property (nonatomic) BrowserTabOverviewController *tabOverviewController;
-@property (nonatomic) BrowserVideoPlaybackCoordinator *videoPlaybackCoordinator;
 @property (nonatomic) BrowserViewModel *viewModel;
 @property (nonatomic) BOOL displayedHintsOnLaunch;
 @property (nonatomic) BOOL scrollViewAllowBounces;
@@ -76,7 +116,6 @@ static UIColor *kTextColor(void) {
 
     self.viewModel = [BrowserViewModel new];
     self.viewModel.textFontSize = 100;
-    self.viewModel.fullscreenVideoPlaybackEnabled = self.preferencesStore.fullscreenVideoPlaybackEnabled;
 
     self.domInteractionService = [BrowserDOMInteractionService new];
     self.navigationService = [[BrowserNavigationService alloc] initWithPreferencesStore:self.preferencesStore];
@@ -90,8 +129,6 @@ static UIColor *kTextColor(void) {
         if (visible && owner.fullscreenMediaControls) [owner.view bringSubviewToFront:owner.remoteInputController.cursorView];
     };
     [self.view addSubview:self.remoteInputController.cursorView];
-    self.videoPlaybackCoordinator = [[BrowserVideoPlaybackCoordinator alloc] initWithHost:self
-                                                                      domInteractionService:self.domInteractionService];
     self.tabCoordinator = [[BrowserTabCoordinator alloc] initWithHost:self
                                                              viewModel:self.viewModel
                                                       preferencesStore:self.preferencesStore
@@ -108,8 +145,7 @@ static UIColor *kTextColor(void) {
                                                                            cursorView:self.remoteInputController.cursorView];
     self.pageActionCoordinator = [[BrowserPageActionCoordinator alloc] initWithHost:self
                                                                domInteractionService:self.domInteractionService
-                                                                   navigationService:self.navigationService
-                                                            videoPlaybackCoordinator:self.videoPlaybackCoordinator];
+                                                                   navigationService:self.navigationService];
 
     self.remoteInputController.cursorView.hidden = NO;
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleApplicationDidBecomeActive:)
@@ -137,6 +173,16 @@ static UIColor *kTextColor(void) {
                                                object:nil];
 
     [self.tabCoordinator restoreInitialStateOrCreateFirstTab];
+#if DEBUG
+    // A launch-only URL lets local device tools open a requested page without altering saved settings.
+    NSString *launchURLString = NSProcessInfo.processInfo.environment[@"BROWSER_OPEN_URL"];
+    NSURL *launchURL = launchURLString.length ? [NSURL URLWithString:launchURLString] : nil;
+    if (launchURL.host.length && [@[@"http", @"https"] containsObject:launchURL.scheme.lowercaseString]) {
+        BOOL opened = [self.tabCoordinator createNewTabWithRequest:[NSURLRequest requestWithURL:launchURL]];
+        self.displayedHintsOnLaunch = opened;
+        BrowserLog(@"[DebugLaunch] openURLAccepted=%d", opened);
+    }
+#endif
     self.remoteInputController.magnifierEnabled = self.preferencesStore.cursorMagnifierEnabled;
 }
 
@@ -351,15 +397,6 @@ static UIColor *kTextColor(void) {
     self.preferencesStore.textFontSize = self.viewModel.textFontSize;
 }
 
-- (BOOL)browserFullscreenVideoPlaybackEnabled {
-    return self.viewModel.fullscreenVideoPlaybackEnabled;
-}
-
-- (void)setBrowserFullscreenVideoPlaybackEnabled:(BOOL)browserFullscreenVideoPlaybackEnabled {
-    self.viewModel.fullscreenVideoPlaybackEnabled = browserFullscreenVideoPlaybackEnabled;
-    self.preferencesStore.fullscreenVideoPlaybackEnabled = browserFullscreenVideoPlaybackEnabled;
-}
-
 - (BOOL)browserCursorMagnifierEnabled {
     return self.preferencesStore.cursorMagnifierEnabled;
 }
@@ -464,6 +501,10 @@ static UIColor *kTextColor(void) {
     [self.tabCoordinator captureSnapshotForCurrentTab];
 }
 
+- (void)browserClearSitePreviewsAndSettingsForURL:(NSURL *)URL {
+    [self.tabCoordinator clearSitePreviewsAndSettingsForURL:URL];
+}
+
 - (void)browserRecreateActiveWebViewPreservingCurrentURL {
     [self.tabCoordinator recreateActiveWebViewPreservingCurrentURL];
 }
@@ -472,30 +513,8 @@ static UIColor *kTextColor(void) {
     [self.view bringSubviewToFront:self.remoteInputController.cursorView];
 }
 
-- (void)browserPlayVideoUnderCursorIfAvailable {
-    [self.videoPlaybackCoordinator playVideoUnderCursorIfAvailable];
-}
-
 - (void)browserSetAdBlockEnabled:(BOOL)enabled {
     [self.tabCoordinator setAdBlockEnabledForAllWebViews:enabled];
-}
-
-#pragma mark - BrowserVideoPlaybackCoordinatorHost
-
-- (BOOL)browserIsCursorModeEnabled {
-    return self.remoteInputController.cursorModeEnabled;
-}
-
-- (CGPoint)browserDOMCursorPoint {
-    return [self browserDOMPointForCursor];
-}
-
-- (UIViewController *)browserPresentedViewController {
-    return self.presentedViewController;
-}
-
-- (NSString *)browserCurrentPageTitle {
-    return self.webview.title;
 }
 
 #pragma mark - BrowserTabCoordinatorHost
@@ -866,6 +885,58 @@ static UIColor *kTextColor(void) {
 }
 
 #pragma mark - BrowserWebViewDelegate
+
+- (void)webView:(BrowserWebView *)webView didRequestVLCPlayback:(NSDictionary *)info {
+    NSString *session = info[@"session"];
+    NSUInteger generation = webView.documentGeneration;
+    NSData *sessionData = [NSJSONSerialization dataWithJSONObject:@[session] options:0 error:nil];
+    NSString *sessionJSON = [[NSString alloc] initWithData:sessionData encoding:NSUTF8StringEncoding];
+    if (!sessionJSON) return;
+    __weak typeof(self) weakSelf = self;
+    __weak BrowserWebView *weakWebView = webView;
+    void (^respond)(NSString *, double, double, BOOL) = ^(NSString *action, double time, double volume, BOOL muted) {
+        BrowserWebView *view = weakWebView;
+        if (!view || view.documentGeneration != generation) return;
+        NSData *data = [NSJSONSerialization dataWithJSONObject:@[session, action, @(time), @(volume), @(muted)] options:0 error:nil];
+        NSString *json = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+        if (json) [view evaluateJavaScript:[NSString stringWithFormat:@"window.__browserTVVLCResponse && window.__browserTVVLCResponse.apply(null,%@)", json]
+                         completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
+    };
+    NSString *script = [NSString stringWithFormat:@"window.__browserTVVLCRequestIsCurrent && window.__browserTVVLCRequestIsCurrent.apply(null,%@)", sessionJSON];
+    [BrowserWebView fetchCookiesWithCompletion:^(NSArray<NSHTTPCookie *> *cookies) {
+        BrowserWebView *currentView = weakWebView;
+        if (!currentView || currentView.documentGeneration != generation) return;
+        [currentView evaluateJavaScript:script completionHandler:^(NSString *result, NSError *error) {
+            typeof(self) owner = weakSelf;
+            BrowserWebView *view = weakWebView;
+            if (!owner || !view || view.documentGeneration != generation || view != owner.webview ||
+                owner.presentedViewController || owner.tabOverviewController.visible || error ||
+                ![result boolValue]) {
+                respond(@"rejected", 0, 0, NO); return;
+            }
+            NSURL *URL = [NSURL URLWithString:info[@"url"]];
+            NSURL *documentURL = [NSURL URLWithString:info[@"documentURL"]];
+            if (!documentURL.host.length || ![@[@"http", @"https"] containsObject:documentURL.scheme.lowercaseString]) documentURL = view.request.URL;
+            NSString *referrer = BrowserMediaReferrer(documentURL, URL, info[@"referrerPolicy"]);
+            NSString *agent = owner.preferencesStore.userAgent;
+            NSMutableDictionary *headers = [NSMutableDictionary dictionary];
+            if (agent.length && [agent rangeOfCharacterFromSet:NSCharacterSet.newlineCharacterSet].location == NSNotFound) headers[@"User-Agent"] = agent;
+            if (referrer.length) headers[@"Referer"] = referrer;
+            BOOL anonymous = [info[@"crossOrigin"] isEqualToString:@"anonymous"] && !BrowserMediaSameOrigin(documentURL, URL);
+            NSArray *mediaCookies = anonymous ? @[] : BrowserMediaCookies(cookies, URL);
+            NSNumber *savedVolume = [owner.preferencesStore playerVolumeForURL:view.request.URL];
+            BrowserVLCPlayerViewController *player = [[BrowserVLCPlayerViewController alloc]
+                initWithWebVideoURL:URL pageURL:view.request.URL title:info[@"title"]
+                currentTime:[info[@"currentTime"] doubleValue]
+                volume:[savedVolume ?: info[@"volume"] doubleValue] muted:[info[@"muted"] boolValue]
+                requestHeaders:headers cookies:mediaCookies];
+            player.webVideoDidClose = ^(double time, double volume, BOOL muted) { respond(@"closed", time, volume, muted); };
+            respond(@"accepted", 0, 0, NO);
+            [owner removeFullscreenMediaControls];
+            [owner browserPresentViewController:player];
+        }];
+    }];
+}
 
 - (BOOL)webView:(id)webView shouldCreateNewTabWithRequest:(NSURLRequest *)request navigationType:(NSInteger)navigationType {
     (void)webView;

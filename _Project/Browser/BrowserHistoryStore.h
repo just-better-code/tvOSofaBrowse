@@ -8,6 +8,7 @@
 - (NSArray<NSDictionary *> *)allVisits;
 - (void)deleteVisitsWithIdentifiers:(NSArray<NSNumber *> *)identifiers;
 - (void)deleteAllVisits;
+- (void)deleteVisitsForSiteURL:(NSURL *)URL;
 - (void)deleteVisitsForURLString:(NSString *)URLString;
 - (NSArray<NSArray<NSString *> *> *)favorites;
 - (void)saveFavorites:(NSArray<NSArray<NSString *> *> *)favorites;

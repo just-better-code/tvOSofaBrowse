@@ -9,6 +9,102 @@ var mediaRequestSerial = 0;
 var mediaAcceptedSerial = 0;
 var mediaActive = false;
 var mediaSuspended = false;
+var mediaSavedVolume = null;
+var mediaVolumeReady = false;
+var mediaVolumeVideos = new WeakMap();
+var mediaVLCRequests = Object.create(null);
+var mediaVLCSerial = 0;
+function directVideoSource(video) {
+    var source = video.currentSrc || video.src;
+    if (!source) {
+        var sources = Array.prototype.slice.call(video.querySelectorAll('source[src]'));
+        var candidate = sources.find(function(item) { return !item.type || video.canPlayType(item.type); }) || sources[0];
+        source = candidate && candidate.src;
+    }
+    if (!source) return null;
+    try { source = new URL(source, document.baseURI); } catch (error) { return null; }
+    return /^https?:$/.test(source.protocol) && source.hostname && source.href.length <= 8192 ? source.href : null;
+}
+window.__browserTVOpenControlledVideo = function(element) {
+    if (!element || element.tagName !== 'VIDEO' || !element.controls || !directVideoSource(element)) return false;
+    enterFullscreen(element);
+    return true;
+};
+function publishVLCRequest(id, info) {
+    if (window !== window.top) {
+        window.parent.postMessage({browserTVVLCRequest: secret, id: id, info: info}, '*');
+    } else {
+        try { window.webkit.messageHandlers.browserFullscreenMedia.postMessage(
+            Object.assign({token: nativeToken, session: id, vlcRequest: true}, info)); } catch (error) {}
+    }
+}
+function requestVLCFullscreen(element) {
+    var videos = element.tagName === 'VIDEO' ? [element] : Array.prototype.slice.call(element.querySelectorAll('video'));
+    var video = videos.find(function(v) { return !v.paused && !v.ended; }) || videos[0];
+    if (!video) return;
+    var source = directVideoSource(video);
+    if (!source) return;
+    var id = secret + ':' + Date.now() + ':vlc:' + (++mediaVLCSerial);
+    mediaVLCRequests[id] = {video: video, url: source};
+    publishVLCRequest(id, {url: source, title: document.title.slice(0, 512),
+        currentTime: Number.isFinite(video.currentTime) ? video.currentTime : 0,
+        volume: video.volume, muted: video.muted, documentURL: location.href,
+        referrerPolicy: video.referrerPolicy || document.referrerPolicy ||
+            ((document.querySelector('meta[name="referrer"]') || {}).content) || 'strict-origin-when-cross-origin',
+        crossOrigin: video.crossOrigin || ''});
+}
+window.__browserTVVLCRequestIsCurrent = function(id) {
+    return !!mediaVLCRequests[id] && !!(fullscreenTarget || fullscreenFrame);
+};
+window.__browserTVVLCResponse = function(id, action, time, volume, muted) {
+    var request = mediaVLCRequests[id];
+    if (!request) return false;
+    if (request.frame) {
+        request.frame.postMessage({browserTVVLCResponse: secret, id: id, action: action,
+            time: time, volume: volume, muted: muted}, '*');
+    } else if (request.video && request.video.isConnected) {
+        var video = request.video;
+        if (action === 'accepted') video.pause();
+        if (action === 'closed' && (video.currentSrc || video.src) === request.url) {
+            try {
+                if (Number.isFinite(time)) video.currentTime = Math.max(0, time);
+                if (Number.isFinite(volume)) video.volume = Math.max(0, Math.min(1, volume));
+                video.muted = !!muted;
+            } catch (error) {}
+        }
+    }
+    if (action === 'accepted') window.__browserTVExitFullscreen();
+    else delete mediaVLCRequests[id];
+    return true;
+};
+window.addEventListener('message', function(event) {
+    var data = event.data;
+    if (!data) return;
+    if (data.browserTVVLCRequest === secret) {
+        var frame = mediaFrame();
+        if (!frame || event.source !== frame.contentWindow || typeof data.id !== 'string' || data.id.length > 128 ||
+            !data.info || typeof data.info.url !== 'string' || data.info.url.length > 8192) return;
+        mediaVLCRequests[data.id] = {frame: event.source};
+        publishVLCRequest(data.id, data.info);
+    } else if (window !== window.top && event.source === window.parent && data.browserTVVLCResponse === secret) {
+        window.__browserTVVLCResponse(data.id, data.action, data.time, data.volume, data.muted);
+    }
+});
+document.addEventListener('loadedmetadata', function(event) {
+    if (event.target && event.target.tagName === 'VIDEO') mediaVolumeVideos.delete(event.target);
+}, true);
+function restoreMediaVideoVolume(preference) {
+    var v = mediaVideo();
+    var value = preference && preference.volume;
+    if (!v || !Number.isFinite(value) || value < 0 || value > 1) return;
+    var source = v.currentSrc || v.src || '';
+    var restored = mediaVolumeVideos.get(v);
+    if (restored && restored.source === source && restored.session === preference.session) return;
+    try {
+        v.volume = value;
+        mediaVolumeVideos.set(v, {source: source, session: preference.session});
+    } catch (error) {}
+}
 function mediaFrame() {
     return fullscreenFrame || (fullscreenTarget && fullscreenTarget.tagName === 'IFRAME' ? fullscreenTarget : null);
 }
@@ -53,11 +149,12 @@ function publishNativeMedia(state) {
             Object.assign({token: nativeToken, session: mediaSessionID, active: mediaActive}, state || {}));
     } catch (error) {}
 }
-function requestMediaState(request) {
+function requestMediaState(request, volume) {
     var frame = mediaFrame();
     if (frame && frame.isConnected && frame.contentWindow) {
-        frame.contentWindow.postMessage({browserTVFullscreenCommand: secret, action: 'media', command: 'status', request: request}, '*');
+        frame.contentWindow.postMessage({browserTVFullscreenCommand: secret, action: 'media', command: 'status', value: volume, request: request}, '*');
     } else if (window !== window.top) {
+        restoreMediaVideoVolume(volume);
         window.parent.postMessage({browserTVMediaState: secret, request: request, state: mediaState()}, '*');
     }
 }
@@ -69,11 +166,13 @@ function refreshFullscreenMedia() {
     clearInterval(mediaTimer); mediaTimer = null;
     mediaObservedFrame = active ? frame : null;
     mediaActive = active;
+    mediaVolumeReady = false;
     mediaFrameState = null; mediaFrameStateTime = 0;
     mediaSessionID = active ? secret + ':' + Date.now() + ':' + (++mediaRequestSerial) : '';
     mediaAcceptedSerial = mediaRequestSerial;
     publishNativeMedia();
     if (!active) return;
+    publishNativeMedia({loadVolume: true});
     function tick() {
         if (!frame.isConnected) {
             window.__browserTVExitFullscreen();
@@ -83,7 +182,8 @@ function refreshFullscreenMedia() {
         if (mediaFrameState && Date.now() - mediaFrameStateTime > 2000) {
             mediaFrameState = null; publishNativeMedia();
         }
-        requestMediaState(++mediaRequestSerial);
+        if (mediaVolumeReady) requestMediaState(++mediaRequestSerial, {volume: mediaSavedVolume, session: mediaSessionID});
+        else publishNativeMedia({loadVolume: true});
     }
     tick(); mediaTimer = setInterval(tick, 500);
 }
@@ -95,11 +195,12 @@ function receiveMediaState(event, data) {
     } else if (mediaActive && Number.isInteger(data.request) && data.request > mediaAcceptedSerial && data.request <= mediaRequestSerial) {
         mediaAcceptedSerial = data.request;
         mediaFrameState = data.state; mediaFrameStateTime = Date.now();
+        if (data.state.canVolume && Number.isFinite(data.state.volume)) mediaSavedVolume = data.state.volume;
         publishNativeMedia(data.state);
     }
 }
 function performMediaCommand(command, value, request) {
-    if (command === 'status') { requestMediaState(request); return true; }
+    if (command === 'status') { requestMediaState(request, value); return true; }
     // Hardware media actions may belong to the embedding page, not the video frame.
     var trackAction = command === 'previous' ? 'previoustrack' : command === 'next' ? 'nexttrack' : null;
     if (trackAction && mediaHandlers[trackAction]) {
@@ -107,7 +208,7 @@ function performMediaCommand(command, value, request) {
     }
     var frame = mediaFrame();
     if (frame && frame.isConnected && frame.contentWindow) {
-        frame.contentWindow.postMessage({browserTVFullscreenCommand: secret, action: 'media', command: command, value: value}, '*');
+        frame.contentWindow.postMessage({browserTVFullscreenCommand: secret, action: 'media', command: command, value: value, request: request}, '*');
         return true;
     }
     var v = mediaVideo();
@@ -115,7 +216,11 @@ function performMediaCommand(command, value, request) {
     var action, details = {};
     if (command === 'volume' && Number.isFinite(value) && Math.abs(value) <= 1) {
         if (!v) return false;
-        try { v.volume = Math.max(0, Math.min(1, Math.round((v.volume + value) * 100) / 100)); return true; }
+        try {
+            v.volume = Math.max(0, Math.min(1, Math.round((v.volume + value) * 100) / 100));
+            requestMediaState(request);
+            return true;
+        }
         catch (error) { return false; }
     }
     if (command === 'mute') {
@@ -156,12 +261,38 @@ window.__browserTVSetFullscreenMediaSuspended = function(suspended) {
     if (mediaSuspended === !!suspended) return;
     mediaSuspended = !!suspended; refreshFullscreenMedia();
 };
+window.__browserTVResetMediaVolume = function() {
+    mediaSavedVolume = 1;
+    mediaVolumeVideos = new WeakMap();
+    mediaFrameState = null;
+    mediaAcceptedSerial = ++mediaRequestSerial;
+    function reset(root) {
+        Array.prototype.forEach.call(root.querySelectorAll('video'), function(video) {
+            try { video.volume = 1; } catch (error) {}
+        });
+        Array.prototype.forEach.call(root.querySelectorAll('*'), function(element) {
+            if (element.tagName === 'IFRAME' && element.contentWindow) {
+                element.contentWindow.postMessage({browserTVFullscreenCommand: secret, action: 'resetVolume'}, '*');
+            }
+            if (element.shadowRoot) reset(element.shadowRoot);
+        });
+    }
+    reset(document);
+};
+window.__browserTVRestoreFullscreenVolume = function(session, volume) {
+    if (window !== window.top || !mediaActive || session !== mediaSessionID || mediaVolumeReady) return;
+    mediaSavedVolume = Number.isFinite(volume) ? volume : null;
+    mediaVolumeReady = true;
+    requestMediaState(++mediaRequestSerial, {volume: mediaSavedVolume, session: mediaSessionID});
+};
 window.__browserTVSendFullscreenMediaCommand = function(command, value, session) {
     if (window !== window.top || mediaSuspended || !mediaActive || session !== mediaSessionID) return false;
     if (command === 'exit') return window.__browserTVExitFullscreen();
-    return performMediaCommand(command, value);
+    if (command === 'volume' && !mediaVolumeReady) return false;
+    return performMediaCommand(command, value, ++mediaRequestSerial);
 };
 window.addEventListener('pagehide', function() {
+    mediaVLCRequests = Object.create(null);
     clearInterval(mediaTimer); mediaTimer = null;
     mediaActive = false; publishNativeMedia();
     if (fullscreenTarget || fullscreenFrame) sendFullscreenToParent('exit');

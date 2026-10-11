@@ -11,6 +11,7 @@ FOUNDATION_EXPORT NSString * const BrowserAdBlockSourceStatusDidChangeNotificati
 - (BOOL)webView:(id _Nonnull)webView shouldCreateNewTabWithRequest:(NSURLRequest * _Nullable)request navigationType:(NSInteger)navigationType;
 - (BOOL)webView:(id _Nonnull)webView shouldImportTorrentResponse:(NSURLResponse * _Nonnull)response request:(NSURLRequest * _Nullable)request;
 - (void)webView:(id)webView didUpdateFullscreenMediaState:(NSDictionary *)state;
+- (void)webView:(id)webView didRequestVLCPlayback:(NSDictionary *)info;
 - (void)webViewDidStartLoad:(id _Nonnull)webView;
 - (void)webViewDidFinishLoad:(id _Nonnull)webView;
 - (void)webViewDidChangeNavigationHistory:(id _Nonnull)webView;
@@ -56,6 +57,7 @@ FOUNDATION_EXPORT NSString * const BrowserAdBlockSourceStatusDidChangeNotificati
 - (void)setUserAgent:(NSString * _Nullable)userAgent;
 - (void)pauseAllMediaPlayback;
 - (void)setFullscreenMediaControlsSuspended:(BOOL)suspended;
+- (void)resetSitePlaybackPreferences;
 // YES means the system route was attempted, not that the player switched tracks.
 - (BOOL)sendSystemMediaTrackCommand:(BOOL)nextTrack;
 - (void)captureSnapshotWithCompletion:(void (^)(UIImage * _Nullable snapshot))completion;
@@ -66,9 +68,12 @@ FOUNDATION_EXPORT NSString * const BrowserAdBlockSourceStatusDidChangeNotificati
 
 + (nullable NSData *)cookieDataRepresentation;
 + (NSArray<NSHTTPCookie *> * _Nonnull)allCookies;
++ (void)fetchCookiesWithCompletion:(void (^)(NSArray<NSHTTPCookie *> *cookies))completion;
 + (void)restoreCookiesFromData:(NSData * _Nullable)cookieData;
 + (void)clearCachedDataWithCompletion:(void (^ _Nullable)(void))completion;
++ (void)clearCachedDataForURL:(nullable NSURL *)URL completion:(void (^ _Nullable)(void))completion;
 + (void)clearCookiesWithCompletion:(void (^ _Nullable)(void))completion;
++ (void)clearCookiesForURL:(nullable NSURL *)URL completion:(void (^ _Nullable)(void))completion;
 + (void)resetWebsiteDataWithCompletion:(void (^ _Nullable)(void))completion;
 + (NSArray<NSDictionary<NSString *, NSString *> *> *)adBlockSources;
 + (BOOL)adBlockSourceEnabled:(NSString *)identifier;
