@@ -77,6 +77,7 @@ static CGFloat const kTabCardURLHeight = 64.0;
 
 @property (nonatomic) UIView *cardBackgroundView;
 @property (nonatomic) UIImageView *thumbnailView;
+@property (nonatomic) UILabel *previewPlaceholderLabel;
 @property (nonatomic) UIView *addIconBackdropView;
 @property (nonatomic) UIImageView *addIconView;
 @property (nonatomic) UILabel *titleLabel;
@@ -109,6 +110,14 @@ static CGFloat const kTabCardURLHeight = 64.0;
         _thumbnailView.contentMode = UIViewContentModeScaleAspectFill;
         _thumbnailView.clipsToBounds = YES;
         [_cardBackgroundView addSubview:_thumbnailView];
+
+        _previewPlaceholderLabel = [[UILabel alloc] initWithFrame:CGRectMake(30.0, 0.0, kTabCardWidth - 60.0, kTabCardThumbnailHeight)];
+        _previewPlaceholderLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.72];
+        _previewPlaceholderLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleTitle2];
+        _previewPlaceholderLabel.textAlignment = NSTextAlignmentCenter;
+        _previewPlaceholderLabel.numberOfLines = 2;
+        _previewPlaceholderLabel.lineBreakMode = NSLineBreakByTruncatingMiddle;
+        [_cardBackgroundView addSubview:_previewPlaceholderLabel];
 
         _addIconBackdropView = [[UIView alloc] initWithFrame:CGRectMake((kTabCardWidth - 144.0) / 2.0, (kTabCardHeight - 144.0) / 2.0, 144.0, 144.0)];
         _addIconBackdropView.backgroundColor = UIColor.clearColor;
@@ -150,6 +159,7 @@ static CGFloat const kTabCardURLHeight = 64.0;
 - (void)configureAsAddCard {
     self.addCard = YES;
     self.activeTab = NO;
+    self.previewPlaceholderLabel.hidden = YES;
     self.thumbnailView.hidden = YES;
     self.thumbnailView.image = nil;
     self.addIconBackdropView.hidden = NO;
@@ -164,6 +174,9 @@ static CGFloat const kTabCardURLHeight = 64.0;
     self.activeTab = activeTab;
     self.thumbnailView.hidden = NO;
     self.thumbnailView.image = tab.snapshotImage;
+    NSString *domain = [NSURL URLWithString:tab.URLString].host;
+    self.previewPlaceholderLabel.text = domain.length > 0 ? domain : @"New Tab";
+    self.previewPlaceholderLabel.hidden = tab.snapshotImage != nil;
     self.addIconBackdropView.hidden = YES;
     self.titleLabel.text = tab.title.length > 0 ? tab.title : @"New Tab";
     self.urlLabel.text = tab.URLString.length > 0 ? tab.URLString : @"Home page";

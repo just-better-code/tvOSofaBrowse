@@ -26,6 +26,9 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
 @property (nonatomic) BOOL scrollViewAllowBounces;
 @property (nonatomic) NSMutableDictionary<NSString *, BrowserWebView *> *webViewsByTabIdentifier;
 @property (nonatomic) UIView *thumbnailStagingView;
+@property (nonatomic, strong) dispatch_queue_t thumbnailCacheQueue;
+@property (nonatomic) NSMutableSet<NSString *> *pendingThumbnailReads;
+@property (nonatomic) NSMutableSet<NSString *> *pendingSnapshots;
 @property (nonatomic, readwrite, nullable) BrowserWebView *activeWebView;
 @property (nonatomic, copy) NSString *pendingNewTabSelectionGroup;
 @property (nonatomic) NSUInteger pendingNewTabSelectionIndex;
@@ -61,6 +64,9 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
         _webViewDelegate = webViewDelegate;
         _scrollViewAllowBounces = scrollViewAllowBounces;
         _webViewsByTabIdentifier = [NSMutableDictionary dictionary];
+        _thumbnailCacheQueue = dispatch_queue_create("browser.tab-thumbnails", DISPATCH_QUEUE_SERIAL);
+        _pendingThumbnailReads = [NSMutableSet set];
+        _pendingSnapshots = [NSMutableSet set];
         [_preferencesStore ensureUserAgentConsistency];
         [self ensureThumbnailStagingView];
     }
@@ -189,7 +195,9 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
 }
 
 - (void)restoreInitialStateOrCreateFirstTab {
-    if (![self restoreBrowserSession]) {
+    BOOL restored = [self restoreBrowserSession];
+    [self pruneThumbnailCache];
+    if (!restored) {
         [self createNewTabLoadingHomePage:NO];
         return;
     }
@@ -460,30 +468,116 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
     tab.needsScrollRestore = NO;
 }
 
-- (void)captureSnapshotForTab:(BrowserTabViewModel *)tab {
-    if (tab == nil) {
-        return;
-    }
+// Disposable previews live outside the session and history stores.
+- (NSURL *)thumbnailCacheDirectory {
+    NSURL *caches = [[NSFileManager defaultManager] URLsForDirectory:NSCachesDirectory
+                                                         inDomains:NSUserDomainMask].firstObject;
+    return [caches URLByAppendingPathComponent:@"TabThumbnails" isDirectory:YES];
+}
 
-    if (!tab.needsScrollRestore) {
-        [self updateStoredScrollOffsetForTab:tab];
-    }
+- (NSURL *)thumbnailCacheURLForTab:(BrowserTabViewModel *)tab {
+    // Session identifiers are normally UUIDs; never use an arbitrary saved path component.
+    NSString *identifier = [[NSUUID alloc] initWithUUIDString:tab.identifier].UUIDString;
+    return identifier != nil ? [[self thumbnailCacheDirectory]
+        URLByAppendingPathComponent:[identifier stringByAppendingPathExtension:@"plist"]] : nil;
+}
 
-    BrowserWebView *webView = self.webViewsByTabIdentifier[tab.identifier];
-    if (webView == nil || CGRectIsEmpty(webView.bounds)) {
-        return;
-    }
-
+- (void)loadCachedThumbnailForTab:(BrowserTabViewModel *)tab {
+    if (tab.snapshotImage != nil || [self.pendingThumbnailReads containsObject:tab.identifier]) return;
+    NSURL *cacheURL = [self thumbnailCacheURLForTab:tab];
+    if (cacheURL == nil) return;
+    NSString *URLString = [tab.URLString copy] ?: @"";
+    [self.pendingThumbnailReads addObject:tab.identifier];
     __weak typeof(self) weakSelf = self;
-    [webView captureSnapshotWithCompletion:^(UIImage *snapshotImage) {
+    dispatch_async(self.thumbnailCacheQueue, ^{
+        NSDictionary *entry = [NSDictionary dictionaryWithContentsOfURL:cacheURL];
+        NSData *data = [entry[@"image"] isKindOfClass:NSData.class] ? entry[@"image"] : nil;
+        UIImage *image = [entry[@"URL"] isEqual:URLString] && data != nil
+            ? [UIImage imageWithData:data] : nil;
         dispatch_async(dispatch_get_main_queue(), ^{
             BrowserTabCoordinator *strongSelf = weakSelf;
-            if (strongSelf == nil || snapshotImage == nil ||
-                strongSelf.webViewsByTabIdentifier[tab.identifier] != webView) {
-                return;
-            }
-            tab.snapshotImage = snapshotImage;
+            if (strongSelf == nil) return;
+            [strongSelf.pendingThumbnailReads removeObject:tab.identifier];
+            if (image == nil || tab.snapshotImage != nil || ![tab.URLString isEqual:URLString] ||
+                [strongSelf.viewModel.tabs indexOfObjectIdenticalTo:tab] == NSNotFound) return;
+            tab.snapshotImage = image;
             [strongSelf.host browserTabCoordinatorSnapshotDidUpdateForTab:tab];
+        });
+    });
+}
+
+- (void)removeCachedThumbnailForTab:(BrowserTabViewModel *)tab {
+    NSURL *cacheURL = [self thumbnailCacheURLForTab:tab];
+    if (cacheURL == nil) return;
+    dispatch_async(self.thumbnailCacheQueue, ^{
+        [[NSFileManager defaultManager] removeItemAtURL:cacheURL error:nil];
+    });
+}
+
+- (void)pruneThumbnailCache {
+    NSURL *directory = [self thumbnailCacheDirectory];
+    if (directory == nil) return;
+    NSMutableSet<NSString *> *retainedNames = [NSMutableSet set];
+    for (BrowserTabViewModel *tab in self.viewModel.tabs) {
+        NSString *name = [self thumbnailCacheURLForTab:tab].lastPathComponent;
+        if (name != nil) [retainedNames addObject:name];
+    }
+    dispatch_async(self.thumbnailCacheQueue, ^{
+        NSFileManager *manager = [NSFileManager defaultManager];
+        for (NSURL *URL in [manager contentsOfDirectoryAtURL:directory
+                                includingPropertiesForKeys:nil options:0 error:nil]) {
+            if (![retainedNames containsObject:URL.lastPathComponent])
+                [manager removeItemAtURL:URL error:nil];
+        }
+    });
+}
+
+- (void)captureSnapshotForTab:(BrowserTabViewModel *)tab {
+    if (tab == nil || [self.pendingSnapshots containsObject:tab.identifier]) return;
+    if (!tab.needsScrollRestore) [self updateStoredScrollOffsetForTab:tab];
+    BrowserWebView *webView = self.webViewsByTabIdentifier[tab.identifier];
+    if (webView == nil || webView.loading || CGRectIsEmpty(webView.bounds) ||
+        [tab.URLString isEqualToString:kBrowserNewTabURL]) return;
+
+    NSUInteger generation = webView.documentGeneration;
+    NSString *URLString = [tab.URLString copy] ?: @"";
+    [self.pendingSnapshots addObject:tab.identifier];
+    __weak typeof(self) weakSelf = self;
+    [webView captureSnapshotInRect:webView.bounds width:584.0 completion:^(UIImage *snapshotImage) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            BrowserTabCoordinator *strongSelf = weakSelf;
+            if (strongSelf == nil) return;
+            [strongSelf.pendingSnapshots removeObject:tab.identifier];
+            if (snapshotImage == nil || snapshotImage.size.width <= 0 || snapshotImage.size.height <= 0 ||
+                strongSelf.webViewsByTabIdentifier[tab.identifier] != webView ||
+                webView.documentGeneration != generation || ![tab.URLString isEqual:URLString] ||
+                [strongSelf.viewModel.tabs indexOfObjectIdenticalTo:tab] == NSNotFound) return;
+
+            // Keep memory and disk previews at the card's pixel size, regardless of display scale.
+            CGSize size = CGSizeMake(584.0, 347.0);
+            UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat defaultFormat];
+            format.scale = 1.0;
+            format.opaque = YES;
+            UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:size format:format];
+            UIImage *thumbnail = [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
+                [UIColor.blackColor setFill];
+                [context fillRect:(CGRect){CGPointZero, size}];
+                CGFloat scale = MAX(size.width / snapshotImage.size.width, size.height / snapshotImage.size.height);
+                CGSize scaled = CGSizeMake(snapshotImage.size.width * scale, snapshotImage.size.height * scale);
+                [snapshotImage drawInRect:CGRectMake((size.width - scaled.width) / 2.0,
+                    (size.height - scaled.height) / 2.0, scaled.width, scaled.height)];
+            }];
+            tab.snapshotImage = thumbnail;
+            [strongSelf.host browserTabCoordinatorSnapshotDidUpdateForTab:tab];
+            NSURL *cacheURL = [strongSelf thumbnailCacheURLForTab:tab];
+            if (cacheURL == nil) return;
+            dispatch_async(strongSelf.thumbnailCacheQueue, ^{
+                NSData *data = UIImageJPEGRepresentation(thumbnail, 0.8);
+                if (data == nil) return;
+                [[NSFileManager defaultManager] createDirectoryAtURL:cacheURL.URLByDeletingLastPathComponent
+                    withIntermediateDirectories:YES attributes:nil error:nil];
+                [@{@"URL": URLString, @"image": data} writeToURL:cacheURL atomically:YES];
+            });
         });
     }];
 }
@@ -493,28 +587,11 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
 }
 
 - (void)prepareTabOverviewThumbnails {
-    [self updateThumbnailStagingViewFrame];
-
+    // Opening the overview must never create a web view or load a saved page.
     for (BrowserTabViewModel *tab in self.viewModel.tabs) {
-        BrowserWebView *webView = self.webViewsByTabIdentifier[tab.identifier];
-        if (tab == self.activeTab) {
-            [self captureSnapshotForTab:tab];
-            continue;
-        }
-
-        if (webView == nil) {
-            webView = [self createConfiguredWebView];
-            self.webViewsByTabIdentifier[tab.identifier] = webView;
-        }
-
-        [self parkWebViewForThumbnailing:webView];
-        if (webView.request == nil) {
-            [self loadStoredContentForTab:tab webView:webView fallbackToHomePage:NO];
-            continue;
-        }
-
-        [self captureSnapshotForTab:tab];
+        [self loadCachedThumbnailForTab:tab];
     }
+    [self captureSnapshotForCurrentTab];
 }
 
 - (void)createNewTabLoadingHomePage:(BOOL)loadHomePage {
@@ -576,6 +653,7 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
 
     [self.viewModel switchToTabAtIndex:tabIndex];
     if (discardCurrentTab) {
+        [self removeCachedThumbnailForTab:currentTab];
         NSInteger emptyTabIndex = [self.viewModel.tabs indexOfObjectIdenticalTo:currentTab];
         [self.webViewsByTabIdentifier[currentTab.identifier] removeFromSuperview];
         [self.webViewsByTabIdentifier removeObjectForKey:currentTab.identifier];
@@ -623,6 +701,7 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
 
     BOOL closingActiveTab = tabIndex == self.viewModel.activeTabIndex;
     BrowserTabViewModel *tab = self.viewModel.tabs[tabIndex];
+    [self removeCachedThumbnailForTab:tab];
     [self.webViewsByTabIdentifier[tab.identifier] removeFromSuperview];
     [self.webViewsByTabIdentifier removeObjectForKey:tab.identifier];
     [self.viewModel removeTabAtIndex:tabIndex];

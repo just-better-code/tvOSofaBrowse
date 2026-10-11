@@ -68,6 +68,7 @@ graphify-out/
 # Locally downloaded tvOS torrent toolchain (see scripts/bootstrap-torrent-deps.sh)
 .deps/
 .data/
+.codex/
 
 # Personal, machine-local agent notes
 AGENTS.local.md

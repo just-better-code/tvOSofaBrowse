@@ -73,6 +73,8 @@ The magnifier is also available through Settings → Magnifier. It turns off aft
 
 The native New Tab page shows **Favorites** and recent history across the available screen width. Center opens an entry. **Play/Pause or Hold Center opens the selected entry's options**: Favorite actions or recent-visit actions.
 
+The overview uses cached previews without loading inactive websites. A tab without a cached preview shows its domain and title; select it to load the page. Previews may be cleared by tvOS without removing saved tabs or history.
+
 The session saves ordinary tabs, the active tab and each tab's Back/Forward list. An empty New Tab is temporary and is not restored as an ordinary page.
 
 If the active webpage's WebKit process terminates while the app is in the foreground, the browser automatically reloads it. It allows two automatic attempts during a burst of crashes, then stops to avoid a reload loop. After 60 seconds without another termination, automatic attempts are available again. You can still use Reload manually. Background tabs are not automatically reloaded.
