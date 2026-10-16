@@ -173,25 +173,31 @@ static NSArray<NSString *> *BrowserAdBlockRuleChunks(BOOL includeOnlineHosts, NS
     NSMutableArray<NSDictionary *> *rules = [NSMutableArray arrayWithCapacity:25000];
     NSCharacterSet *invalidCharacters = [[NSCharacterSet characterSetWithCharactersInString:
         @"abcdefghijklmnopqrstuvwxyz0123456789.-"] invertedSet];
+    NSMutableArray<NSString *> *DNSAlternatives = [NSMutableArray arrayWithCapacity:32];
+    BOOL (^appendDNSGroup)(void) = ^BOOL {
+        if (DNSAlternatives.count == 0) return YES;
+        // Each alternative is a complete destination host suffix. Grouping
+        // keeps the original third-party and subdomain behavior while giving
+        // WebKit far fewer individual regex rules to compile.
+        NSString *URLFilter = [NSString stringWithFormat:@"^https?://([a-z0-9-]+\\.)*(%@)(:[0-9]+)?/",
+            [DNSAlternatives componentsJoinedByString:@"|"]];
+        [rules addObject:@{@"trigger":@{@"url-filter":URLFilter, @"load-type":@[@"third-party"]},
+                           @"action":@{@"type":@"block"}}];
+        [DNSAlternatives removeAllObjects];
+        if (rules.count < 25000) return YES;
+        NSData *data = [NSJSONSerialization dataWithJSONObject:rules options:0 error:nil];
+        if (!data) return NO;
+        [chunks addObject:[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]];
+        [sourceIDs addObject:@"dns"];
+        [rules removeAllObjects];
+        return YES;
+    };
     for (NSString *domain in domains) {
         if ([domain rangeOfCharacterFromSet:invalidCharacters].location != NSNotFound) continue;
-        NSString *escapedDomain = [domain stringByReplacingOccurrencesOfString:@"." withString:@"\\."];
-        NSString *URLFilter = [NSString stringWithFormat:@"^https?://([a-z0-9-]+\\.)*%@(:[0-9]+)?/", escapedDomain];
-        [rules addObject:@{
-            @"trigger": @{
-                @"url-filter": URLFilter,
-                @"load-type": @[@"third-party"]
-            },
-            @"action": @{@"type": @"block"}
-        }];
-        if (rules.count == 25000) {
-            NSData *data = [NSJSONSerialization dataWithJSONObject:rules options:0 error:nil];
-            if (data == nil) return nil;
-            [chunks addObject:[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]];
-            [sourceIDs addObject:@"dns"];
-            [rules removeAllObjects];
-        }
+        [DNSAlternatives addObject:[domain stringByReplacingOccurrencesOfString:@"." withString:@"\\."]];
+        if (DNSAlternatives.count == 32 && !appendDNSGroup()) return nil;
     }
+    if (!appendDNSGroup()) return nil;
     if (rules.count > 0) {
         NSData *data = [NSJSONSerialization dataWithJSONObject:rules options:0 error:nil];
         if (data == nil) return nil;
