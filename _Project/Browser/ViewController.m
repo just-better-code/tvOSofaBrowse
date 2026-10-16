@@ -376,6 +376,14 @@ static UIColor *kTextColor(void) {
 
 #pragma mark - BrowserMenuCoordinatorHost
 
+- (BOOL)browserPageActionCoordinatorCanSelectInWebView:(BrowserWebView *)webView {
+    return self.webview == webView && !self.presentedViewController && !self.tabOverviewController.visible;
+}
+
+- (BOOL)browserPageActionCoordinatorIsActiveWebView:(BrowserWebView *)webView {
+    return self.webview == webView;
+}
+
 - (BrowserWebView *)browserWebView {
     return self.webview;
 }
@@ -637,6 +645,10 @@ static UIColor *kTextColor(void) {
 
 - (UIViewController *)browserRemoteInputControllerPresentedViewController {
     return self.presentedViewController;
+}
+
+- (BOOL)browserRemoteInputControllerPageFullscreenActive {
+    return self.webview.pageFullscreenActive || [self fullscreenMediaInputActive];
 }
 
 - (BOOL)browserRemoteInputControllerTabOverviewVisible {
@@ -903,7 +915,8 @@ static UIColor *kTextColor(void) {
                          completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
     };
     NSString *script = [NSString stringWithFormat:@"window.__browserTVVLCRequestIsCurrent && window.__browserTVVLCRequestIsCurrent.apply(null,%@)", sessionJSON];
-    [BrowserWebView fetchCookiesWithCompletion:^(NSArray<NSHTTPCookie *> *cookies) {
+    [BrowserWebView fetchCookiesWithResult:^(NSArray<NSHTTPCookie *> *cookies, NSError *cookieError) {
+        if (cookieError) { respond(@"rejected", 0, 0, NO); return; }
         BrowserWebView *currentView = weakWebView;
         if (!currentView || currentView.documentGeneration != generation) return;
         [currentView evaluateJavaScript:script completionHandler:^(NSString *result, NSError *error) {
@@ -965,6 +978,29 @@ static UIColor *kTextColor(void) {
     NSURLRequest *importRequest = sameURL ? request : [NSURLRequest requestWithURL:URL];
     [library importTorrentRequest:importRequest];
     return YES;
+}
+
+- (void)webView:(id)webView didBlockNavigationToURL:(NSURL *)URL rule:(NSString *)rule {
+    // Never present a delayed background-tab decision over the active page.
+    if (webView != self.webview) return;
+    NSString *host = URL.host ?: @"this website";
+    NSMutableString *message = [[NSString stringWithFormat:@"Ad Block stopped opening %@.", host] mutableCopy];
+    if (rule.length) {
+        // This is engine-provided filter text, not the visited URL. Keep long
+        // filters readable on TV and never write them to diagnostic logs.
+        NSString *displayRule = rule.length > 512 ? [[rule substringToIndex:512] stringByAppendingString:@"…"] : rule;
+        [message appendFormat:@"\n\nMatched rule:\n%@", displayRule];
+    }
+    [message appendString:@"\n\nYou can change Ad Block in the browser menu to open this website."];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Page Blocked by Ad Block"
+        message:message
+        preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Done" style:UIAlertActionStyleCancel handler:nil]];
+    // Present over an app-owned menu if navigation was initiated there.
+    UIViewController *presenter = self;
+    while (presenter.presentedViewController && !presenter.presentedViewController.isBeingDismissed) presenter = presenter.presentedViewController;
+    if (presenter.isBeingDismissed || presenter.isBeingPresented) return;
+    [presenter presentViewController:alert animated:YES completion:nil];
 }
 
 - (BOOL)webView:(id)webView shouldStartLoadWithRequest:(NSURLRequest *)request navigationType:(NSInteger)navigationType {

@@ -342,7 +342,7 @@ static NSString *BrowserPressPhaseString(UIPressPhase phase) {
     UIScrollView *scrollView = [self.host browserRemoteInputControllerActiveScrollView];
     BOOL shouldAllowWebInteraction = !self.cursorModeEnabled &&
         ![self.host browserRemoteInputControllerTabOverviewVisible];
-    // Remote arrows own page scrolling; touchpad movement must not pan the page.
+    // Keep ordinary touchpad panning disabled; only outward cursor movement at a page edge scrolls.
     scrollView.scrollEnabled = NO;
     [self.host browserRemoteInputControllerSetWebInteractionEnabled:shouldAllowWebInteraction];
     self.cursorView.hidden = self.cursorSuppressed || !self.cursorModeEnabled ||
@@ -784,8 +784,9 @@ static NSString *BrowserPressPhaseString(UIPressPhase phase) {
 
     for (UITouch *touch in touches) {
         UIScrollView *activeScrollView = [self.host browserRemoteInputControllerActiveScrollView];
-        UIView *targetView = activeScrollView ?: self.rootView;
-        CGPoint location = [touch locationInView:targetView];
+        // Content coordinates change when edge scrolling changes contentOffset.
+        // Sample in the stationary root view to avoid scroll feeding back into movement.
+        CGPoint location = [touch locationInView:self.rootView];
 
         if (self.lastTouchLocation.x == -1 && self.lastTouchLocation.y == -1) {
             self.lastTouchLocation = location;
@@ -800,8 +801,32 @@ static NSString *BrowserPressPhaseString(UIPressPhase phase) {
             CGFloat cursorEdgeInset = 1.0;
             CGFloat maximumCursorX = MAX(0.0, CGRectGetWidth(self.rootView.bounds) - cursorEdgeInset);
             CGFloat maximumCursorY = MAX(0.0, CGRectGetHeight(self.rootView.bounds) - cursorEdgeInset);
+            CGFloat proposedY = rect.origin.y + yDiff;
             rect.origin.x = MIN(MAX(rect.origin.x + xDiff, 0.0), maximumCursorX);
-            rect.origin.y = MIN(MAX(rect.origin.y + yDiff, 0.0), maximumCursorY);
+            rect.origin.y = MIN(MAX(proposedY, 0.0), maximumCursorY);
+            BOOL canEdgeScroll = activeScrollView && !self.cursorSuppressed &&
+                !self.selectPressPending && !self.verticalPressPending &&
+                ![self.host browserRemoteInputControllerPageFullscreenActive] &&
+                ![self.host browserRemoteInputControllerNewTabVisible] &&
+                ![self.host browserRemoteInputControllerPresentedViewController] &&
+                UIApplication.sharedApplication.applicationState == UIApplicationStateActive;
+            if (canEdgeScroll) {
+                CGRect viewport = CGRectIntersection(self.rootView.bounds,
+                    [activeScrollView convertRect:activeScrollView.bounds toView:self.rootView]);
+                if (!CGRectIsNull(viewport) && CGRectGetHeight(viewport) > 2.0) {
+                    CGFloat topEdge = CGRectGetMinY(viewport);
+                    CGFloat bottomEdge = CGRectGetMaxY(viewport) - cursorEdgeInset;
+                    CGFloat overflow = 0;
+                    if (yDiff < 0 && proposedY < topEdge) {
+                        overflow = proposedY - topEdge;
+                        rect.origin.y = topEdge;
+                    } else if (yDiff > 0 && proposedY > bottomEdge) {
+                        overflow = proposedY - bottomEdge;
+                        rect.origin.y = bottomEdge;
+                    }
+                    if (overflow != 0) [self applyManualScrollDelta:CGPointMake(0, overflow)];
+                }
+            }
             if (self.cursorHiddenForDirectionalNavigation &&
                 fabs(rect.origin.x - self.directionalNavigationCursorOrigin.x) +
                 fabs(rect.origin.y - self.directionalNavigationCursorOrigin.y) > 10.0) {

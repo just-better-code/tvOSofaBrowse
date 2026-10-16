@@ -1,0 +1,62 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const context = vm.createContext({URL, TextDecoder, performance, setTimeout, clearTimeout, console});
+vm.runInContext(fs.readFileSync('_Project/Vendor/UBlock/UBlockNetwork.js', 'utf8'), context);
+const list = [{id:'fixture', trusted:false, text:'||advert.example^\n@@||advert.example/allowed$xmlhttprequest\n||site.example^$removeparam=utm_source\n@@||site.example/keep$removeparam=utm_source\n'}];
+const built = context.browserCompileNetwork(list, '', 'com\norg\nnet\nexample\n');
+assert.equal(built.stats.fixture.accepted, 4);
+const request = {url:'https://advert.example/ad',originURL:'https://site.example/',topURL:'https://site.example/',type:'xmlhttprequest',method:'GET'};
+function match(host='', url='', details={}) {
+    context.browserSetDynamicNetwork(host, url);
+    return context.browserMatchNetwork({...request,...details});
+}
+assert.equal(match().action, 1);
+assert.equal(match('', '', {url:'https://advert.example/allowed'}).action, 2);
+assert.equal(match('site.example advert.example * allow').action, 2);
+assert.equal(match('site.example advert.example * noop').action, 1);
+assert.equal(match('site.example advert.example * block', 'site.example https://advert.example/ad xmlhttprequest allow').action, 2);
+assert.equal(match('site.example advert.example * allow', 'site.example https://advert.example/ad xmlhttprequest noop').action, 1);
+assert.equal(match().action, 1); // removal clears previous dynamic state
+for(let i=0;i<100;i++) assert.equal(match('site.example advert.example * allow').action, 2);
+context.browserCompileNetwork([], built.compiled, 'com\norg\nnet\nexample\n');
+assert.equal(match().action, 1); // cache restoration preserves filtering
+console.log('Full network core static/exception, dynamic URL/host precedence, noop/removal, repeat and compiled-cache checks passed.');
+
+let pruned = match('', '', {url:'https://site.example/path?token=a%2Fb&utm_source=ad&tag=1&tag=2#section'});
+assert.equal(pruned.modifiedURL, 'https://site.example/path?token=a%2Fb&tag=1&tag=2#section');
+assert.equal(match('', '', {url:'https://site.example/keep?utm_source=ad'}).modifiedURL, undefined);
+assert.equal(match('', '', {url:'https://site.example/path?utm_source=ad',method:'POST'}).modifiedURL, undefined);
+assert.equal(match('', '', {url:'https://advert.example/ad?utm_source=ad'}).modifiedURL, undefined);
+console.log('Upstream query pruning preserves encoded/duplicate parameters and fragments, honors exceptions and skips POST/blocked requests.');
+
+const sitePolicies = 'site.example * 3p block\nchild.site.example * 3p noop\nallow.site.example * 3p allow';
+assert.equal(match(sitePolicies).action, 1);
+assert.equal(match(sitePolicies, '', {topURL:'https://allow.site.example/'}).action, 2);
+assert.equal(match(sitePolicies, '', {topURL:'https://child.site.example/'}).engine, 'static');
+assert.equal(match(sitePolicies, '', {topURL:'https://child.site.example/'}).action, 1);
+assert.equal(match(sitePolicies, '', {url:'https://clean.example/resource'}).action, 1);
+assert.equal(match(sitePolicies, '', {topURL:'https://allow.site.example/',url:'https://clean.example/resource'}).action, 2);
+assert.equal(match(sitePolicies, '', {topURL:'https://child.site.example/',url:'https://clean.example/resource'}).action, 0);
+assert.equal(match(sitePolicies, '', {url:'https://site.example/first-party'}).action, 0);
+assert.equal(match(sitePolicies, '', {topURL:'https://site.example.evil.net/',url:'https://clean.example/resource'}).action, 0);
+console.log('Site policy upstream decisions pass ancestor block, specific allow/noop, static fallback, first-party and hostname boundaries.');
+
+// A persisted ready engine must survive a fresh VM, including typed tries,
+// regular-expression buckets, exceptions and request modifiers.
+const snapshot = context.browserSerializeNetwork();
+const restored = vm.createContext({URL, TextDecoder, performance, setTimeout, clearTimeout, console});
+vm.runInContext(fs.readFileSync('_Project/Vendor/UBlock/UBlockNetwork.js', 'utf8'), restored);
+assert.equal(restored.browserRestoreNetwork(snapshot, 'com\norg\nnet\nexample\n').snapshot, true);
+assert.equal(restored.browserMatchNetwork(request).action, 1);
+assert.equal(restored.browserMatchNetwork({...request,url:'https://advert.example/allowed'}).action, 2);
+assert.equal(restored.browserMatchNetwork({...request,url:'https://site.example/?utm_source=ad&ok=1'}).modifiedURL,'https://site.example/?ok=1');
+restored.browserSetDynamicNetwork('site.example advert.example * allow','');
+assert.equal(restored.browserMatchNetwork(request).action,2);
+assert.equal(restored.browserRestoreNetwork('{broken', 'com\n'),undefined);
+assert.equal(restored.browserMatchNetwork(request).engine,'unavailable');
+assert.equal(restored.browserRestoreNetwork(snapshot.replace('"format":1','"format":999'),'com\n'),undefined);
+restored.browserCompileNetwork(list, built.compiled, 'com\norg\nnet\nexample\n');
+restored.browserSetDynamicNetwork('','');
+assert.equal(restored.browserMatchNetwork(request).action,1);
+console.log('Fresh-VM ready snapshots preserve blocking, exceptions, modifiers and dynamic policy; corrupt/versioned caches fall back safely.');

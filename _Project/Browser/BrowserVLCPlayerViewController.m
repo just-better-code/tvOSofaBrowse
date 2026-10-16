@@ -27,6 +27,7 @@
 @property (nonatomic) UIProgressView *progressView;
 @property (nonatomic) UIView *controlsView;
 @property (nonatomic) UIButton *playButton;
+@property (nonatomic) UIButton *endButton;
 @property (nonatomic) UIButton *muteButton;
 @property (nonatomic) UIButton *audioTrackButton;
 @property (nonatomic) UIButton *subtitleTrackButton;
@@ -151,6 +152,8 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     UIButton *previous = [self controlButtonWithSymbol:@"backward.end.fill" label:@"Previous file" action:@selector(previousFilePressed)];
     UIButton *backTen = [self controlButtonWithSymbol:@"backward.fill" label:@"Back 10 seconds" action:@selector(seekBackTenPressed)];
     UIButton *back = [self controlButtonWithSymbol:@"arrowtriangle.left.fill" label:@"Back 5 seconds" action:@selector(seekBackPressed)];
+    UIButton *end = [self controlButtonWithSymbol:@"browser.end.fill" label:@"Go to end" action:@selector(endPressed)];
+    self.endButton = end;
     UIButton *play = [self controlButtonWithSymbol:@"playpause.fill" label:@"Pause" action:@selector(playPausePressed)];
     UIButton *forward = [self controlButtonWithSymbol:@"arrowtriangle.right.fill" label:@"Forward 5 seconds" action:@selector(seekForwardPressed)];
     UIButton *forwardTen = [self controlButtonWithSymbol:@"forward.fill" label:@"Forward 10 seconds" action:@selector(seekForwardTenPressed)];
@@ -172,9 +175,9 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     UIButton *subtitleTrack = [self trackButtonWithTitle:@"Subtitles: Unavailable" action:@selector(subtitleTrackPressed)];
     self.audioTrackButton = audioTrack;
     self.subtitleTrackButton = subtitleTrack;
-    NSArray<UIButton *> *mainButtons = @[previous, backTen, back, restart, play, forward, forwardTen, volumeDown, mute, volumeUp, next];
+    NSArray<UIButton *> *mainButtons = @[previous, backTen, back, restart, play, end, forward, forwardTen, volumeDown, mute, volumeUp, next];
     for (UIButton *button in mainButtons) {
-        CGFloat diameter = (button == play || button == restart) ? 81.6 : 68;
+        CGFloat diameter = (button == play || button == restart || button == end) ? 81.6 : 68;
         [button.widthAnchor constraintEqualToConstant:diameter].active = YES;
         [button.heightAnchor constraintEqualToConstant:diameter].active = YES;
     }
@@ -183,7 +186,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
         [button.heightAnchor constraintEqualToConstant:68].active = YES;
     }
     UIStackView *buttons = [[UIStackView alloc] initWithArrangedSubviews:
-        @[previous, backTen, back, restart, play, forward, forwardTen, audioTrack, subtitleTrack, next]];
+        @[previous, backTen, back, restart, play, end, forward, forwardTen, next]];
     buttons.translatesAutoresizingMaskIntoConstraints = NO;
     buttons.axis = UILayoutConstraintAxisHorizontal;
     buttons.alignment = UIStackViewAlignmentCenter;
@@ -194,6 +197,11 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     volumeButtons.spacing = 10;
     volumeButtons.alignment = UIStackViewAlignmentCenter;
     [controls addSubview:volumeButtons];
+    UIStackView *trackButtons = [[UIStackView alloc] initWithArrangedSubviews:@[audioTrack, subtitleTrack]];
+    trackButtons.translatesAutoresizingMaskIntoConstraints = NO;
+    trackButtons.spacing = 10;
+    trackButtons.alignment = UIStackViewAlignmentCenter;
+    [controls addSubview:trackButtons];
     [NSLayoutConstraint activateConstraints:@[
         [controls.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [controls.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
@@ -210,7 +218,9 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
         [time.topAnchor constraintEqualToAnchor:progress.bottomAnchor constant:10],
         [volumeButtons.leadingAnchor constraintEqualToAnchor:buttons.trailingAnchor constant:34],
         [volumeButtons.centerYAnchor constraintEqualToAnchor:buttons.centerYAnchor],
-        [buttons.centerXAnchor constraintEqualToAnchor:controls.centerXAnchor],
+        [trackButtons.leadingAnchor constraintEqualToAnchor:volumeButtons.trailingAnchor constant:34],
+        [trackButtons.trailingAnchor constraintEqualToAnchor:controls.trailingAnchor constant:-80],
+        [trackButtons.centerYAnchor constraintEqualToAnchor:buttons.centerYAnchor],
         [buttons.topAnchor constraintEqualToAnchor:time.bottomAnchor constant:15.2],
         [buttons.heightAnchor constraintEqualToConstant:81.6],
     ]];
@@ -426,7 +436,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
 - (UIButton *)controlButtonWithSymbol:(NSString *)symbol label:(NSString *)label action:(SEL)action {
     UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
     button.backgroundColor = UIColor.clearColor;
-    CGFloat scale = ([symbol isEqualToString:@"playpause.fill"] || [symbol isEqualToString:@"backward.end.alt.fill"]) ? 1.2 : 1;
+    CGFloat scale = ([symbol isEqualToString:@"playpause.fill"] || [symbol isEqualToString:@"backward.end.alt.fill"] || [symbol isEqualToString:@"browser.end.fill"]) ? 1.2 : 1;
     button.layer.cornerRadius = 34 * scale;
     button.clipsToBounds = YES;
     UIVisualEffectView *backdrop = [self glassBackdrop];
@@ -638,6 +648,8 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     int64_t duration = self.vlcPlayer.media.length.value.longLongValue;
     int64_t remaining = self.vlcPlayer.remainingTime.value.longLongValue;
     if (duration <= 0 && remaining < 0) duration = elapsed - remaining;
+    self.endButton.enabled = duration > 0;
+    self.endButton.alpha = self.endButton.enabled ? 1 : 0.35;
     NSTimeInterval now = NSDate.date.timeIntervalSince1970;
     BOOL advanced = elapsed > self.lastPlaybackTime;
     if (advanced) {
@@ -724,6 +736,14 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     self.lastPositionSaveTime = NSDate.date.timeIntervalSince1970;
     [self showControls];
     [self refreshProgress];
+}
+
+- (void)endPressed {
+    int64_t duration = self.vlcPlayer.media.length.value.longLongValue;
+    if (duration <= 0) return;
+    [self stopHeldSeek];
+    [self seekToMilliseconds:MAX(0, duration - 1000)];
+    [self showControls]; [self refreshProgress];
 }
 
 - (void)mutePressed {

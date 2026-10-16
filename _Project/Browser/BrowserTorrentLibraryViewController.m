@@ -851,7 +851,12 @@ completionHandler:(void (^)(NSURLRequest *))completionHandler {
     if (!request.URL) return;
     self.loadingMessage = @"Fetching .torrent file…";
     [self refresh];
-    NSArray<NSHTTPCookie *> *cookies = [BrowserWebView allCookies];
+    [BrowserWebView fetchCookiesWithResult:^(NSArray<NSHTTPCookie *> *cookies, NSError *cookieError) {
+    if (cookieError) {
+        self.loadingMessage = nil;
+        [self showImportError:cookieError.localizedDescription];
+        return;
+    }
     NSMutableURLRequest *downloadRequest = [request mutableCopy];
     if ([downloadRequest valueForHTTPHeaderField:@"Cookie"].length == 0) {
         NSArray *matching = BrowserTorrentCookiesForURL(cookies, request.URL);
@@ -892,6 +897,7 @@ completionHandler:(void (^)(NSURLRequest *))completionHandler {
         });
         [session finishTasksAndInvalidate];
     }] resume];
+    }];
 }
 
 - (void)backPressed {

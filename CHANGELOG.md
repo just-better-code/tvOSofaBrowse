@@ -2,6 +2,45 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.21.1 - 2026-10-16
+
+### Changed
+
+- Present Ad Block coverage in a native table with grouped counts, total preparation and page-application times, and separate timings for list conversion, WebKit compilation, the network engine and page scripts ([Ad Block controls](docs/USER_GUIDE.md)).
+
+### Added
+
+- Show a subtle page-corner badge while enabled Ad Block protection is preparing or awaiting reload, and offer Rebuild Filters for a fresh preparation and explicit page reload from cached lists ([Ad Block controls](docs/USER_GUIDE.md)).
+
+### Fixed
+
+- Prepare native WebKit rules, the full network core and extended rules concurrently, submit up to 14 native chunks at once, optimize Swift conversion in Debug builds, and retain existing protection and caches across ordinary launches ([Preparation and caches](_Project/Vendor/UBlock/README.md), [Native converter](_Project/Vendor/AdGuardConverter/README.md)).
+
+## 2.21.0 - 2026-10-11
+
+### Changed
+
+- Replace synchronous JavaScript and cookie waits with asynchronous operations and managed script components that preserve browser and player controls ([User Guide](docs/USER_GUIDE.md)).
+- Place This Site beside Ad Block and move VLC Audio and Subtitles to the playback panel's right edge ([User Guide](docs/USER_GUIDE.md)).
+
+### Added
+
+- Select extended-rule candidates by hostname while preserving scoped exceptions, and apply pinned uBlock scriptlets, procedural cosmetics and full static/dynamic matching to navigation, page fetch/XHR and supported classic, module and nested Blob workers, including fetch query pruning ([Ad Block coverage](docs/USER_GUIDE.md), [uBO components](_Project/Vendor/UBlock/README.md)).
+- Choose Block (Strict), Allow (Soft), Use Filters (Default) or Inherit per site, show the matching rule in blocked-navigation explanations, and report bounded coverage and unsupported-filter reasons ([Ad Block controls](docs/USER_GUIDE.md)).
+- Scroll at the pointer's top or bottom edge outside fullscreen and add Go to End to VLC playback ([User Guide](docs/USER_GUIDE.md)).
+- Refresh bundled uAssets from an immutable upstream commit with recorded input/output digests and retain only current or needed generated caches ([uBO maintenance](_Project/Vendor/UBlock/README.md)).
+
+### Removed
+
+- Remove manual filter entry and bundled Hraimo rules while retaining previously saved My Filters and downloaded lists ([Ad Block controls](docs/USER_GUIDE.md)).
+
+### Fixed
+
+- Reduce extended-filter preparation memory by streaming complete rules in bounded batches and escaping them directly into final scripts, while preserving enabled lists and filtering behavior ([uBO components](_Project/Vendor/UBlock/README.md)).
+- Open requested pages while filters prepare, reuse cached network engines and extended scripts, coalesce reloads, defer them during playback or editing, and retain active protection when replacement rules fail ([User Guide](docs/USER_GUIDE.md)).
+- Prevent advanced-script stack overflows and discard obsolete network, worker and page-control results across navigation, tabs and history ([Browser runtime](_Project/Browser/BrowserWebView.m)).
+- Restore compatible cookie archives, preserve the order of rapid Center clicks, and keep asynchronous text dialogs attached to their original fields ([Browser runtime](_Project/Browser/BrowserWebView.m), [Page actions](_Project/Browser/BrowserPageActionCoordinator.m)).
+
 ## 2.20.4 - 2026-10-11
 
 ### Fixed

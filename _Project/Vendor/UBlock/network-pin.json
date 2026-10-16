@@ -1,0 +1,24 @@
+{
+  "upstream": "https://github.com/gorhill/uBlock",
+  "versionMetadata": "1.75.1.10",
+  "commit": null,
+  "pslSource": "Firefox iOS 371a1b51c54645dbcbd7ad41d1479c7a9e5850f8 Shared/effective_tld_names.dat",
+  "sha256": {
+    "src/js/biditrie.js": "cc0e454a45462a69eb30d61b5a94c0b6304fcc12792229af43057d27c99a5953",
+    "src/js/dynamic-net-filtering.js": "2e83bc515e6dce1af17c90baf7a82a02880786cfed45e3ead9d3b2a54603d253",
+    "src/js/filtering-context.js": "8d6d8eec4013a637754907a8cbfa29dba3c921ef484118b6925f6de1f4308d91",
+    "src/js/hntrie.js": "ef504aa8ec4644084139112f23330a820bc8c6a89c508017c158aa57f7a71a60",
+    "src/js/publicsuffix.js": "fc80a48f885bb1111fc2b20b59f32e54dffdfcdebce4c8552f5274697710b926",
+    "src/js/regex-analyzer.js": "d0b6e2417248598c5fd8dce44b988e4e17eb65542412bd8c419093251ee7f159",
+    "src/js/static-filtering-io.js": "bcb5ad3e1789a3b41f65a0862ae1c4cfe1e01d227c107db8fb75f1466766b3f3",
+    "src/js/static-net-filtering.js": "d9bec1596ab3c507755aa4a96be41d380accd2ce836d2d94f2d220d822c8e0d2",
+    "src/js/tasks.js": "dfeab767fd9e28fbbc0e00456b3d3de4c502b493f73fabe582ebaecf97e11886",
+    "src/js/text-utils.js": "7f83fa6f050bbc05c43fae18e6cba322c9ceac5a2f2cf36497ea0c1af61af98d",
+    "src/js/uri-utils.js": "e5171e9c10c314ccb750b7dc2ef9a4fd17c75ce121bb5111b6511e674a8f5209",
+    "src/js/url-net-filtering.js": "5206408dfc8d42690c19685e168e2317d1d40d487761b8d0e39846dd1de1be06",
+    "src/lib/publicsuffixlist/publicsuffixlist.js": "282288bb44a4fd0a8cf2157ab64ea82963820cce4e7fd5483ecdd266e6755eeb",
+    "src/lib/punycode.js": "329249856a82a02f69fb2d929f89e02aefa6b04cca4ef6a3b9bebfa48d6e824c",
+    "src/lib/regexanalyzer/regex.js": "5191149eb2577fab7a67ef10c7bb3e165c75c7b242a4f9d5215d0e7589a141cb",
+    "PublicSuffixList.dat": "8335d7c09592c5209e5026d275f7b291e1bc9c90cd949b967c1a7af5f8381b2a"
+  }
+}

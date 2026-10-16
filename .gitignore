@@ -79,3 +79,4 @@ _Project/Browser/Config/Signing.local.xcconfig
 # Personal device deployment
 scripts/push-*
 scripts/build-*
+!scripts/build-ublock-assets*

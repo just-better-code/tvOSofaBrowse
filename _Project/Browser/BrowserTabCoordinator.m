@@ -346,6 +346,10 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
         webView = [self createConfiguredWebView];
         self.webViewsByTabIdentifier[tab.identifier] = webView;
     }
+    if (self.activeWebView != webView) {
+        [self.activeWebView invalidatePendingJavaScript];
+        [webView invalidatePendingJavaScript];
+    }
     self.activeWebView = webView;
     [self attachActiveWebView];
 }
