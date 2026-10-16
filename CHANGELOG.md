@@ -2,6 +2,20 @@
 
 This personal-use project's retrospective versions do not correspond to published releases or Git tags.
 
+## 2.21.1 - 2026-10-16
+
+### Changed
+
+- Present Ad Block coverage in a native table with two metric/value pairs per row, grouped counts and the last successful preparation time and total time until application to the page ([Ad Block controls](docs/USER_GUIDE.md)).
+
+### Added
+
+- Show a subtle page-corner badge while enabled Ad Block protection is preparing or awaiting reload, and offer Rebuild Filters for a fresh preparation and explicit page reload from cached lists ([Ad Block controls](docs/USER_GUIDE.md)).
+
+### Fixed
+
+- Prepare native WebKit rules, the full network core and extended rules concurrently, optimize Swift conversion in Debug builds, and retain existing protection and caches across ordinary launches ([Preparation and caches](_Project/Vendor/UBlock/README.md), [Native converter](_Project/Vendor/AdGuardConverter/README.md)).
+
 ## 2.21.0 - 2026-10-11
 
 ### Changed

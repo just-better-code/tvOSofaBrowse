@@ -15,6 +15,9 @@ let package = Package(
         .target(name: "ContentBlockerConverter", dependencies: [
             .product(name: "Punycode", package: "PunycodeSwift"),
             .product(name: "PublicSuffixList", package: "swift-psl"),
+        ], swiftSettings: [
+            // Filter conversion is CPU-heavy even in an inspectable Debug app.
+            .unsafeFlags(["-O"], .when(configuration: .debug)),
         ]),
     ]
 )

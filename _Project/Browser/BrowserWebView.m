@@ -1,5 +1,6 @@
 #import "BrowserAdBlockPolicy.h"
 #import "BrowserAdBlockService.h"
+#import "BrowserTVAppearance.h"
 #import "BrowserWebView.h"
 #import <math.h>
 #import "BrowserPreferencesStore.h"
@@ -890,6 +891,8 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 @property (nonatomic, strong) NSArray *appliedAdBlockRuleLists;
 @property (nonatomic, readwrite) BOOL adBlockEnabled;
 @property (nonatomic, readwrite, copy) NSString *adBlockStatus;
+@property (nonatomic, strong) UILabel *adBlockPreparingBadge;
+@property (nonatomic) BOOL adBlockRuntimePreparing;
 @property (nonatomic, strong) BrowserUBlockHandler *uBlockHandler;
 @property (nonatomic, strong) BrowserNetworkRequestHandler *networkRequestHandler;
 @property (nonatomic) BOOL networkReplyAvailable;
@@ -1027,7 +1030,13 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
     NSString *identity = body[@"identity"];
     if (![identity isKindOfClass:NSString.class] || ![body[@"host"] isEqual:BrowserAdBlockHost(self.request.URL)]) return;
     if ([body[@"token"] isKindOfClass:NSString.class]) self.adBlockActiveDocumentToken = body[@"token"];
-    if ([identity isEqual:self.installedUBlockIdentity]) { self.adBlockRecoveredPolicy = nil; return; }
+    [self updateAdBlockPreparingBadge];
+    if ([identity isEqual:self.installedUBlockIdentity]) {
+        self.adBlockRecoveredPolicy = nil;
+        if (self.window && self.adBlockEffectiveEnabled && self.adBlockRuntimeAvailable && !self.adBlockRuntimePreparing)
+            [BrowserAdBlockService recordFiltersAppliedToPage];
+        return;
+    }
     if ([self.adBlockRecoveredPolicy isEqual:self.installedUBlockIdentity]) return;
     self.adBlockRecoveredPolicy = self.installedUBlockIdentity;
     [self reloadWithPreparedAdBlock];
@@ -1078,24 +1087,101 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 + (NSString *)effectiveDynamicAdBlockPolicyForHost:(NSString *)host { return [BrowserAdBlockService effectiveDynamicAdBlockPolicyForHost:host]; }
 + (void)setDynamicAdBlockPolicy:(NSString *)policy forHost:(NSString *)host { [BrowserAdBlockService setDynamicAdBlockPolicy:policy forHost:host]; }
 
+- (void)setAdBlockStatus:(NSString *)status {
+    _adBlockStatus = [status copy];
+    [self updateAdBlockPreparingBadge];
+}
+
+- (void)updateAdBlockPreparingBadge {
+    NSURL *URL = self.adBlockPolicyURL ?: self.request.URL;
+    BOOL website = [@[@"http", @"https"] containsObject:URL.scheme.lowercaseString];
+    BOOL pending = self.adBlockRuntimePreparing || ![self.adBlockStatus isEqualToString:@"on"] ||
+        !self.adBlockRuntimeAvailable || ![BrowserAdBlockService.networkSummary[@"available"] boolValue] ||
+        BrowserAdBlockService.nativePreparationFailed ||
+        ![self.adBlockActiveDocumentToken isEqualToString:self.adBlockDocumentToken];
+    BOOL visible = website && self.adBlockEnabled && BrowserAdBlockSiteEnabled(URL) && pending;
+    if (visible && !self.adBlockPreparingBadge) {
+        UILabel *badge = [[UILabel alloc] init];
+        badge.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
+        badge.textColor = [UIColor colorWithWhite:1 alpha:0.78];
+        badge.backgroundColor = [BrowserTVToggleBadgeColor(NO) colorWithAlphaComponent:0.35];
+        badge.textAlignment = NSTextAlignmentCenter;
+        badge.layer.cornerRadius = 11;
+        badge.layer.masksToBounds = YES;
+        badge.userInteractionEnabled = NO;
+        badge.accessibilityIdentifier = @"AdBlockPreparingBadge";
+        self.adBlockPreparingBadge = badge;
+        [self addSubview:badge];
+    }
+    BOOL failed = [@[@"update-failed", @"unavailable", @"installation-unavailable"] containsObject:self.adBlockStatus];
+    self.adBlockPreparingBadge.text = failed ? @"Ad Block · Not ready" :
+        (self.adBlockReloadDeferred && !self.adBlockRuntimePreparing ? @"Ad Block · Reload pending" : @"Ad Block · Preparing");
+    self.adBlockPreparingBadge.hidden = !visible;
+    [self setNeedsLayout];
+}
+
+
 - (BOOL)adBlockPolicyPreparing { return [self.adBlockStatus isEqualToString:@"loading"]; }
 
-- (NSString *)adBlockDiagnosticSummary {
+- (NSArray<NSDictionary *> *)adBlockDiagnosticSections {
     NSUInteger scripts = 0, cosmetics = 0, unsupported = 0;
     for (NSDictionary *count in BrowserAdBlockService.statistics.allValues) {
-        scripts += [count[@"scriptlet"] unsignedIntegerValue]; cosmetics += [count[@"cosmetic"] unsignedIntegerValue]; unsupported += [count[@"unsupported"] unsignedIntegerValue];
+        scripts += [count[@"scriptlet"] unsignedIntegerValue];
+        cosmetics += [count[@"cosmetic"] unsignedIntegerValue];
+        unsupported += [count[@"unsupported"] unsignedIntegerValue];
     }
-    NSString *summary = [NSString stringWithFormat:@"Network core: %@ · %lu filters. Navigation + page/Blob-worker API adapters; resource interception remains partial.\nReply bridge: %@ · fetch observed: %@ · XHR observed: %@.\nPage/worker decisions: %lu fetch, %lu XHR; applied blocks: %lu fetch, %lu XHR; fallback: %lu; sync XHR bypass: %lu.\nBlob workers: %lu ready, %lu bypassed, %lu unready.\nWebKit: %@ · Advanced runtime: %@ · Isolated world: %@\nCompiled: %lu scriptlet rules, %lu cosmetic rules, %lu unsupported advanced rules.\nDebug observations: %lu / 128. Native resource actions (Debug): %lu callbacks, %lu blocked loads, %lu blocked cookies, %lu HTTPS upgrades, %lu redirects, %lu header changes. Actions are observed; allowed traffic and request type/source line are not supplied by this callback.", BrowserAdBlockService.networkSummary[@"available"] ? ([BrowserAdBlockService.networkSummary[@"available"] boolValue] ? @"available" : @"unavailable") : @"preparing", (unsigned long)[BrowserAdBlockService.networkSummary[@"count"] unsignedIntegerValue], self.networkReplyAvailable ? @"available" : @"unavailable", self.networkFetchObserved ? @"yes" : @"no", self.networkXHRObserved ? @"yes" : @"no", (unsigned long)[self.networkRequestCounts[@"fetch-decisions"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"xhr-decisions"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"fetch-blocked"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"xhr-blocked"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"fallback"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"sync-bypass"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"worker-ready"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"worker-bypass"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"worker-unready"] unsignedIntegerValue], self.adBlockStatus ?: @"off", self.adBlockRuntimeAvailable ? @"available" : @"inactive", self.adBlockIsolatedAvailable ? @"available" : @"inactive", (unsigned long)scripts, (unsigned long)cosmetics, (unsigned long)unsupported, (unsigned long)self.adBlockEvents.count, (unsigned long)[self.networkRequestCounts[@"native-actions"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"native-blockedLoad"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"native-blockedCookies"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"native-madeHTTPS"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"native-redirected"] unsignedIntegerValue], (unsigned long)[self.networkRequestCounts[@"native-modifiedHeaders"] unsignedIntegerValue]];
+    NSString *(^number)(NSUInteger) = ^NSString *(NSUInteger value) { return [NSString stringWithFormat:@"%lu", (unsigned long)value]; };
+    NSString *(^observed)(NSString *) = ^NSString *(NSString *key) { return number([self.networkRequestCounts[key] unsignedIntegerValue]); };
+    NSDictionary *bake = BrowserAdBlockService.lastFilterBake;
+    NSDate *completed = [bake[@"completedAt"] isKindOfClass:NSDate.class] ? bake[@"completedAt"] : nil;
+    NSString *date = completed ? [NSDateFormatter localizedStringFromDate:completed dateStyle:NSDateFormatterMediumStyle timeStyle:NSDateFormatterMediumStyle] : @"Not recorded yet";
+    NSDictionary *network = BrowserAdBlockService.networkSummary;
+    NSString *networkState = network[@"available"] ? ([network[@"available"] boolValue] ? @"Available" : @"Unavailable") : @"Preparing";
+    NSMutableArray *sections = [NSMutableArray arrayWithArray:@[
+        @{@"title":@"Preparation", @"metrics":@[
+            @[@"Last successful bake", date],
+            @[@"Preparation time", completed ? [NSString stringWithFormat:@"%.1f s", [bake[@"duration"] doubleValue]] : @"—"],
+            @[@"Applied to page · total", bake[@"appliedDuration"] ? [NSString stringWithFormat:@"%.1f s", [bake[@"appliedDuration"] doubleValue]] : (completed ? @"Reload pending" : @"—")],
+            @[@"Current page", ![self.adBlockActiveDocumentToken isEqualToString:self.adBlockDocumentToken] ? @"Reload pending" : (self.adBlockRuntimePreparing ? @"Preparing" : @"Current policy")],
+            @[@"WebKit rules", self.adBlockStatus ?: @"off"],
+            @[@"Advanced runtime", self.adBlockRuntimeAvailable ? @"Available" : @"Inactive"]]},
+        @{@"title":@"Filtering engines", @"metrics":@[
+            @[@"Network core", networkState], @[@"Network filters", number([network[@"count"] unsignedIntegerValue])],
+            @[@"Scriptlet rules", number(scripts)], @[@"Cosmetic rules", number(cosmetics)],
+            @[@"Unsupported advanced", number(unsupported)], @[@"Isolated world", self.adBlockIsolatedAvailable ? @"Available" : @"Inactive"]]},
+        @{@"title":@"Page and Blob-worker adapters", @"metrics":@[
+            @[@"Reply bridge", self.networkReplyAvailable ? @"Available" : @"Unavailable"],
+            @[@"Observed fetch / XHR", [NSString stringWithFormat:@"%@ / %@", self.networkFetchObserved ? @"Yes" : @"No", self.networkXHRObserved ? @"Yes" : @"No"]],
+            @[@"Fetch decisions / blocks", [NSString stringWithFormat:@"%@ / %@", observed(@"fetch-decisions"), observed(@"fetch-blocked")]],
+            @[@"XHR decisions / blocks", [NSString stringWithFormat:@"%@ / %@", observed(@"xhr-decisions"), observed(@"xhr-blocked")]],
+            @[@"Fallback / sync XHR bypass", [NSString stringWithFormat:@"%@ / %@", observed(@"fallback"), observed(@"sync-bypass")]],
+            @[@"Workers ready", observed(@"worker-ready")],
+            @[@"Workers bypassed / unready", [NSString stringWithFormat:@"%@ / %@", observed(@"worker-bypass"), observed(@"worker-unready")]],
+            @[@"Resource interception", @"Partial · WebKit fallback"]]},
+        @{@"title":@"Debug observations · applied native actions", @"metrics":@[
+            @[@"Script / DOM observations", [NSString stringWithFormat:@"%@ / 128", number(self.adBlockEvents.count)]],
+            @[@"Native callbacks", observed(@"native-actions")],
+            @[@"Blocked loads / cookies", [NSString stringWithFormat:@"%@ / %@", observed(@"native-blockedLoad"), observed(@"native-blockedCookies")]],
+            @[@"HTTPS upgrades", observed(@"native-madeHTTPS")],
+            @[@"Redirects", observed(@"native-redirected")], @[@"Header changes", observed(@"native-modifiedHeaders")]]}
+    ]];
     NSDictionary *rejected = BrowserAdBlockService.runtime[@"rejected"];
     NSArray *reasons = @[@"syntax", @"response-body", @"response-header", @"scriptlet-name", @"untrusted-scriptlet", @"cosmetic", @"response-filter"];
-    NSDictionary *titles = @{@"syntax":@"Invalid syntax", @"response-body":@"HTML response delivery pending", @"response-header":@"Response header delivery pending", @"scriptlet-name":@"Unknown scriptlet", @"untrusted-scriptlet":@"Trusted source required", @"cosmetic":@"Cosmetic compilation", @"response-filter":@"Other response delivery pending"};
-    NSMutableArray *details = [NSMutableArray array];
-    for (NSString *reason in reasons) {
-        NSUInteger count = [rejected[reason] unsignedIntegerValue];
-        if (count) [details addObject:[NSString stringWithFormat:@"%@: %lu", titles[reason], (unsigned long)count]];
-    }
-    return details.count ? [summary stringByAppendingFormat:@"\nAdvanced rejection reasons: %@.", [details componentsJoinedByString:@"; "]] : summary;
+    NSDictionary *titles = @{@"syntax":@"Invalid syntax", @"response-body":@"HTML delivery pending", @"response-header":@"Header delivery pending", @"scriptlet-name":@"Unknown scriptlet", @"untrusted-scriptlet":@"Trusted source required", @"cosmetic":@"Cosmetic compilation", @"response-filter":@"Other delivery pending"};
+    NSMutableArray *metrics = [NSMutableArray array];
+    for (NSString *reason in reasons) if ([rejected[reason] unsignedIntegerValue])
+        [metrics addObject:@[titles[reason], number([rejected[reason] unsignedIntegerValue])]];
+    if (metrics.count) [sections addObject:@{@"title":@"Advanced rejection reasons", @"metrics":metrics}];
+    return sections;
+}
 
+- (NSString *)adBlockDiagnosticSummary {
+    NSMutableArray *lines = [NSMutableArray array];
+    for (NSDictionary *section in self.adBlockDiagnosticSections) {
+        [lines addObject:section[@"title"]];
+        for (NSArray *metric in section[@"metrics"]) [lines addObject:[NSString stringWithFormat:@"%@: %@", metric[0], metric[1]]];
+    }
+    return [lines componentsJoinedByString:@"\n"];
 }
 
 - (void)didMoveToWindow {
@@ -1351,6 +1437,7 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
     }
     BrowserReplaceScriptComponent(controller, @"ublock", retained);
     self.installedUBlockIdentity = identity;
+    [self updateAdBlockPreparingBadge];
 }
 
 - (void)prepareAdBlockForURL:(NSURL *)URL completion:(void (^)(BOOL))completion {
@@ -1376,34 +1463,49 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
         applied = YES;
     };
     if (!enabled) {
+        self.adBlockRuntimePreparing = NO;
         apply(@[], nil);
         [self replaceUBlockScripts:nil forURL:URL enabled:NO];
         if (applied && completion) completion(YES);
         return;
     }
+    self.adBlockRuntimePreparing = YES;
     self.adBlockStatus = @"loading";
     NSString *dynamicPolicy = [BrowserAdBlockPolicy effectivePolicyForHost:BrowserAdBlockHost(URL)
         policies:[NSUserDefaults.standardUserDefaults dictionaryForKey:@"AdBlockDynamicSitePolicies"]];
+    NSTimeInterval preparationStarted = NSProcessInfo.processInfo.systemUptime;
+    __block BOOL nativeReady = NO, runtimeReady = NO;
+    __block NSDictionary *preparedRuntime;
+    void (^finishPreparation)(void) = ^{
+        BrowserWebView *owner = weakSelf;
+        if (!nativeReady || !runtimeReady || !owner || policy != owner.adBlockPolicyGeneration ||
+            rulesGeneration != BrowserAdBlockService.generation || enabled != owner.adBlockEffectiveEnabled) return;
+        owner.adBlockRuntimePreparing = NO;
+        if (preparedRuntime) [owner replaceUBlockScripts:preparedRuntime forURL:URL enabled:enabled];
+        [BrowserAdBlockService recordCompletedPreparationSince:preparationStarted];
+        [owner updateAdBlockPreparingBadge];
+        if (completion) completion(YES);
+    };
     BrowserLoadAdBlockRuleList(dynamicPolicy, ^(NSArray *ruleLists, NSError *error) {
         if (!weakSelf || policy != weakSelf.adBlockPolicyGeneration) { if (completion) completion(NO); return; }
-        // A failed replacement must not turn into an intentional empty policy.
         if (!ruleLists || ((error || BrowserAdBlockService.nativePreparationFailed) && weakSelf.appliedAdBlockRuleLists.count)) {
+            weakSelf.adBlockRuntimePreparing = NO;
             weakSelf.adBlockStatus = @"update-failed";
             [NSNotificationCenter.defaultCenter postNotificationName:BrowserAdBlockSourceStatusDidChangeNotification object:nil];
             if (completion) completion(NO);
             return;
         }
-        // Apply native rules immediately, but notify once both stages are ready.
         apply(ruleLists, nil);
         if (!applied) return;
+        nativeReady = YES;
         BrowserLog(@"[AdBlock] native protection applied chunks=%lu", (unsigned long)ruleLists.count);
-        BrowserLoadUBlockRuntime(^(NSDictionary *runtime) {
-            BrowserWebView *owner = weakSelf;
-            if (!owner || policy != owner.adBlockPolicyGeneration || rulesGeneration != BrowserAdBlockService.generation ||
-                enabled != owner.adBlockEffectiveEnabled) return;
-            if (runtime) [owner replaceUBlockScripts:runtime forURL:URL enabled:enabled];
-            if (completion) completion(YES);
-        });
+        finishPreparation();
+    });
+    // Start full-core and extended preparation without waiting for native
+    // conversion/WebKit compilation. Completion still fires just once.
+    BrowserLoadUBlockRuntime(^(NSDictionary *runtime) {
+        runtimeReady = YES; preparedRuntime = runtime;
+        finishPreparation();
     });
 }
 
@@ -1417,7 +1519,15 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
         return;
     }
     self.adBlockRefreshAfterNavigation = NO;
+    if ([BrowserAdBlockService explicitRebuildReadyToApply]) {
+        // Rebuild Filters is an explicit user action, just like Reload. It
+        // must complete the requested upgrade even with opaque ad/video frames.
+        if (self.loading) { self.adBlockRefreshAfterNavigation = YES; return; }
+        [self reloadRuntimeWebView];
+        return;
+    }
     self.adBlockReloadDeferred = YES;
+    [self updateAdBlockPreparingBadge];
     if (self.adBlockReloadCheckPending || !self.window || self.pageFullscreenActive ||
         UIApplication.sharedApplication.applicationState != UIApplicationStateActive ||
         self.window.rootViewController.presentedViewController) return;
@@ -1457,6 +1567,7 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 
 - (void)setAdBlockEnabled:(BOOL)enabled {
     _adBlockEnabled = enabled;
+    [self updateAdBlockPreparingBadge];
     if (enabled) BrowserCheckForAdBlockUpdateIfNeeded();
     [self refreshAdBlockWithExplicitReload:YES];
 }
@@ -1486,6 +1597,13 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
     [super layoutSubviews];
     ((UIView *)self.runtimeWebView).frame = self.bounds;
     [self applyPageScalingIfNeeded];
+    if (self.adBlockPreparingBadge) {
+        CGSize size = [self.adBlockPreparingBadge sizeThatFits:CGSizeMake(300, 32)];
+        CGFloat width = MIN(size.width + 24, MAX(0, self.bounds.size.width - 40));
+        self.adBlockPreparingBadge.frame = CGRectMake(CGRectGetMaxX(self.bounds) - width - 20,
+            CGRectGetMinY(self.bounds) + 20, width, 32);
+        [self bringSubviewToFront:self.adBlockPreparingBadge];
+    }
 }
 
 - (void)setUserInteractionEnabled:(BOOL)userInteractionEnabled {
@@ -2055,12 +2173,15 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 - (void)webView:(id)webView didCommitNavigation:(id)navigation {
     self.documentGeneration += 1;
     self.adBlockActiveDocumentToken = self.adBlockDocumentToken;
+    [self updateAdBlockPreparingBadge];
     [self applyDomainZoomForURL:[self request].URL];
     if (self.adBlockRefreshAfterNavigation) [self reloadWithPreparedAdBlock];
 }
 
 - (void)webView:(id)webView didFinishNavigation:(id)navigation {
     self.loading = NO;
+    if (self.adBlockRefreshAfterNavigation && [BrowserAdBlockService explicitRebuildReadyToApply])
+        [self reloadWithPreparedAdBlock];
     if (self.adBlockEnabled && [self.adBlockStatus isEqualToString:@"on"]) {
         BrowserCheckForAdBlockUpdateIfNeeded();
     }

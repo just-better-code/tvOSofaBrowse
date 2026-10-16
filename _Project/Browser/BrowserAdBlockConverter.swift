@@ -23,7 +23,8 @@ final class BrowserAdBlockConverter: NSObject {
 }
 
 // The parser runs outside the page; only pinned implementations enter WKUserScript.
-// JSCore is shared under a lock because conversion can be requested by multiple tabs.
+// Native preprocessing shares a small locked VM; every extended compilation owns
+// its own VM so it never serializes behind native conversion.
 import JavaScriptCore
 
 extension BrowserAdBlockConverter {
@@ -35,8 +36,7 @@ extension BrowserAdBlockConverter {
         return try? String(contentsOf: url, encoding: .utf8)
     }
 
-    private static func context() -> JSContext? {
-        if let cached = parserContext { return cached }
+    private static func makeContext() -> JSContext? {
         guard let source = resource("UBlockParser", "js"), let context = JSContext() else { return nil }
         let normalize: @convention(block) (String) -> String = { host in
             guard !host.contains("/"), !host.contains("@"), !host.contains(":") else { return "" }
@@ -45,20 +45,20 @@ extension BrowserAdBlockConverter {
         context.setObject(normalize, forKeyedSubscript: "browserNormalizeHostname" as NSString)
         context.evaluateScript(source)
         guard context.exception == nil else { return nil }
-        parserContext = context
         return context
     }
 
     @objc static func preprocessRules(_ source: String) -> String {
         parserLock.lock(); defer { parserLock.unlock() }
-        guard let context = context() else { return source }
-        context.exception = nil
-        return context.objectForKeyedSubscript("browserPreprocessUBlock")?.call(withArguments: [source])?.toString() ?? source
+        return autoreleasepool {
+            if parserContext == nil { parserContext = makeContext() }
+            guard let context = parserContext else { return source }
+            context.exception = nil
+            return context.objectForKeyedSubscript("browserPreprocessUBlock")?.call(withArguments: [source])?.toString() ?? source
+        }
     }
 
     @objc static func compileUBlockLists(_ lists: NSArray) -> NSDictionary? {
-        parserLock.lock()
-        defer { parserContext = nil; parserLock.unlock() }
         // The background queue need not drain its pool between preparations.
         // Retain only the compiled scripts/counters, not temporary bridge objects.
         return autoreleasepool { compileScripts(lists) }
@@ -139,10 +139,9 @@ extension BrowserAdBlockConverter {
         }
         let buckets = ["MAIN": Buckets(), "ISOLATED": Buckets()]
         let counters: (NSDictionary, NSDictionary)? = autoreleasepool {
-            guard let context = context() else { return nil }
+            guard let context = makeContext() else { return nil }
             // Release the VM before assembling the scripts; it owns neither
             // the final bucket buffers nor the returned counters.
-            defer { parserContext = nil }
             context.exception = nil
             guard let iterator = context.objectForKeyedSubscript("browserCompileUBlockBatches")?.call(withArguments: [lists, library]),
                   context.exception == nil,
