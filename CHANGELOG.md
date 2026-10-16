@@ -7,7 +7,6 @@ This personal-use project's retrospective versions do not correspond to publishe
 ### Changed
 
 - Present Ad Block coverage in a native table with grouped counts, total preparation and page-application times, and separate timings for list conversion, WebKit compilation, the network engine and page scripts ([Ad Block controls](docs/USER_GUIDE.md)).
-- Group DNS destination hosts into bounded native regex rules to reduce cold WebKit compilation work while retaining the same blocked hosts and third-party condition ([Preparation and caches](_Project/Vendor/UBlock/README.md)).
 
 ### Added
 
