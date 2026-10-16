@@ -14,7 +14,7 @@ This personal-use project's retrospective versions do not correspond to publishe
 
 ### Fixed
 
-- Prepare native WebKit rules, the full network core and extended rules concurrently, optimize Swift conversion in Debug builds, and retain existing protection and caches across ordinary launches ([Preparation and caches](_Project/Vendor/UBlock/README.md), [Native converter](_Project/Vendor/AdGuardConverter/README.md)).
+- Prepare native WebKit rules, the full network core and extended rules concurrently, submit up to 14 native chunks at once, optimize Swift conversion in Debug builds, and retain existing protection and caches across ordinary launches ([Preparation and caches](_Project/Vendor/UBlock/README.md), [Native converter](_Project/Vendor/AdGuardConverter/README.md)).
 
 ## 2.21.0 - 2026-10-11
 

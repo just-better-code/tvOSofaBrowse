@@ -299,47 +299,59 @@ static void BrowserCompileAdBlockChunks(id store, NSString *identifier, NSArray<
     SEL lookupSelector = NSSelectorFromString(@"lookUpContentRuleListForIdentifier:completionHandler:");
     SEL compileSelector = NSSelectorFromString(@"compileContentRuleListForIdentifier:encodedContentRuleList:completionHandler:");
     NSMutableArray *ruleLists = [NSMutableArray arrayWithCapacity:chunks.count];
+    for (NSUInteger index = 0; index < chunks.count; index++) [ruleLists addObject:NSNull.null];
     __block NSError *lastError = nil;
-    __block void (^loadChunk)(NSUInteger);
-    loadChunk = ^(NSUInteger index) {
-        if (index == chunks.count) {
-            completion(ruleLists.count > 0 || failedSources.count == 0 ? [ruleLists copy] : nil,
-                       [failedSources copy], lastError);
-            loadChunk = nil;
-            return;
-        }
-        NSString *chunkIdentifier = [identifier stringByAppendingFormat:@"-%lu", (unsigned long)index];
-        void (^finishChunk)(id, NSError *) = ^(id ruleList, NSError *error) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (ruleList == nil) {
-                    NSString *sourceID = sourceIDs[index];
-                    [failedSources addObject:sourceID];
-                    lastError = error;
-                    BrowserLog(@"[AdBlock] source=%@ chunk=%lu compile failed: %@",
-                          sourceID, (unsigned long)index, error.localizedDescription ?: @"unknown error");
-                    loadChunk(index + 1);
-                    return;
-                }
-                [ruleLists addObject:ruleList];
-                loadChunk(index + 1);
-            });
-        };
-        void (^compileChunk)(void) = ^{
-            ((void (*)(id, SEL, NSString *, NSString *, void (^)(id, NSError *)))objc_msgSend)(
-                store, compileSelector, chunkIdentifier, chunks[index], finishChunk);
-        };
-        if ([store respondsToSelector:lookupSelector]) {
-            ((void (*)(id, SEL, NSString *, void (^)(id, NSError *)))objc_msgSend)(
-                store, lookupSelector, chunkIdentifier, ^(id ruleList, NSError *error) {
-                    (void)error;
-                    if (ruleList != nil) finishChunk(ruleList, nil);
-                    else dispatch_async(dispatch_get_main_queue(), compileChunk);
+    __block NSUInteger nextIndex = 0, active = 0, remaining = chunks.count;
+    __block void (^startNext)(void);
+    startNext = ^{
+        // WebKit owns the worker threads. Keep at most 14 independent chunk
+        // requests in flight, then refill a slot whenever one completes.
+        while (active < 14 && nextIndex < chunks.count) {
+            NSUInteger index = nextIndex++;
+            active++;
+            NSString *chunkIdentifier = [identifier stringByAppendingFormat:@"-%lu", (unsigned long)index];
+            void (^finishChunk)(id, NSError *) = ^(id ruleList, NSError *error) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if (ruleList == nil) {
+                        NSString *sourceID = sourceIDs[index];
+                        [failedSources addObject:sourceID];
+                        lastError = error;
+                        BrowserLog(@"[AdBlock] source=%@ chunk=%lu compile failed: %@",
+                              sourceID, (unsigned long)index, error.localizedDescription ?: @"unknown error");
+                    } else {
+                        ruleLists[index] = ruleList;
+                    }
+                    active--;
+                    remaining--;
+                    if (remaining == 0) {
+                        NSMutableArray *successful = [NSMutableArray arrayWithCapacity:ruleLists.count];
+                        for (id value in ruleLists) if (value != NSNull.null) [successful addObject:value];
+                        completion(successful.count > 0 || failedSources.count == 0 ? [successful copy] : nil,
+                                   [failedSources copy], lastError);
+                        startNext = nil;
+                    } else {
+                        startNext();
+                    }
                 });
-        } else {
-            compileChunk();
+            };
+            void (^compileChunk)(void) = ^{
+                ((void (*)(id, SEL, NSString *, NSString *, void (^)(id, NSError *)))objc_msgSend)(
+                    store, compileSelector, chunkIdentifier, chunks[index], finishChunk);
+            };
+            if ([store respondsToSelector:lookupSelector]) {
+                ((void (*)(id, SEL, NSString *, void (^)(id, NSError *)))objc_msgSend)(
+                    store, lookupSelector, chunkIdentifier, ^(id ruleList, NSError *error) {
+                        (void)error;
+                        if (ruleList != nil) finishChunk(ruleList, nil);
+                        else dispatch_async(dispatch_get_main_queue(), compileChunk);
+                    });
+            } else {
+                compileChunk();
+            }
         }
     };
-    loadChunk(0);
+    if (remaining == 0) { completion(@[], [failedSources copy], nil); return; }
+    startNext();
 }
 
 // A manifest lets us look up compiled chunks before parsing or converting filters.
