@@ -31,9 +31,13 @@ static NSDictionary *sBrowserUBlockStatistics;
 static NSDictionary *sBrowserNetworkSummary;
 static NSUInteger sNativeLoads;
 static NSTimeInterval sFilterPreparationStarted;
+static NSMutableDictionary<NSString *, NSNumber *> *sFilterStageDurations;
 
 static void BrowserBeginFilterPreparation(void) {
-    if (!sNativeLoads && !sBrowserUBlockPendingCallbacks) sFilterPreparationStarted = NSProcessInfo.processInfo.systemUptime;
+    if (!sNativeLoads && !sBrowserUBlockPendingCallbacks) {
+        sFilterPreparationStarted = NSProcessInfo.processInfo.systemUptime;
+        sFilterStageDurations = [NSMutableDictionary dictionary];
+    }
 }
 static NSMutableDictionary<NSString *, NSNumber *> *sInstalledNativeRules;
 
@@ -481,6 +485,7 @@ void BrowserLoadAdBlockRuleList(NSString *dynamicPolicy, BrowserAdBlockRuleListC
             return;
         }
         sFilterBakePending = YES;
+        NSTimeInterval conversionStarted = NSProcessInfo.processInfo.systemUptime;
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
             NSMutableArray<NSString *> *sourceIDs = [NSMutableArray array];
             NSMutableSet<NSString *> *failedSources = [NSMutableSet set];
@@ -497,8 +502,12 @@ void BrowserLoadAdBlockRuleList(NSString *dynamicPolicy, BrowserAdBlockRuleListC
                     finishLoading(nil, [failedSources copy], preparationError);
                     return;
                 }
+                sFilterStageDurations[@"nativeConversion"] = @(NSProcessInfo.processInfo.systemUptime - conversionStarted);
+                NSTimeInterval webKitStarted = NSProcessInfo.processInfo.systemUptime;
                 BrowserCompileAdBlockChunks(store, identifier, chunks, sourceIDs, failedSources,
                     ^(NSArray *ruleLists, NSSet<NSString *> *ruleFailures, NSError *compileError) {
+                    if (generation == sBrowserAdBlockRulesGeneration)
+                        sFilterStageDurations[@"nativeWebKit"] = @(NSProcessInfo.processInfo.systemUptime - webKitStarted);
                     if (generation == sBrowserAdBlockRulesGeneration &&
                         [identifier isEqualToString:BrowserAdBlockRuleListIdentifier(includeOnlineHosts, dynamicPolicy)] &&
                         ruleFailures.count == 0 && ruleLists.count > 0 && ruleLists.count == chunks.count) {
@@ -534,6 +543,8 @@ void BrowserLoadUBlockRuntime(void (^completion)(NSDictionary *)) {
     __block NSURL *preparedSnapshot;
     __block BOOL saved = NO;
     __block BOOL restored = NO;
+    NSTimeInterval runtimeStarted = NSProcessInfo.processInfo.systemUptime;
+    __block NSTimeInterval networkDuration = 0, extendedDuration = 0;
     // Each stage owns its VM/queue. Publish once both finish, retaining the
     // previous runtime until the current generation is ready.
     dispatch_group_notify(preparation, dispatch_get_main_queue(), ^{
@@ -549,12 +560,15 @@ void BrowserLoadUBlockRuntime(void (^completion)(NSDictionary *)) {
             if (saved) BrowserPruneSnapshots(preparedDirectory, @"extended-v", preparedSnapshot);
             if (!restored || ![preparedNetwork[@"cached"] boolValue]) sFilterBakePending = YES;
         }
+        sFilterStageDurations[@"network"] = @(networkDuration);
+        sFilterStageDurations[@"extended"] = @(extendedDuration);
         [NSNotificationCenter.defaultCenter postNotificationName:BrowserAdBlockSourceStatusDidChangeNotification object:nil];
         if (!preparedRuntime) BrowserLog(@"[AdBlock] uBO parser/runtime unavailable");
         for (void (^callback)(NSDictionary *) in callbacks) callback(preparedRuntime ?: sBrowserUBlockRuntime);
     });
     [BrowserNetworkFilterEngine prepareLists:lists identity:identifier completion:^(NSDictionary *network) {
         preparedNetwork = network;
+        networkDuration = NSProcessInfo.processInfo.systemUptime - runtimeStarted;
         BrowserLog(@"[AdBlock] network available=%d filters=%ld cached=%d snapshot=%d prepare-ms=%ld error=%ld", [network[@"available"] boolValue], (long)[network[@"count"] integerValue], [network[@"cached"] boolValue], [network[@"snapshot"] boolValue], (long)[network[@"prepareMilliseconds"] integerValue], (long)[network[@"error"] integerValue]);
         dispatch_group_leave(preparation);
     }];
@@ -581,6 +595,7 @@ void BrowserLoadUBlockRuntime(void (^completion)(NSDictionary *)) {
                 saved = cache && [cache writeToURL:snapshotURL options:NSDataWritingAtomic error:nil];
             }
             preparedRuntime = compiled; preparedDirectory = directory; preparedSnapshot = snapshotURL;
+            extendedDuration = NSProcessInfo.processInfo.systemUptime - runtimeStarted;
             BrowserLog(@"[AdBlock] advanced cached=%d prepare-ms=%ld", restored, (long)((CFAbsoluteTimeGetCurrent() - started) * 1000));
         }
         dispatch_group_leave(preparation);
@@ -814,7 +829,8 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     NSTimeInterval duration = MAX(0, NSProcessInfo.processInfo.systemUptime - started);
     NSDate *completed = NSDate.date;
     NSDictionary *bake = @{@"completedAt":completed, @"startedAt":[completed dateByAddingTimeInterval:-duration],
-        @"duration":@(duration), @"identity":BrowserAdBlockFilterIdentifier(YES)};
+        @"duration":@(duration), @"identity":BrowserAdBlockFilterIdentifier(YES),
+        @"stages":[sFilterStageDurations copy] ?: @{}};
     [NSUserDefaults.standardUserDefaults setObject:bake forKey:@"AdBlockLastSuccessfulBake"];
     [NSNotificationCenter.defaultCenter postNotificationName:BrowserAdBlockSourceStatusDidChangeNotification object:nil];
 }

@@ -1133,6 +1133,11 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
     NSString *(^number)(NSUInteger) = ^NSString *(NSUInteger value) { return [NSString stringWithFormat:@"%lu", (unsigned long)value]; };
     NSString *(^observed)(NSString *) = ^NSString *(NSString *key) { return number([self.networkRequestCounts[key] unsignedIntegerValue]); };
     NSDictionary *bake = BrowserAdBlockService.lastFilterBake;
+    NSDictionary *stages = [bake[@"stages"] isKindOfClass:NSDictionary.class] ? bake[@"stages"] : @{};
+    NSString *(^stageTime)(NSString *) = ^NSString *(NSString *key) {
+        NSNumber *seconds = [stages[key] isKindOfClass:NSNumber.class] ? stages[key] : nil;
+        return seconds ? [NSString stringWithFormat:@"%.1f s", seconds.doubleValue] : @"—";
+    };
     NSDate *completed = [bake[@"completedAt"] isKindOfClass:NSDate.class] ? bake[@"completedAt"] : nil;
     NSString *date = completed ? [NSDateFormatter localizedStringFromDate:completed dateStyle:NSDateFormatterMediumStyle timeStyle:NSDateFormatterMediumStyle] : @"Not recorded yet";
     NSDictionary *network = BrowserAdBlockService.networkSummary;
@@ -1145,6 +1150,11 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
             @[@"Current page", ![self.adBlockActiveDocumentToken isEqualToString:self.adBlockDocumentToken] ? @"Reload pending" : (self.adBlockRuntimePreparing ? @"Preparing" : @"Current policy")],
             @[@"WebKit rules", self.adBlockStatus ?: @"off"],
             @[@"Advanced runtime", self.adBlockRuntimeAvailable ? @"Available" : @"Inactive"]]},
+        @{@"title":@"Parallel preparation stages", @"metrics":@[
+            @[@"List conversion", stageTime(@"nativeConversion")],
+            @[@"WebKit compilation", stageTime(@"nativeWebKit")],
+            @[@"Network engine", stageTime(@"network")],
+            @[@"Page rules and scripts", stageTime(@"extended")]]},
         @{@"title":@"Filtering engines", @"metrics":@[
             @[@"Network core", networkState], @[@"Network filters", number([network[@"count"] unsignedIntegerValue])],
             @[@"Scriptlet rules", number(scripts)], @[@"Cosmetic rules", number(cosmetics)],
