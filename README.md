@@ -75,7 +75,7 @@ If Xcode reports a missing libtorrent or TVVLCKit binary, rerun both bootstrap s
 <details>
 <summary>Build with GitHub Actions (including from Linux)</summary>
 
-The [build workflow](.github/workflows/build.yml) runs on pushes and pull requests, and can also be started from **Actions → Build tvOSofaBrowse → Run workflow**. You can edit and push source from Linux; compilation runs on a GitHub-hosted macOS 15 runner with Xcode 26.2 and the tvOS SDK. No Apple account, signing certificate, or repository secret is required for these unsigned builds.
+The [build workflow](.github/workflows/build.yml) runs on pull requests and pushes to `master`, and can also be started from **Actions → Build tvOSofaBrowse → Run workflow**. Feature-branch pushes do not start a second copy of the PR build. New commits cancel obsolete builds for the same PR or branch. You can edit and push source from Linux; compilation runs on a GitHub-hosted macOS 15 Intel runner (`macos-15-intel`) with Xcode 26.2 and the tvOS SDK. No Apple account, signing certificate, or repository secret is required for these unsigned builds.
 
 The workflow downloads the pinned media dependencies using the bootstrap scripts and caches `.deps/`. It builds **Debug for the tvOS Simulator** and **Release for Apple TV**, then uploads artifacts to the workflow run:
 
