@@ -1,0 +1,114 @@
+name: Build tvOSofaBrowse
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.platform }} / ${{ matrix.configuration }}
+    # Avoid the constrained hosted ARM pool; media dependencies include x86_64 simulator slices.
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: simulator
+            configuration: Debug
+            destination: generic/platform=tvOS Simulator
+          - platform: device
+            configuration: Release
+            destination: generic/platform=tvOS
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          xcodebuild -showsdks
+
+      - name: Cache media dependencies
+        uses: actions/cache@v5
+        with:
+          path: .deps
+          key: media-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/bootstrap-torrent-deps.sh', 'scripts/bootstrap-vlc-deps.sh') }}
+
+      - name: Install pinned media dependencies
+        run: |
+          ./scripts/bootstrap-torrent-deps.sh
+          ./scripts/bootstrap-vlc-deps.sh
+
+      - name: Build without signing
+        env:
+          CONFIGURATION: ${{ matrix.configuration }}
+          DESTINATION: ${{ matrix.destination }}
+        run: |
+          set -euo pipefail
+          mkdir -p build/artifacts
+          xcodebuild build \
+            -project _Project/Browser.xcodeproj \
+            -scheme Browser \
+            -configuration "$CONFIGURATION" \
+            -destination "$DESTINATION" \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -resultBundlePath build/Build.xcresult \
+            -onlyUsePackageVersionsFromResolvedFile \
+            CONFIGURATION_BUILD_DIR="$GITHUB_WORKSPACE/build/products" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY= \
+            DEVELOPMENT_TEAM= \
+            2>&1 | tee build/xcodebuild.log
+
+      - name: Package app
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          CONFIGURATION: ${{ matrix.configuration }}
+        run: |
+          set -euo pipefail
+          test -d build/products/Browser.app
+          if [[ "$PLATFORM" == device ]]; then
+            mkdir -p build/package/Payload
+            ditto build/products/Browser.app build/package/Payload/Browser.app
+            ditto -c -k --keepParent build/package/Payload \
+              "build/artifacts/tvOSofaBrowse-$CONFIGURATION-unsigned.ipa"
+          else
+            tar -czf "build/artifacts/tvOSofaBrowse-$CONFIGURATION-simulator.tar.gz" \
+              -C build/products Browser.app
+          fi
+          cp .deps/TVVLCKit-LICENSE.txt build/artifacts/
+
+      - name: Upload app
+        uses: actions/upload-artifact@v4
+        with:
+          name: tvOSofaBrowse-${{ matrix.platform }}-${{ matrix.configuration }}-${{ github.sha }}
+          path: build/artifacts/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-diagnostics-${{ matrix.platform }}-${{ matrix.configuration }}-${{ github.sha }}
+          path: |
+            build/xcodebuild.log
+            build/Build.xcresult
+          retention-days: 7
