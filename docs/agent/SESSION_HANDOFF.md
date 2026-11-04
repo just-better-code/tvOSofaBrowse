@@ -18,18 +18,11 @@ If the repository is already present, inspect `git status` and update the intend
 - Historical base 2.20.4: original tag `2.20.4` points to `c4502da` and is unchanged.
 - New release `v2.20.4` / title `tvOSofaBrowse 2.20.4` points to `082cf197adf615a04883c40e09e3fc7a5b22bbf6` on `release/2.20.4`. It preserves `_Project` byte-for-byte from `c4502da`; only five CI/packaging/license files were added. It is deliberately not Latest.
 
-## Current work: finish the 2.20.4 release
+## Release work is complete
 
-The release is already published. Do not create a duplicate release or move either existing tag. At the time this handoff was written, [CI 41901991988](https://github.com/just-better-code/tvOSofaBrowse/actions/runs/41901991988) was compiling Simulator Debug and Apple TV Release. Check its actual state:
+[CI 41901991988](https://github.com/just-better-code/tvOSofaBrowse/actions/runs/41901991988) passed: version validation, Simulator Debug, Apple TV Release and asset upload all succeeded. The release contains `tvOSofaBrowse-2.20.4-unsigned.ipa` (19,189,997 bytes), license notices and `SHA256SUMS`. The published files were downloaded; both checksums and the arm64 AppleTVOS IPA checks passed. GitHub Latest remains `v2.21.1`. No physical-TV installation, playback or automatic renewal was observed.
 
-```sh
-gh run view 41901991988
-gh run watch 41901991988 --exit-status
-gh release view v2.20.4
-gh release download v2.20.4 --dir build/release-2.20.4
-```
-
-After both builds and asset upload succeed, validate the downloaded manifest and IPA with the verifier from `release/2.20.4` (the master verifier additionally requires uBlock files that this older app does not contain). Confirm Latest remains `v2.21.1`, then record the result in development history and update the changelog's retrospective notice to account for the additional published older version. No physical-TV installation, playback or automatic renewal has been verified in this release work.
+There is no unfinished release operation. Do not create duplicate releases, move existing tags or rerun a completed build merely to resume this session. Ask the user for the next task. For reference, the verifier on `release/2.20.4` handles that older app; the master verifier additionally requires uBlock files that 2.20.4 does not contain.
 
 ## Local setup that Git does not transfer
 
@@ -41,4 +34,4 @@ After both builds and asset upload succeed, validate the downloaded manifest and
 
 ## Starter prompt
 
-> Read AGENTS.md and docs/agent/SESSION_HANDOFF.md. Continue the existing 2.20.4 release task: check CI 41901991988, verify its published IPA and checksums, and preserve 2.21.1 as Latest. Do not recreate releases or move existing tags. Use the repository notes for earlier decisions. Git pushes for this task are authorized; physical Apple TV work is not authorized.
+> Read AGENTS.md and docs/agent/SESSION_HANDOFF.md. We are continuing this project on another computer. Both release tasks are complete; use the repository notes for earlier decisions and ask me for the next task. Do not recreate releases, move existing tags or access a physical Apple TV without a new request.
