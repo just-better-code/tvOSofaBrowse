@@ -62,9 +62,6 @@ graphify-out/
 # Downloaded source references for targeted research
 /.references/
 
-# Локальний клон Firefox та нотатки дослідження
-/docs/agent/*
-
 # Locally downloaded tvOS torrent toolchain (see scripts/bootstrap-torrent-deps.sh)
 .deps/
 .data/
@@ -76,7 +73,11 @@ AGENTS.local.md
 # Personal signing configuration
 _Project/Browser/Config/Signing.local.xcconfig
 
-# Personal device deployment
-scripts/push-*
-scripts/build-*
-!scripts/build-ublock-assets*
+# Private deployment settings, legacy scheduler entry point and runtime state
+scripts/Deployment.local.env
+scripts/push-to-*.sh
+!scripts/push-to-tv.sh
+!scripts/push-to-simulator.sh
+scripts/*.log
+scripts/*.next-update
+__pycache__/

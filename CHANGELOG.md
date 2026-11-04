@@ -1,6 +1,6 @@
 # Changelog
 
-This personal-use project's retrospective versions do not correspond to published releases or Git tags.
+Version [2.21.1](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.1) is the first published release; earlier entries reconstruct development history and do not represent separately published releases or tags.
 
 ## 2.21.1 - 2026-10-16
 

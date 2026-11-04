@@ -1,0 +1,28 @@
+# Research source index
+
+This index accompanies the complete project research notes. Large local upstream checkouts, downloaded page copies and personal visual references are not part of the repository. A version in a local directory name is evidence of its label, not proof of an exact upstream commit. Moving-branch links below are navigation aids; verify current source before reusing a mechanism.
+
+| Reference | Recorded revision or version | Source and retained analysis |
+| --- | --- | --- |
+| Firefox for iOS | `371a1b51c54645dbcbd7ad41d1479c7a9e5850f8`, recorded by the 2026-10-01 investigation | [Pinned upstream tree](https://github.com/mozilla-mobile/firefox-ios/tree/371a1b51c54645dbcbd7ad41d1479c7a9e5850f8); [iframe research](FIREFOX_IOS_IFRAME_RESEARCH.md). Local slice: `.references/firefox-ios-research/`. |
+| Firefox TV | Local `master` snapshot; exact archive commit unknown | [Upstream](https://github.com/mozilla-mobile/firefox-tv); [roadmap comparisons](ROADMAP.md). Android/Fire TV architecture is a reference, not proof of tvOS support. |
+| Brave Core / iOS | Supplied `master` archive, reviewed 2026-10-11; exact commit unknown | [Upstream](https://github.com/brave/brave-core); [slice scope and restored modules](references/BRAVE_SCOPE.md); [HTTP-worker investigation](plans/ublock-http-workers-handoff.md). |
+| uBlock Origin | Supplied snapshot labelled `1.75.1.10`; exact commit and archive provenance unknown | [Upstream](https://github.com/gorhill/uBlock); [reference scope](references/UBLOCK_SCOPE.md); [feasibility review](UBLOCK_REFERENCE_REVIEW.md). Shipped source and licenses are retained under [`_Project/Vendor/UBlock`](../../_Project/Vendor/UBlock/README.md). |
+| uAssets | Individual input digests and immutable source commit recorded in the bundled pin | [Pin and source inventory](../../_Project/Vendor/UBlock/uassets-pin.json); [upstream](https://github.com/uBlockOrigin/uAssets). |
+| libtorrent research source | Local snapshot labelled `1.2.20`; exact archive commit unknown | [Upstream version tree](https://github.com/arvidn/libtorrent/tree/v1.2.20); [API reference](https://www.libtorrent.org/single-page-ref.html); [torrent architecture](TORRENTS.md). The saved local `libtorrent.htm` is retained locally. |
+| libtorrent app binary and Boost | libtorrent `1.2.17`, Boost `1.69.0`; exact download hashes in bootstrap script | [Binary release](https://github.com/danylokos/libtorrent-Apple/releases/tag/1.2.17); [bootstrap script](../../scripts/bootstrap-torrent-deps.sh); [licenses](../THIRD_PARTY_NOTICES.md). Distinct from the `1.2.20` research snapshot. |
+| iTransmission | Local source label `itransmission-ios-master`; exact archive origin and commit unknown | [Original project archive](https://code.google.com/archive/p/itransmission/); [historical torrent handoff](TORRENT_HANDOFF.md). The local README credits the original ccp0101 project and later contributors; do not infer an exact fork from those credits. |
+| TVVLCKit / VLC | Pinned binary `3.7.3-319ed2c0-79128878` | [Bootstrap and checksum](../../scripts/bootstrap-vlc-deps.sh); [source and license references](../THIRD_PARTY_NOTICES.md). |
+| Other tvOS Browser forks | Specific commits recorded in the survey | [Fork survey](FORK_SURVEY_2026-10-04.md). Source inspection is distinguished from built or device-verified behavior. |
+
+## Automatic signing and release research
+
+- **Selected: [atvloadly v0.8.2](https://github.com/bitxeno/atvloadly/releases/tag/v0.8.2).** The reviewed [README](https://github.com/bitxeno/atvloadly/blob/v0.8.2/README.md), [Compose configuration](https://github.com/bitxeno/atvloadly/blob/v0.8.2/docker-compose.yml) and [GitHub source adapter](https://github.com/bitxeno/atvloadly/blob/v0.8.2/internal/source/github.go) describe pairing, free-account signing, automatic renewal and uploaded IPA release assets. Docker tag availability for amd64/arm64 and the Compose configuration were checked; installation and a later renewal on this app remain unverified on a physical TV. [Installation instructions](../DEPLOYMENT.md).
+- **Alternative: [tvsign](https://github.com/esalwey/tvsign).** Reviewed public documentation describes Linux/Docker, TV pairing and seven-day free-account renewal. No exact revision was pinned and no local installation was tested.
+- **Signing component: [zsign](https://github.com/zhlynn/zsign).** Reviewed documentation describes signing ready-built packages on Linux with an existing key/certificate/profile. This alone does not obtain a fresh Apple provisioning profile or deliver to a TV; no standalone zsign path was tested here.
+- **[GitHub release event](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#release).** The `published` event runs against the tagged release commit. The project builds only after manual release publication; pushes, tags alone, PRs and release title edits do not trigger its workflow.
+- **[GitHub private networking](https://docs.github.com/en/actions/concepts/runners/private-networking).** A hosted runner needs configured network access to reach a home TV. The selected architecture instead leaves pairing/signing/delivery on the home Linux host and uses GitHub only to build and publish unsigned packages.
+
+## Reusing a local reference
+
+Read its upstream license and the recorded scope first. Use an immutable revision where one is recorded; do not present an unpinned archive as an exact reproducible checkout. Preserve original copyright and source attribution. Keep test databases, account configuration, page captures, runtime logs and personal photos out of Git.

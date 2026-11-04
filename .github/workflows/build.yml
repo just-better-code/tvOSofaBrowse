@@ -1,0 +1,173 @@
+name: Build tvOSofaBrowse
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Validate release version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - id: version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          version=$(python3 scripts/ci-release.py version "$RELEASE_TAG")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: version
+    name: ${{ matrix.platform }} / ${{ matrix.configuration }}
+    # Avoid the constrained hosted ARM pool; media dependencies include x86_64 simulator slices.
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: simulator
+            configuration: Debug
+            destination: generic/platform=tvOS Simulator
+          - platform: device
+            configuration: Release
+            destination: generic/platform=tvOS
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          xcodebuild -showsdks
+
+      - name: Cache media dependencies
+        uses: actions/cache@v5
+        with:
+          path: .deps
+          key: media-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/bootstrap-torrent-deps.sh', 'scripts/bootstrap-vlc-deps.sh') }}
+
+      - name: Install pinned media dependencies
+        run: |
+          ./scripts/bootstrap-torrent-deps.sh
+          ./scripts/bootstrap-vlc-deps.sh
+
+      - name: Build without signing
+        env:
+          CONFIGURATION: ${{ matrix.configuration }}
+          DESTINATION: ${{ matrix.destination }}
+        run: |
+          set -euo pipefail
+          mkdir -p build/artifacts
+          xcodebuild build \
+            -project _Project/Browser.xcodeproj \
+            -scheme Browser \
+            -configuration "$CONFIGURATION" \
+            -destination "$DESTINATION" \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -resultBundlePath build/Build.xcresult \
+            -onlyUsePackageVersionsFromResolvedFile \
+            CONFIGURATION_BUILD_DIR="$GITHUB_WORKSPACE/build/products" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY= \
+            DEVELOPMENT_TEAM= \
+            2>&1 | tee build/xcodebuild.log
+
+      - name: Package app
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          CONFIGURATION: ${{ matrix.configuration }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          test -d build/products/Browser.app
+          mkdir -p build/products/Browser.app/ThirdPartyNotices
+          cp docs/THIRD_PARTY_NOTICES.md build/products/Browser.app/ThirdPartyNotices/README.md
+          cp docs/licenses/* build/products/Browser.app/ThirdPartyNotices/
+          cp .deps/TVVLCKit-LICENSE.txt build/products/Browser.app/ThirdPartyNotices/
+          cp _Project/Vendor/UBlock/LICENSE.txt build/products/Browser.app/ThirdPartyNotices/uBlock-GPL-3.0.txt
+          cp _Project/Vendor/UBlock/UAssets-LICENSE build/products/Browser.app/ThirdPartyNotices/uAssets-GPL-3.0.txt
+          cp _Project/Vendor/UBlock/src/lib/csstree/LICENSE build/products/Browser.app/ThirdPartyNotices/CSS-Tree-MIT.txt
+          cp _Project/Vendor/AdGuardConverter/LICENSE build/products/Browser.app/ThirdPartyNotices/AdGuard-GPL-3.0.txt
+          if [[ "$PLATFORM" == device ]]; then
+            mkdir -p build/package/Payload
+            ditto build/products/Browser.app build/package/Payload/Browser.app
+            ditto -c -k --norsrc --keepParent build/package/Payload \
+              "build/artifacts/tvOSofaBrowse-$VERSION-unsigned.ipa"
+            python3 scripts/ci-release.py verify \
+              "build/artifacts/tvOSofaBrowse-$VERSION-unsigned.ipa" "$VERSION"
+          else
+            tar -czf "build/artifacts/tvOSofaBrowse-$VERSION-simulator.tar.gz" \
+              -C build/products Browser.app
+          fi
+          tar -czf "build/artifacts/tvOSofaBrowse-$VERSION-notices.tar.gz" \
+            -C build/products/Browser.app ThirdPartyNotices
+          (cd build/artifacts && shasum -a 256 tvOSofaBrowse-* > SHA256SUMS)
+
+      - name: Upload app
+        uses: actions/upload-artifact@v4
+        with:
+          name: tvOSofaBrowse-${{ matrix.platform }}-${{ matrix.configuration }}-${{ github.sha }}
+          path: build/artifacts/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-diagnostics-${{ matrix.platform }}-${{ matrix.configuration }}-${{ github.sha }}
+          path: |
+            build/xcodebuild.log
+            build/Build.xcresult
+          retention-days: 7
+
+  publish:
+    name: Attach verified release files
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: tvOSofaBrowse-device-Release-${{ github.sha }}
+          path: build/release
+      - name: Verify and upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          (cd build/release && sha256sum --check SHA256SUMS)
+          python3 scripts/ci-release.py verify \
+            "build/release/tvOSofaBrowse-$VERSION-unsigned.ipa" "$VERSION"
+          gh release upload "$RELEASE_TAG" build/release/* --clobber
