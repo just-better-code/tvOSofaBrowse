@@ -21,7 +21,16 @@
 **One touchpad. Everywhere.** This guide opens from **Menu → Tools → User Guide**. [Read the full User Guide](docs/USER_GUIDE.md).
 
 <details>
-<summary>Install on your Apple TV</summary>
+<summary>Install from Linux and renew automatically</summary>
+
+Download the unsigned IPA from [GitHub Releases](https://github.com/just-better-code/tvOSofaBrowse/releases/latest), then use **atvloadly** on an always-on Linux host to sign it with your Apple Account, install it on Apple TV, and renew it automatically. A free Apple Account can be used; Xcode is not required on the Linux host.
+
+Follow the [Linux deployment guide](docs/DEPLOYMENT.md) for Docker setup, pairing, installation, release updates and renewal. Keep the signing identity stable to avoid creating a separate app. The complete install-and-renew flow still needs confirmation on an actual Apple TV.
+
+</details>
+
+<details>
+<summary>Build and install with Xcode on a Mac</summary>
 
 ### 1. Prepare your Mac
 
@@ -68,40 +77,27 @@ Edit only that local file: replace `YOUR_TEAM_ID` with the team ID selected in X
 2. Select the shared **Browser** scheme and your paired Apple TV as the destination.
 3. Press **Run** (`⌘R`). Xcode builds, signs, installs and launches the app. Use a touchpad-equipped remote to control it.
 
-If Xcode reports a missing libtorrent or TVVLCKit binary, rerun both bootstrap scripts and confirm `.deps/` contains their `.xcframework` directories. If signing fails, check the team and bundle identifier in `Signing.local.xcconfig` and Xcode's automatic signing status. The app is intended for local sideloading; there is no App Store or prebuilt release.
+If Xcode reports a missing libtorrent or TVVLCKit binary, rerun both bootstrap scripts and confirm `.deps/` contains their `.xcframework` directories. If signing fails, check the team and bundle identifier in `Signing.local.xcconfig` and Xcode's automatic signing status. The app is intended for personal sideloading outside the App Store. [Unsigned release packages](https://github.com/just-better-code/tvOSofaBrowse/releases) provide an alternative to building locally.
 
 </details>
 
 <details>
-<summary>Build with GitHub Actions (including from Linux)</summary>
+<summary>Build and publish a release (including from Linux)</summary>
 
-The [build workflow](.github/workflows/build.yml) runs on pull requests and pushes to `master`, and can also be started from **Actions → Build tvOSofaBrowse → Run workflow**. Feature-branch pushes do not start a second copy of the PR build. New commits cancel obsolete builds for the same PR or branch. You can edit and push source from Linux; compilation runs on a GitHub-hosted macOS 15 Intel runner (`macos-15-intel`) with Xcode 26.2 and the tvOS SDK. No Apple account, signing certificate, or repository secret is required for these unsigned builds.
+The [build workflow](.github/workflows/build.yml) runs **only when a GitHub Release is manually published**. Pushes, tags alone and pull requests do not start builds. Create the release in GitHub's Releases page or with `gh release create`; see [maintainer instructions](docs/DEPLOYMENT.md#maintainers-publish-a-release-manually).
 
-The workflow downloads the pinned media dependencies using the bootstrap scripts and caches `.deps/`. It builds **Debug for the tvOS Simulator** and **Release for Apple TV**, then uploads artifacts to the workflow run:
+Compilation runs on GitHub-hosted macOS 15 Intel with Xcode 26.2. The workflow builds **Simulator Debug** and **Apple TV Release** without an Apple Account or signing secrets, verifies the IPA, and attaches the unsigned IPA, dependency notices and SHA-256 checksums to the published release after both builds pass. While the build is running, the release does not yet have an installable package.
 
-- `tvOSofaBrowse-simulator-Debug-…`: a `.tar.gz` containing `Browser.app`, preserving executable permissions and symlinks.
-- `tvOSofaBrowse-device-Release-…`: an **unsigned `.ipa`** containing `Payload/Browser.app`. This requires signing and provisioning before installation on an Apple TV; this workflow does not sign or deploy it.
-- `build-diagnostics-…`: the Xcode build log and result bundle, including when compilation fails.
-
-App artifacts are retained for 14 days and diagnostics for 7 days. Download them from the run's **Artifacts** section. With GitHub CLI authenticated on Linux, you can also use:
-
-```sh
-gh workflow run build.yml --ref YOUR_BRANCH
-gh run list --workflow build.yml
-gh run watch RUN_ID
-gh run download RUN_ID --dir build/ci-artifacts
-```
-
-Manual dispatch becomes available after the workflow is present on the repository's default branch. A successful build confirms compilation, not playback or remote-control behavior. Signing and installing from Linux are separate work.
+The Simulator package is available in the run's Actions artifacts. App artifacts are retained for 14 days and diagnostics for 7 days; release assets persist. A successful run confirms compilation and package checks, not playback, TV installation or automatic renewal.
 
 </details>
 
 <details>
 <summary>Compatibility and project notes</summary>
 
-Website players, formats, codecs and DRM vary; some iframe controls and fullscreen paths still need work. This personal-use fork of [tvOS Browser](https://github.com/jvanakker/tvOSBrowser) uses private tvOS and WebKit APIs and has no App Store or prebuilt release. Preserve dependency licenses when redistributing source or binaries.
+Website players, formats, codecs and DRM vary; some iframe controls and fullscreen paths still need work. This personal-use fork of [tvOS Browser](https://github.com/jvanakker/tvOSBrowser) uses private tvOS and WebKit APIs and is distributed for personal sideloading outside the App Store. See [third-party notices and source references](docs/THIRD_PARTY_NOTICES.md) when redistributing source or binaries.
 
-Current source version: **2.17.11**. The retrospective version history has no matching published release or Git tag.
+Current source version: **2.21.1**. Older changelog entries reconstruct development history; they do not imply separately published releases or tags.
 
 </details>
 
