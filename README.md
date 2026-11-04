@@ -20,6 +20,8 @@
 
 **One touchpad. Everywhere.** This guide opens from **Menu → Tools → User Guide**. [Read the full User Guide](docs/USER_GUIDE.md).
 
+**Install and keep it signed from Linux:** follow the [atvloadly setup guide](docs/DEPLOYMENT.md) for Docker, Apple Account sign-in, TV pairing and automatic renewal.
+
 <details>
 <summary>Install from Linux and renew automatically</summary>
 
@@ -102,3 +104,5 @@ Current source version: **2.21.1**. Older changelog entries reconstruct developm
 </details>
 
 *Images are illustrative and based on anonymized app screenshots.*
+
+[Research and development notes](docs/agent/README.md) · [Research sources](docs/agent/RESEARCH_SOURCES.md) · [Build and delivery scripts](scripts/README.md)

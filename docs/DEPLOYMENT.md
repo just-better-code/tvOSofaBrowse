@@ -123,6 +123,8 @@ The only automatic build trigger is **`release: published`**. Pushes, tags alone
      --title 'tvOSofaBrowse MAJOR.MINOR.PATCH' --notes-file release-notes.md
    ```
 
+   The Git tag (`vMAJOR.MINOR.PATCH`) identifies the source commit; the release title (`tvOSofaBrowse MAJOR.MINOR.PATCH`) is only its display name. The workflow is loaded from the tagged commit, so that commit must contain the intended workflow even if it is on a feature branch.
+
 5. Follow the release run:
 
    ```sh
