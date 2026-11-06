@@ -655,3 +655,36 @@ The user requested a tag and release for application version 2.20.4. Existing ta
 Release title: tvOSofaBrowse 2.20.4. [CI 41901991988](https://github.com/just-better-code/tvOSofaBrowse/actions/runs/41901991988) passed version validation, Simulator Debug, Apple TV Release and asset upload. The published 19,189,997-byte unsigned IPA and notices archive were downloaded; SHA-256 checks passed, as did ZIP, version, arm64 AppleTVOS executable, permissions, framework and license-presence validation. The packaging verifier intentionally checks the dependencies of 2.20.4 rather than requiring the later uBlock assets. Latest remains v2.21.1. Publication on 2026-11-04 does not change the recorded feature implementation date of 2026-10-11. No physical-TV installation, playback or automatic signing renewal was observed.
 
 A sanitized SESSION_HANDOFF.md on master supports continuing on another computer. It records both completed releases, private configuration boundaries and a starter prompt. No conversation transcript, private device identity or signing settings are committed.
+
+
+## 2026-11-07 — Brave preparation lifecycle around uBO: implementation checkpoint
+
+The user requested a deep Brave comparison, then authorized fast parallel implementation
+with subagents. The final direction explicitly retains the existing uBO engines and
+all supported rules; Rust replacement, slim-list substitution and softer first-party
+policy are excluded. Full cold readiness remains a separate target of at most 30 s
+on tvOS 27 with source lists already downloaded. Early protection or cache restoration
+must not be reported as meeting that target.
+
+Read Brave Core at `3281ce16a8846681c7b059be5d49debd97a806e2`, verify key local
+reference files against that revision, and inspect LaunchHelper, navigation policy,
+engine/content-blocker managers, PageData, ScriptFactory and resource downloaders.
+The confirmed adaptation candidates are pre-navigation early readiness, ready-state
+restoration, independent native artifacts, coalesced conditional updates and reusable
+page-script preparation. Keep the original source/trust and website-state safeguards.
+
+Implementation started on `feature/brave-preparation` from clean master
+`248b9dcec59d49a2ccbda11cf2df51e1a2b7c7c7`. Extract the network runtime into its own
+Swift source so subagents can work independently. Add an optional non-truncating
+AdGuard conversion path and a host splitter that preserves later native exceptions.
+Early-navigation and extended-v4/WKUserScript-cache changes are on disk; native
+store dispatch, lazy inputs, source caches and last-good/update integration are still
+in progress. This checkpoint does not establish a compiling or runnable app.
+
+The user explicitly requested durable development checkpoints in case work is
+interrupted. Current ownership, pending integration checks and resume instructions
+are in [the execution plan](plans/brave-preparation-lifecycle.md). Preliminary adapter
+syntax parsing and whitespace checks succeeded for the versions read; final checks
+remain pending. No app build, app tests, Simulator/device action, release, Git remote
+push or measured performance result has occurred. Linux has no local Xcode/tvOS SDK.
+Application version and changelog have not yet been advanced at this checkpoint.
