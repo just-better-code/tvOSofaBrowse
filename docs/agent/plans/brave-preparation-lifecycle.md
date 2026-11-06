@@ -20,9 +20,10 @@ network bundle, Xcode source-reference checks, matching Debug/Release marketing
 versions and whitespace checks. These are static checks, not Apple compilation or
 rule-equivalence/runtime tests. No app build, Simulator/TV action or remote push ran.
 
-Remaining platform work: on an authorized macOS environment, compile the application
-and perform requested rule/lifecycle verification; on an explicitly authorized tvOS
-27 target, measure full cold readiness and memory. The <=30 s outcome is unverified.
+CI compilation has now passed for Simulator Debug and Apple TV Release at source
+commit `254b13b`, run `42312524985`. Remaining platform work is requested
+rule/lifecycle verification and, on an explicitly authorized tvOS 27 target, full
+cold-readiness and memory measurements. The <=30 s outcome is unverified.
 The follow-up source stage adds local generic class/ID surveying, indexed exceptions
 and one network-bundle read per preparation/restoration. Full per-frame payload
 specialization and host-side on-demand retrieval remain deferred.
@@ -376,7 +377,7 @@ Work through these checks before calling integration complete:
    names; these edits are compatibility maintenance, not a passed test result.
 4. Follow AGENTS.md before tests/builds/delivery. This request authorized implementation;
    no app tests, app build, TV discovery or TV installation have been run here. Linux
-   lacks Xcode and the tvOS SDK. Manual branch CI is now supported through workflow_dispatch once registered on the default branch; remote Git push still requires explicit authorization.
+   lacks Xcode and the tvOS SDK. Manual branch CI is now verified through workflow_dispatch on the existing registered workflow; remote Git push still requires explicit authorization.
 5. Once source integration is complete, update the user guide, uBO/component README,
    development history and both marketing versions together. Use patch 2.21.2 for this
    refinement of existing Ad Block; keep build number/signing unchanged. Add one
@@ -457,3 +458,23 @@ achievement or memory/jetsam improvement is established by source edits alone.
    shard count/chunk size or equivalent regex generation using that evidence; retain
    rules and exceptions. Do not relabel early readiness as full success. Record the
    selected tradeoff and repeat only relevant checks after each actual change.
+
+
+## CI build and package checkpoint — 2026-11-07
+
+The user authorized GitHub push/build, authenticated gh and explicitly withheld TV
+delivery. Push feature/brave-preparation and dispatch the existing workflow at
+254b13b. Run https://github.com/just-better-code/tvOSofaBrowse/actions/runs/42312524985
+completed successfully: Device Release succeeded on the first attempt and Simulator
+Debug on the second. The first Simulator attempt failed before compilation because
+the runner could not resolve github.com while SwiftPM fetched dependencies; retry
+only failed jobs on fresh runners without changing app code. Both final app builds
+and packaging passed; release upload was correctly skipped for manual dispatch.
+
+The Device IPA passed the CI arm64 AppleTVOS/version/notices checks. Local artifacts
+are in ignored .data/ci-brave; the user requested a copy of the unsigned IPA in their
+Downloads folder and its SHA256 was verified against the CI manifest. No Simulator
+launch, app tests, physical-TV discovery/install/launch, release/tag or master merge
+ran. The user will attempt TV installation independently; do not infer results or
+new device authorization. Documentation corrections after this run do not change
+the built app source or establish the filter-preparation performance target.

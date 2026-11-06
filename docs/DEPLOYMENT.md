@@ -123,7 +123,7 @@ gh run watch RUN_ID --exit-status
 gh run download RUN_ID --name tvOSofaBrowse-device-Release-COMMIT_SHA
 ```
 
-The selected revision must contain this workflow and the optional-tag version helper. For manual dispatch, the workflow must also be registered with `workflow_dispatch` on the repository's default branch. Pushing a feature branch alone does not establish that prerequisite. Manual builds validate that Debug and Release share a semantic marketing version, without requiring a release tag. The IPA still requires local signing before installation. Workflow completion does not prove Simulator interaction, TV behavior or filter preparation timing.
+The selected revision must contain this workflow and the optional-tag version helper. The existing build workflow is already registered in this repository; branch dispatch was verified without modifying master. A newly introduced workflow may first need registration on the default branch. Manual builds validate that Debug and Release share a semantic marketing version, without requiring a release tag. The IPA still requires local signing before installation. Workflow completion does not prove Simulator interaction, TV behavior or filter preparation timing.
 
 ## Maintainers: publish a release manually
 

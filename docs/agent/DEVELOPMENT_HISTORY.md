@@ -830,3 +830,26 @@ Python AST parsing, workflow YAML parsing, manual-dispatch/release-upload guard
 inspection and whitespace checks passed. No workflow, Apple build, app tests, release,
 Git remote push or physical device action ran. Publishing the workflow to the default
 branch and GitHub authentication remain prerequisites for remote manual dispatch.
+
+
+## 2026-11-07 — First CI build of Brave-inspired preparation
+
+After GitHub authentication, the user authorized remote push/build and explicitly
+withheld installation on TV. Push feature/brave-preparation and manually dispatch
+run [42312524985](https://github.com/just-better-code/tvOSofaBrowse/actions/runs/42312524985)
+at 254b13b. Existing workflow registration allowed dispatch from the feature branch
+without changing master; correct the previously overstated default-branch prerequisite.
+
+Device Release built successfully and the unsigned 2.21.2 IPA passed arm64 AppleTVOS,
+version and packaged-notice checks. Simulator Debug initially failed before source
+compilation when the runner could not resolve github.com for Swift package downloads.
+Rerun only failed jobs on fresh runners; Simulator compilation and packaging then
+succeeded, producing an overall successful run. No app code changed between attempts.
+Release upload was skipped as intended for workflow_dispatch. Download artifacts to
+ignored .data/ci-brave. At the user's request, copy the unsigned IPA to their Downloads
+folder and verify its SHA256 against the CI manifest. Keep personal absolute paths
+and raw logs out of tracked documentation.
+
+No release, tag, merge to master, app tests, Simulator launch or physical-TV discovery,
+installation or launch occurred. The user intends to install the IPA independently;
+no installation/interaction result or <=30-second filter preparation is established.
