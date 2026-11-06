@@ -688,3 +688,18 @@ syntax parsing and whitespace checks succeeded for the versions read; final chec
 remain pending. No app build, app tests, Simulator/device action, release, Git remote
 push or measured performance result has occurred. Linux has no local Xcode/tvOS SDK.
 Application version and changelog have not yet been advanced at this checkpoint.
+
+The initial resumable checkpoint was committed as `e312bb1`. Git had no author
+configuration, so use the established public noreply identity from preceding commits
+per command rather than changing global configuration. The user then explicitly asked
+for detailed upcoming implementation instructions sufficient for another agent at
+medium reasoning effort to continue without reconstructing the conversation. Expand
+the execution plan with ownership, selectors, cache schemas, rule-preservation
+invariants, known race/corruption defects, exact integration order, validation limits
+and explicitly deferred work. Add this checkpoint detail requirement to AGENTS.md.
+
+Later integration work regenerates the shipping network bundle through the standard
+asset builder. Static peer review identifies malformed compiled-block reader risks,
+source-cache integrity/provenance gaps, A-to-B-to-A publication races, last-good binding
+and first-success early restoration ordering. These findings must be resolved before
+the source integration is declared complete; no app/runtime verification is implied.

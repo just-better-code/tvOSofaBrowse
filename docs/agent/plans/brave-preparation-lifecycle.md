@@ -75,3 +75,234 @@ test, Simulator delivery, physical-TV access or Git remote push has occurred yet
 Resume by inspecting this plan, the development-history entry and `git diff`, then
 finish the cache/update agent's integration and review all cross-agent selectors.
 Keep user-authorized local commits separate from any unrequested build or delivery.
+
+### Integration checkpoint
+
+The initial checkpoint is committed as `e312bb1`. Source changes remain in the
+working tree. Extended v4 and early-navigation ownership work is complete; peer
+review continues while cache/update integration finishes. The standard asset builder
+has regenerated `UBlockNetwork.js` once through the available Node runtime; regenerate
+again after the pending network-adapter review fixes. The existing macOS probe now
+imports CryptoKit and uses v4 cache paths, but it has not been run.
+
+Required fixes reported to the cache/update owner include source-cache integrity and
+balanced serialized block markers, skipping empty lines in the legacy collecting
+adapter, newest-wins handling when a request returns to the currently installed
+identity, binding last-good metadata to its actual cache/configuration, and letting
+the first successful early path win over another path's earlier failure. FullReady
+must reject stale/mismatched network state. The native dispatcher also needs complete
+reference validation, coherent previous-manifest names and retained-artifact pruning.
+
+## Detailed continuation instructions
+
+This section is deliberately implementation-specific. Do not infer completion from
+the checklist: inspect the current diff because the cache/update owner may have
+written a fix after this checkpoint. Symbol names below are more stable than line
+numbers. Do not reset, stash or overwrite the working tree to recover this task.
+
+### 1. Establish state and ownership
+
+Run `git status --short`, `git branch --show-current`, `git log -3 --oneline` and
+`git diff --stat`. The branch must be `feature/brave-preparation`; `e312bb1` contains
+the first documentation checkpoint, not the implementation. The starting app was
+2.21.1/build 3022. No build, delivery, remote push or performance observation is
+authorized merely by a historical development note.
+
+Current code ownership is split as follows; coordinate before editing another role's
+files, especially while agents are still running:
+
+| Role | Files and responsibility |
+| --- | --- |
+| Cache/update | `BrowserAdBlockService.m/.h`, `BrowserNetworkFilterEngine.swift`, `Vendor/UBlock/network.js`: native stores, identities, descriptors, restoration, updates and cancellation |
+| Early readiness | `AppDelegate.m`, `BrowserWebView.m`: startup, navigation decisions, script installation, immutable WK cache and UI readiness |
+| Extended payload | `BrowserAdBlockConverter.swift`, `Vendor/UBlock/UBlockRuntime.js`: v4 output, resource caches, safe configuration handoff and parser cancellation |
+| Root integration | `BrowserNativeRuleConverter.swift`, local AdGuard extension, Xcode references, asset regeneration, existing probe compatibility, version and documentation |
+
+All application files above are under `_Project/Browser/` unless a different root
+is given. The package extension is under `_Project/Vendor/AdGuardConverter/`.
+
+### 2. Keep the public and internal contracts consistent
+
+- `BrowserAdBlockService +prepareForLaunch` is main-queue, idempotent startup work;
+  AppDelegate invokes it only when the global switch is on. It must not block app UI.
+- `+prepareEarlyProtectionForPolicy:completion:` returns native lists, an extended
+  runtime and an error. A successful result needs usable native protection and an
+  available compatible network engine. A nil runtime or a partial native failure is
+  not success. Every subscriber must complete exactly once.
+- `BrowserLoadAdBlockRuleList` remains the full native loader. `BrowserLoadUBlockRuntime`
+  remains the full current core/extended loader; an old early result must not satisfy
+  its current-ready fast path.
+- `+runtimeCurrent` must mean current extended identity AND available network state
+  with the same current identity AND `stale != true`. Use it in FullReady and bake
+  recording, not just `networkSummary.available`.
+- Network Objective-C selectors are `prepareSources:identity:configuration:completion:`,
+  `restoreIdentity:configuration:completion:`, `restoreLastGoodForConfiguration:completion:`
+  and `cancelPreparation`. Retain `prepareLists:identity:completion:` for existing tools.
+- Extended conversion retains `compileUBlockLists:` and adds
+  `compileUBlockLists:cancelled:`. Check cancellation between batches of at most 512
+  records, before each world's assembly and before returning the completed artifact.
+- Native conversion is the separate `BrowserNativeRuleConverter +convertRuleChunks:`.
+  Return `{chunks:[JSON strings], rules, advanced, discarded, errors}`. Its vendor call
+  uses `preserveAllRules:true`; legacy converter callers retain the default behavior.
+
+### 3. Preserve rule and cache semantics
+
+Native conversion:
+
+1. For results of at most 149,999 entries, return the existing JSON directly; do not
+   decode/re-encode it unnecessarily.
+2. For larger results, partition contiguous actions. Append every later
+   `ignore-previous-rules` entry that can cancel an action in that partition. Do not
+   copy earlier exceptions after later actions. Reserve one slot for the per-policy
+   action appended by the service.
+3. If the required exceptions cannot fit with one action, fail preparation. Keep
+   installed protection and report Not ready; never truncate to make compilation pass.
+4. DNS keeps every valid distinct host, the existing HTTP(S)/subdomain/third-party
+   conditions and source order. The new form uses a canonical-host `[:/]` boundary
+   and `url-filter-is-case-sensitive:true`. It does not use `|`, broaden schemes or
+   replace destination matching with WebKit `if-domain`.
+
+Native artifacts and dispatch:
+
+- `ConvertedSource-<sourceKey>.plist` has `format:lossless-native-v2`, JSON chunks and
+  counts. The source key binds source ID, complete text, generator version and forced
+  rebuild epoch. Empty chunks may be valid for advanced-only sources.
+- Compiled IDs bind the source, ordered chunk contents, policy and forced rebuild
+  epoch. A normal update must preserve unchanged IDs; Rebuild Filters must bypass
+  all old generated artifacts as full results.
+- `Compiled-0` through `Compiled-3` are independent WebKit store directories below
+  `BrowserContentRules`. At most one task per store runs at once. Main-queue state
+  tracks shared in-flight identifiers, subscribers, generation and failures.
+- `BrowserAdBlockRuleChunks` reports each prepared chunk through its callback so
+  compilation can overlap later source conversion. The final collector joins those
+  same in-flight IDs instead of recompiling them. A failure must be memoized for the
+  generation, not automatically retried by the final collector.
+- `NativeManifest-<early|full>-<policy>.plist` uses `native-manifest-v2` and an ordered
+  `chunks` array containing `identifier`, `shard` and `source`; it also binds global
+  input identity and enabled-source configuration. Validate every reference before
+  subscripting it. Only a complete successful set may replace the current manifest.
+- Keep previous-manifest filenames identical between writer and pruner. Pruning
+  retains installed, in-flight, current, previous and last-successful references.
+  Never remove source TXT or website storage as part of generated-cache cleanup.
+
+Network artifacts:
+
+- `network-v4-<identity>.json` binds format, identity, configuration, engine/PSL
+  fingerprint, ready snapshot, ordered source references and source statistics.
+- `source-v1-<key>.json` binds format, source key, engine fingerprint, source ID,
+  compiled blocks and statistics. Source keys also bind trust and rebuild epoch.
+- Cache JSON uses canonical sorted-key SHA-256 integrity plus atomic writes. Validate
+  provenance and integrity before consuming a compiled string. Validate balanced
+  `#block-start-N`/`#block-end-N` sections before constructing upstream readers: a
+  missing end marker can loop forever, not merely throw.
+- Initialize PSL before compiling any source. Reassemble with `snfe.reset()`, one
+  `snfe.fromCompiled(new CompiledListReader(source.compiled))` per ordered source,
+  then one `snfe.freeze()`. Never concatenate texts with repeated section IDs.
+- The compatibility collecting wrapper must skip empty trailing block lines when
+  rebuilding its one output writer. `JSON.parse('')` in a later restore is a defect.
+- Descriptor `available:false` means an optional remote source was not downloaded
+  yet. An available file that cannot be read is an error, not an empty successful
+  source. Leave the old engine installed on read/parse/cache failures.
+
+### 4. Finish restoration, update and race handling
+
+Work through these checks before calling integration complete:
+
+1. For installed A, pending B, then a new request A, cancel/invalidate B even when A
+   is an exact installed-cache hit. Publication must correspond to the newest request.
+2. `LastSuccessfulFilters.plist` is written only after a fully successful coherent
+   pipeline. It binds configuration, full identity, extended filename/fingerprint,
+   native policy manifests and the exact network identity to restore.
+3. A last-good result may be stale by source revision but must match enabled sources,
+   custom-rule text/trust configuration and engine/adapter fingerprints. Validate
+   both pointer and referenced cache; reject path traversal, mismatched format,
+   identity or configuration. Never label last-good data FullReady for a newer input.
+4. Early preparation races current preparation against last-good restoration. The
+   first successful result wins; a fast failure must wait for other eligible paths
+   before reporting failure. Recheck generation/configuration before callback.
+5. The actual runtime's `artifactIdentity` defines its script identity. Never assign
+   the current global identity to an old dictionary captured by an earlier callback.
+6. ETag metadata under `AdBlockSourceHTTP.<id>` is paired with the cached source file's
+   signature. Send `If-None-Match` only for the matching existing file. A valid 304
+   updates last-check without a generation bump; failed/invalid 200 preserves old
+   text and metadata. A changed valid 200 atomically replaces text before publishing
+   one coalesced source-change generation.
+7. Stop obsolete native scheduling, source compilation and extended batches at safe
+   boundaries. Do not attempt to forcibly interrupt a WebKit call or synchronous
+   matcher execution. Completion and installed-engine safety still need final guards.
+8. Apply native rules by ordered identifier difference: retain common installed
+   lists, add required new lists, then remove superseded lists. Update reference
+   counts only for additions/removals so shared baseline protection stays installed.
+
+### 5. Preserve navigation and v4 script behavior
+
+- The main HTTP(S) navigation barrier runs before the normal strict-document/network
+  decision. Start that decision's existing short watchdog only after early preparation.
+- Keep one-shot decisions plus document, navigation and policy generations. An old
+  callback must cancel its own navigation; it must not mutate or complete a newer one.
+- Redirect responses must establish the destination site's enabled/OFF policy before
+  the document starts. OFF removes app-owned rules/scripts without waiting for caches.
+- After EarlyReady, full native preparation continues. A native-only upgrade must
+  not reload the page or disturb iframe playback. Explicit rebuild/source/site actions
+  keep their intentional reload behavior and existing busy/fullscreen safeguards.
+- Extended v4 artifacts contain `format:4`, `configurationMode:separate-v1`, `scripts`,
+  `stats`, `rejected` and an artifact identity supplied by the service.
+- Register one small configuration script immediately before each world's immutable
+  runtime. The runtime consumes an own configurable data-property descriptor and
+  removes it before invoking library/website code. Never leave its token in a global.
+- Separate configuration is required even without artifact identity. Only immutable
+  WK cache eligibility depends on artifact identity; missing identity uses an uncached
+  v4 script, not a legacy configuration path.
+- WK cache budget is 64 MiB of UTF-8 source and eight entries, keyed by artifact/world.
+  Memory warnings clear only recoverable cached objects, not installed rules/engines.
+- Do not force fresh semantic policy IDs on every same-host navigation: BFcache does
+  not rerun WKUserScripts, so this requires a separate protocol. Preserve existing
+  page-cache behavior and use generation checks to reject stale asynchronous replies.
+
+### 6. Integration, validation and completion order
+
+1. Obtain final readiness from the cache/update owner, then cross-review all selectors
+   with the early owner. Resolve each defect above or explicitly document a remaining
+   limitation; do not silently delete the checkpoint findings.
+2. Regenerate assets with `node scripts/build-ublock-assets.mjs` after the last adapter
+   edit. This session has Node only through `mcp__node_repl`; it can dynamically import
+   the standard builder by absolute file URL with a fresh query suffix. Do not hand-edit
+   the generated network bundle. Expected current inventory is parser 4 modules,
+   174 scriptlet/helper entries and network core 20 modules.
+3. Run appropriate non-runtime syntax/whitespace/project-reference checks. The existing
+   macOS runtime probe was updated for the extracted Swift path, CryptoKit and v4 cache
+   names; these edits are compatibility maintenance, not a passed test result.
+4. Follow AGENTS.md before tests/builds/delivery. This request authorized implementation;
+   no app tests, app build, TV discovery or TV installation have been run here. Linux
+   lacks Xcode and the tvOS SDK. Do not bypass release-only CI or push Git to get a build.
+5. Once source integration is complete, update the user guide, uBO/component README,
+   development history and both marketing versions together. Use patch 2.21.2 for this
+   refinement of existing Ad Block; keep build number/signing unchanged. Add one
+   unreleased changelog entry dated for implementation without inventing a release.
+6. Commit coherent implementation stages locally; no Git remote push. Git author config
+   is absent on this host. Inspect `git log -2 --format='%an <%ae>'` and reuse the
+   established public noreply identity with per-command `git -c user.name='<name>'
+   -c user.email='<public-noreply-email>' commit ...`, as the documentation checkpoint
+   did. Do not change global configuration or copy private identity values into docs.
+7. Before ending, update this checkpoint and development history with actual commit IDs,
+   checks performed, checks not performed and remaining platform-dependent work.
+
+When verification is requested on macOS/tvOS, cover complete rule-record and native
+decision equivalence, source-spanning badfilter/exceptions, corrupt caches, A→B→A
+requests, OFF during preparation, redirects, two WebViews, dynamic/nested/about:blank
+frames, BFcache, full-native completion during iframe playback and forced rebuild.
+Measure five full cold runs against the same source digests: each must finish within
+30 s. Record EarlyReady, FullReady, applied-to-page duration and peak memory separately.
+Warm restoration and a one-source update must demonstrate reuse of unchanged native
+artifacts. Do not derive TV timing or memory limits from Node/macOS-only observations.
+
+### Deliberately deferred work
+
+Page/frame-specific payload delivery and class/ID-driven generic selector retrieval
+are not implemented by this first integration. Current v4 reuses complete immutable
+all-frame scripts; it does not claim smaller per-frame rule sets. A later implementation
+must first define how every dynamic realm receives matching document-start scriptlets,
+including inherited origins, srcdoc/blob, path/entity/regex/ancestor scopes and all
+negative rules. Until that is proven, keep universal delivery as the lossless fallback.
+The new native performance changes also need actual tvOS measurements; no 30-second
+achievement or memory/jetsam improvement is established by source edits alone.
