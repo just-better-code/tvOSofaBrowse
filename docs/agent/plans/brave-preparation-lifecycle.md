@@ -1,5 +1,30 @@
 # Brave-inspired filter preparation around uBlock Origin
 
+## Latest status — 2026-11-07
+
+Source integration is committed as `8d7681c` on `feature/brave-preparation`, app
+version 2.21.2/build 3022. Three subagents completed implementation and static peer
+review; root resolved the remaining runtime-loading path issue, regenerated shipped
+assets and checked project references. The historical checkpoints below describe
+earlier intermediate states; use this section and the final evidence entry first.
+
+Implemented: early navigation protection, coherent compatible last-good restoration,
+independent native/source caches, four bounded native stores, conversion/compilation
+overlap, conditional/coalesced updates, cancellation, lossless native splitting,
+integrity-checked network records and reusable complete v4 scripts. No filtering
+engine replacement, slim full-list substitution or website-state migration occurred.
+
+Passed: final JavaScript syntax parsing for five maintained/generated adapters,
+Python probe AST parsing without execution, exact adapter inclusion in the generated
+network bundle, Xcode source-reference checks, matching Debug/Release marketing
+versions and whitespace checks. These are static checks, not Apple compilation or
+rule-equivalence/runtime tests. No app build, Simulator/TV action or remote push ran.
+
+Remaining platform work: on an authorized macOS environment, compile the application
+and perform requested rule/lifecycle verification; on an explicitly authorized tvOS
+27 target, measure full cold readiness and memory. The <=30 s outcome is unverified.
+Per-frame payload specialization and class/ID-driven generic retrieval remain deferred.
+
 ## Objective and constraints
 
 Preserve the existing uBO engines, every supported rule, exception, source order,
@@ -306,3 +331,51 @@ including inherited origins, srcdoc/blob, path/entity/regex/ancestor scopes and 
 negative rules. Until that is proven, keep universal delivery as the lossless fallback.
 The new native performance changes also need actual tvOS measurements; no 30-second
 achievement or memory/jetsam improvement is established by source edits alone.
+
+## Final source-integration evidence
+
+- Implementation commit: `8d7681c`; documentation checkpoints: `e312bb1`, `b4d48f6`.
+- Peer-review defects were resolved: compiled-record integrity/provenance and balanced
+  blocks, empty-line aggregation, available-file read failure, A→B→A newest-wins,
+  exact last-good binding, first-success early races, current-only FullReady and
+  runtime/artifact identity separation. The last asset regeneration includes those
+  adapter fixes; the shipped bundle contains the exact maintained `network.js`.
+- Root also made startup load WebKit from the same public/private/staged locations
+  as BrowserWebView, since prewarm runs before the WebView's own runtime loader.
+- The standard Node asset builder reported parser 4 modules, 174 scriptlet/helper
+  entries and network core 20 modules. Syntax parsing accepted `UBlockRuntime.js`,
+  `network.js`, `UBlockNetwork.js`, `UBlockParser.js` and `UBlockDomains.js`.
+- Static project inspection confirmed each extracted/new Swift file has one file
+  reference and source-phase membership, both marketing versions are 2.21.2 and the
+  existing updated Python probe parses. The probe itself was not executed.
+- The user supplied a 15-minute final integration window. Source commit and static
+  checks completed within that window; platform-dependent acceptance remains open.
+
+### Exact next validation steps when the necessary authorization/environment exists
+
+1. Confirm the checkout contains `8d7681c` and this final checkpoint; inspect the
+   working tree before any checkout, merge or build. Do not use historical TV
+   deliveries as permission to inspect or install a physical device.
+2. Read the installed apple-tv-deploy skill and Simulator runbook. For a requested
+   Simulator build use the existing delivery script with the Browser scheme; keep
+   signing overrides/local settings intact. Fix any Apple SDK diagnostics before
+   interpreting static-review confidence as compilation evidence.
+3. When testing is requested, run the updated macOS network-runtime probe and existing
+   targeted parser/domain/request/worker checks. Verify per-source compiled output
+   against monolithic compilation, including cross-source exceptions and badfilter.
+   Compare ordered extended records and rejection counters, not only total counts.
+4. Exercise cold/warm launch, one changed source, forced rebuild, rapid A→B→A,
+   source/global/site OFF during preparation, redirects, two WebViews and failures
+   of each early restoration path. Observe that every navigation decides once and
+   stale/partial data never reports FullReady.
+5. Test iframe playback and page cache explicitly. Native-only completion must leave
+   the running player/document intact; script-runtime changes retain guarded reloads.
+   Check nested/dynamic/about:blank frames and both configuration worlds.
+6. On an authorized TV, retain exact source digests and run five full cold rebuilds.
+   Rebuild Filters changes the epoch in source/chunk cache keys; do not delete site
+   data to force a measurement. Record each EarlyReady/FullReady/applied duration,
+   WebKit/conversion/core/extended stage and process memory observation window.
+7. If any full run exceeds 30 s, identify the measured critical stage. Tune native
+   shard count/chunk size or equivalent regex generation using that evidence; retain
+   rules and exceptions. Do not relabel early readiness as full success. Record the
+   selected tradeoff and repeat only relevant checks after each actual change.

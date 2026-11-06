@@ -703,3 +703,56 @@ asset builder. Static peer review identifies malformed compiled-block reader ris
 source-cache integrity/provenance gaps, A-to-B-to-A publication races, last-good binding
 and first-success early restoration ordering. These findings must be resolved before
 the source integration is declared complete; no app/runtime verification is implied.
+
+### Source integration completed — 2.21.2, commit 8d7681c
+
+Integrate three subagents' work into `8d7681c` on `feature/brave-preparation`. Add shared
+launch prewarm and a generation-checked early navigation/redirect barrier before the
+ordinary bounded network/strict-document decision. Early readiness may use compatible
+last-successful protection or the complete bundled uBO native artifact with an
+available core/extended runtime. Full readiness separately requires exact current
+identities and no stale network state. Native-only completion does not reload the
+document; explicit rebuild and existing script-upgrade/player safeguards remain.
+
+Cache converted sources and native chunks independently, retain unchanged identifiers,
+and compile through four separate WebKit stores with one active request per shard.
+Enqueue prepared chunks while subsequent source conversion continues and join shared
+in-flight work for final collection. Use canonical case-sensitive HTTP(S) DNS host
+patterns with the existing subdomain and third-party conditions. Add replacement
+native lists before removing superseded identifiers. Extend the local AdGuard API
+with optional non-truncating output and split oversized sources while retaining every
+applicable following exception; unsupported capacity fails instead of dropping rules.
+
+Move network preparation to its own Swift source. Read source text only when the
+relevant ready cache misses, reuse per-source compiled blocks with separate upstream
+readers and a single final freeze, and preserve source-spanning exceptions/badfilter.
+Add canonical JSON integrity, source/engine provenance, balanced-block validation,
+atomic caches, coherent last-good binding, conditional ETag downloads, short update
+coalescing and safe-boundary cancellation. Fix the review-discovered A-to-B-to-A
+publication race, corrupt/empty compiled-block paths, available-file read failures,
+first-success early restoration ordering and current/stale readiness confusion.
+
+Extended v4 separates fresh configuration from complete immutable MAIN/ISOLATED
+sources. Consume a configurable own data property before running scriptlets and reuse
+WKUserScript objects under a 64 MiB UTF-8-source/eight-entry budget. Memory warnings
+clear recoverable script/resource/library caches, leaving active rules installed.
+Retain complete universal delivery; per-frame specialization and generic-selector
+retrieval were not delivered by this integration. Preserve BFcache behavior rather
+than inventing a new document-token protocol. Root also aligned service startup's
+WebKit loader with the host's public/private/staged fallback paths.
+
+Set Debug and Release MARKETING_VERSION to 2.21.2, retain technical build 3022 and
+local signing, and update the single changelog, user guide and component notes. Run
+the standard asset generator through the available Node runtime after the final
+adapter fixes: parser four modules, 174 scriptlet/helper entries, network 20 modules.
+Final static checks accepted JavaScript syntax for runtime/adapter/network/parser/
+domain assets, Python probe AST, exact maintained-adapter inclusion in the shipping
+network bundle, both new Swift Xcode references, matching marketing versions and
+`git diff --check`. The updated macOS probe was maintained but not executed.
+
+Source integration and commit completed within the user's final 15-minute window.
+No Apple SDK compilation, app tests, Simulator interaction, physical-TV action,
+release/tag, merge or remote Git push occurred. The <=30 s full-cold goal, rule-level
+runtime equivalence, real playback behavior and memory/jetsam effects remain
+unverified. The detailed execution plan records exact next validation steps and the
+deferred mechanisms so another agent can resume without reconstructing the chat.
