@@ -15,6 +15,8 @@ public class ContentBlockerConverter {
     ///     have to limit that size. Read more about the bug in
     ///     [issue #56](https://github.com/AdguardTeam/SafariConverterLib/issues/56).
     ///   - progress: provides a way to cancel conversion earlier.
+    ///   - preserveAllRules: Emits all compatible entries for a host that splits
+    ///     oversized output into exception-preserving WebKit lists itself.
     /// - Returns:
     ///   - Conversion result that contains the Safari rules JSON and additional
     ///     information about conversion.
@@ -23,7 +25,8 @@ public class ContentBlockerConverter {
         safariVersion: SafariVersion = .safari13,
         advancedBlocking: Bool = false,
         maxJsonSizeBytes: Int? = nil,
-        progress: Progress? = nil
+        progress: Progress? = nil,
+        preserveAllRules: Bool = false
     ) -> ConversionResult {
         var shouldContinue: Bool {
             !(progress?.isCancelled ?? false)
@@ -64,7 +67,7 @@ public class ContentBlockerConverter {
         let rulesLimit = safariVersion.rulesLimit
         let result = SafariCbBuilder.buildCbJson(
             from: compilationResult,
-            maxRules: rulesLimit,
+            maxRules: preserveAllRules ? Int.max : rulesLimit,
             maxJsonSizeBytes: maxJsonSizeBytes
         )
 

@@ -11,6 +11,7 @@
 #import "BrowserTorrentKeepAlive.h"
 #import "BrowserTorrentManager.h"
 #import "BrowserWebView.h"
+#import "BrowserAdBlockService.h"
 #import <BackgroundTasks/BackgroundTasks.h>
 
 static NSString * const kTorrentProcessingTaskIdentifier = @"org.justbettercode.browser.torrent-processing";
@@ -81,6 +82,9 @@ static NSTimeInterval const kBackgroundProbeInterval = 5;
         [[NSUserDefaults standardUserDefaults] synchronize];
     }
     [self restoreCookiesFromDefaults];
+    if ([NSUserDefaults.standardUserDefaults boolForKey:@"AdBlockEnabled"]) {
+        [BrowserAdBlockService prepareForLaunch];
+    }
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(debugEnabledDidChange:)
         name:BrowserDebugEnabledDidChangeNotification object:nil];
     [self recoverInterruptedBackgroundProbe];

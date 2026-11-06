@@ -18852,46 +18852,96 @@ function validateStrictBlock(fctxt, logData) {
 // tvOSofaBrowse host adapter. Upstream engines remain unmodified.
 const firewall = new HostEngine(), urls = new URLEngine();
 let ready = false, installedHostRules, installedURLRules;
-globalThis.browserCompileNetwork = function(lists, cached, suffixes) {
-    psl.parse(suffixes, punycode.toASCII);
-    snfe.reset();
-    const stats = {};
-    let compiled = cached || '';
-    if (!cached) {
-        const writer = new CompiledListWriter(), compiler = snfe.createCompiler();
-        compiler.start(writer);
-        for (const list of lists) {
-            writer.properties.set('name', list.id);
-            const parser = new AstFilterParser({trustedSource:list.trusted === true, maxTokenLength:snfe.MAX_TOKEN_LENGTH});
-            const counts = stats[list.id] = {accepted:0, rejected:0};
-            const slices = utils.preparser.splitter(list.text, ['ublock','safari','mobile']);
-            for (let i=0; i<slices.length-1; i+=2) {
-                const lines = list.text.slice(slices[i],slices[i+1]).split(/\r?\n/);
-                for (let index=0; index<lines.length; index++) {
-                    let raw = lines[index].trim();
-                    while (raw.endsWith(' \\') && index+1<lines.length && lines[index+1].startsWith('    '))
-                        raw = raw.slice(0,-2).trim() + lines[++index].trim();
-                    if (!raw || /^[!\[]/.test(raw)) continue;
-                    const hosts = /^(?:0\.0\.0\.0|127\.0\.0\.1|::1)\s+(.+)/.exec(raw);
-                    const filters = hosts ? hosts[1].replace(/#.*/, '').trim().split(/\s+/) : [raw];
-                    for (const filter of filters) {
-                        if (!filter || filter === 'localhost' || filter === 'localhost.localdomain') continue;
-                        parser.parse(filter);
-                        if (!parser.isNetworkFilter()) continue;
-                        if (!parser.hasError() && compiler.compile(parser, writer)) counts.accepted++;
-                        else counts.rejected++;
-                    }
+// Keep each source's serialized blocks independent. Concatenating block texts
+// would overwrite repeated section IDs in CompiledListReader.
+function browserCompiledNetworkValid(raw) {
+    if (typeof raw !== 'string') return false;
+    const sections = new Set();
+    let offset = 0;
+    try {
+        while (offset < raw.length) {
+            const match = /^#block-start-([\w:]+)\n/.exec(raw.slice(offset));
+            if (!match || !['NETWORK_FILTERS:GOOD','NETWORK_FILTERS:BAD'].includes(match[1]) || sections.has(match[1])) return false;
+            sections.add(match[1]);
+            const start = offset + match[0].length;
+            const marker = '\n#block-end-' + match[1];
+            const end = raw.indexOf(marker,start);
+            if (end < start) return false;
+            for (const line of raw.slice(start,end).split('\n')) if (!line || !Array.isArray(JSON.parse(line))) return false;
+            offset = end + marker.length;
+            if (offset < raw.length) { if (raw[offset] !== '\n') return false; offset++; }
+        }
+        return true;
+    } catch { return false; }
+}
+globalThis.browserBeginNetworkCompilation = function(suffixes) {
+    ready=false; psl.parse(suffixes,punycode.toASCII); snfe.reset();
+};
+globalThis.browserCompileNetworkSource = function(list) {
+    const writer = new CompiledListWriter(), compiler = snfe.createCompiler();
+    compiler.start(writer);
+    writer.properties.set('name', list.id);
+    const parser = new AstFilterParser({trustedSource:list.trusted === true, maxTokenLength:snfe.MAX_TOKEN_LENGTH});
+    const counts = {accepted:0,rejected:0};
+    try {
+        const slices = utils.preparser.splitter(list.text, ['ublock','safari','mobile']);
+        for (let i=0; i<slices.length-1; i+=2) {
+            const lines = list.text.slice(slices[i],slices[i+1]).split(/\r?\n/);
+            for (let index=0; index<lines.length; index++) {
+                if ((index & 255) === 0 && globalThis.browserPreparationCancelled?.()) throw new Error('Preparation superseded');
+                let raw = lines[index].trim();
+                while (raw.endsWith(' \\') && index+1<lines.length && lines[index+1].startsWith('    '))
+                    raw = raw.slice(0,-2).trim() + lines[++index].trim();
+                if (!raw || /^[!\[]/.test(raw)) continue;
+                const hosts = /^(?:0\.0\.0\.0|127\.0\.0\.1|::1)\s+(.+)/.exec(raw);
+                const filters = hosts ? hosts[1].replace(/#.*/, '').trim().split(/\s+/) : [raw];
+                for (const filter of filters) {
+                    if (!filter || filter === 'localhost' || filter === 'localhost.localdomain') continue;
+                    parser.parse(filter);
+                    if (!parser.isNetworkFilter()) continue;
+                    if (!parser.hasError() && compiler.compile(parser,writer)) counts.accepted++;
+                    else counts.rejected++;
                 }
             }
-            parser.finish();
         }
-        compiler.finish(writer);
-        compiled = writer.toString();
+    } finally { parser.finish(); }
+    compiler.finish(writer);
+    return {compiled:writer.toString(),stats:counts};
+};
+globalThis.browserRestoreCompiledNetworkSources = function(records,suffixes) {
+    ready=false;
+    psl.parse(suffixes,punycode.toASCII);
+    snfe.reset();
+    const stats={};
+    for (const record of records) {
+        if (globalThis.browserPreparationCancelled?.()) throw new Error('Preparation superseded');
+        if (!browserCompiledNetworkValid(record.compiled)) throw new Error("Invalid compiled source");
+        snfe.fromCompiled(new CompiledListReader(record.compiled));
+        stats[record.id]=record.stats;
     }
-    snfe.fromCompiled(new CompiledListReader(compiled));
-    snfe.freeze();
-    ready = true;
-    return {compiled,stats,count:snfe.getFilterCount(),cached:!!cached};
+    snfe.freeze(); ready=true;
+    return {stats,count:snfe.getFilterCount(),cached:false};
+};
+// Compatibility entry point retained for tools and older callers.
+globalThis.browserCompileNetwork = function(lists,cached,suffixes) {
+    if (cached) {
+        if (!browserCompiledNetworkValid(cached)) throw new Error("Invalid compiled source");
+        psl.parse(suffixes,punycode.toASCII); snfe.reset();
+        snfe.fromCompiled(new CompiledListReader(cached)); snfe.freeze(); ready=true;
+        return {compiled:cached,stats:{},count:snfe.getFilterCount(),cached:true};
+    }
+    // A single writer preserves the legacy collecting API's block shape.
+    browserBeginNetworkCompilation(suffixes);
+    const records=lists.map(list=>({id:list.id,...browserCompileNetworkSource(list)}));
+    const summary=browserRestoreCompiledNetworkSources(records,suffixes);
+    const writer=new CompiledListWriter();
+    for (const record of records) {
+        const reader=new CompiledListReader(record.compiled);
+        for (const [id,block] of reader.blocks) {
+            writer.select(id); if(block) for (const line of block.split('\n')) if (line) writer.block.push(line);
+        }
+    }
+    return {...summary,compiled:writer.toString()};
 };
 globalThis.browserSetDynamicNetwork = function(hostRules, urlRules) {
     hostRules ||= ''; urlRules ||= '';

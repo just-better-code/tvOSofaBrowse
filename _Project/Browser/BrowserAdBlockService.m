@@ -2,14 +2,24 @@
 #import "BrowserAdBlockPolicy.h"
 #import "BrowserPreferencesStore.h"
 #import <objc/message.h>
+#import <CommonCrypto/CommonDigest.h>
+#import <dlfcn.h>
+
+@interface BrowserNativeRuleConverter : NSObject
++ (NSDictionary *)convertRuleChunks:(NSString *)source;
+@end
 
 @interface BrowserAdBlockConverter : NSObject
 + (NSDictionary *)convertRules:(NSString *)source;
 + (NSDictionary *)compileUBlockLists:(NSArray *)lists;
++ (NSDictionary *)compileUBlockLists:(NSArray *)lists cancelled:(BOOL (^)(void))cancelled;
 @end
 
 @interface BrowserNetworkFilterEngine : NSObject
-+ (void)prepareLists:(NSArray *)lists identity:(NSString *)identity completion:(void (^)(NSDictionary *))completion;
++ (void)prepareSources:(NSArray *)sources identity:(NSString *)identity configuration:(NSString *)configuration completion:(void (^)(NSDictionary *))completion;
++ (void)cancelPreparation;
++ (void)restoreLastGoodForConfiguration:(NSString *)configuration completion:(void (^)(NSDictionary *))completion;
++ (void)restoreIdentity:(NSString *)identity configuration:(NSString *)configuration completion:(void (^)(NSDictionary *))completion;
 + (void)matchRequest:(NSDictionary *)request hostRules:(NSString *)hostRules urlRules:(NSString *)urlRules completion:(void (^)(NSDictionary *))completion;
 @end
 
@@ -60,27 +70,6 @@ static void BrowserPruneSnapshots(NSURL *directory, NSString *prefix, NSURL *cur
     }
 }
 
-static void BrowserPruneNativeRules(id store, NSURL *directory) {
-    SEL list = NSSelectorFromString(@"getAvailableContentRuleListIdentifiers:"), remove = NSSelectorFromString(@"removeContentRuleListForIdentifier:completionHandler:");
-    if (sNativeLoads || ![store respondsToSelector:list] || ![store respondsToSelector:remove]) return;
-    NSUInteger generation = sBrowserAdBlockRulesGeneration;
-    ((void (*)(id, SEL, id))objc_msgSend)(store, list, ^(NSArray *identifiers) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (sNativeLoads || generation != sBrowserAdBlockRulesGeneration) return;
-            NSMutableSet *keep = [NSMutableSet setWithArray:sInstalledNativeRules.allKeys ?: @[]];
-            for (NSString *name in @[@"CompiledRulesManifest.plist", @"CompiledRulesManifest-allow.plist", @"CompiledRulesManifest-block.plist"]) {
-                NSDictionary *manifest = [NSDictionary dictionaryWithContentsOfURL:[directory URLByAppendingPathComponent:name]];
-                NSString *identity = manifest[@"identifier"]; NSUInteger count = [manifest[@"chunkCount"] unsignedIntegerValue];
-                if (![identity isKindOfClass:NSString.class] || count > 1000) continue;
-                for (NSUInteger i = 0; i < count; i++) [keep addObject:[identity stringByAppendingFormat:@"-%lu", (unsigned long)i]];
-            }
-            for (NSString *identifier in identifiers) {
-                if (![identifier hasPrefix:@"BrowserAdBlock-v"] || [keep containsObject:identifier]) continue;
-                ((void (*)(id, SEL, id, id))objc_msgSend)(store, remove, identifier, ^(__unused NSError *error) {});
-            }
-        });
-    });
-}
 
 
 NSString *BrowserAdBlockHost(NSURL *URL) {
@@ -151,99 +140,145 @@ static NSUInteger BrowserAddAdBlockHosts(NSMutableOrderedSet<NSString *> *domain
 
 static NSString *BrowserAdBlockFilterIdentifier(BOOL includeOnlineHosts);
 
-static NSArray<NSString *> *BrowserAdBlockRuleChunks(BOOL includeOnlineHosts, NSString *dynamicPolicy,
-    NSMutableArray<NSString *> *sourceIDs, NSMutableSet<NSString *> *failedSources) {
-    NSString *baseIdentity = BrowserAdBlockFilterIdentifier(includeOnlineHosts);
-    NSURL *baseCacheURL = [[[[NSFileManager defaultManager] URLsForDirectory:NSCachesDirectory inDomains:NSUserDomainMask].firstObject
-        URLByAppendingPathComponent:@"BrowserContentRules" isDirectory:YES] URLByAppendingPathComponent:@"ConvertedRules.plist"];
-    NSDictionary *cached = [NSDictionary dictionaryWithContentsOfURL:baseCacheURL];
-    NSArray *cachedChunks = cached[@"chunks"], *cachedSources = cached[@"sources"];
-    BOOL validCache = [cached[@"identifier"] isEqual:baseIdentity] &&
-        [cached[@"format"] isEqual:@"individual-dns-v1"] && [cachedChunks isKindOfClass:NSArray.class] &&
-        [cachedSources isKindOfClass:NSArray.class] && cachedChunks.count == cachedSources.count;
-    if (validCache) {
-        for (id value in cachedChunks) if (![value isKindOfClass:NSString.class]) { validCache = NO; break; }
-        for (id value in cachedSources) if (![value isKindOfClass:NSString.class]) { validCache = NO; break; }
+static NSString *BrowserFilterDigest(NSData *data) {
+    unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256(data.bytes, (CC_LONG)data.length, digest);
+    NSMutableString *text = [NSMutableString stringWithCapacity:64];
+    for (NSUInteger i = 0; i < sizeof(digest); i++) [text appendFormat:@"%02x", digest[i]];
+    return text;
+}
+
+static NSURL *BrowserFilterCacheDirectory(NSString *name) {
+    NSURL *directory = [[NSFileManager.defaultManager URLsForDirectory:NSCachesDirectory inDomains:NSUserDomainMask].firstObject URLByAppendingPathComponent:name isDirectory:YES];
+    [NSFileManager.defaultManager createDirectoryAtURL:directory withIntermediateDirectories:YES attributes:nil error:nil];
+    return directory;
+}
+
+static NSString *BrowserFilterConfiguration(void) {
+    NSMutableArray *enabled = [NSMutableArray arrayWithObject:@"source-trust-v1"];
+    for (NSDictionary *source in BrowserAdBlockSources()) {
+        if (BrowserAdBlockSourceEnabled(source[@"id"])) [enabled addObject:source[@"id"]];
     }
-    NSMutableArray<NSString *> *chunks;
-    if (validCache) {
-        chunks = [cachedChunks mutableCopy]; [sourceIDs addObjectsFromArray:cachedSources];
-    } else {
-    NSMutableOrderedSet<NSString *> *domains = [NSMutableOrderedSet orderedSet];
-    if (includeOnlineHosts && BrowserAdBlockSourceEnabled(@"dns")) {
-        BrowserAddAdBlockHosts(domains, [NSString stringWithContentsOfURL:BrowserAdBlockOnlineHostsURL()
-                                                                 encoding:NSUTF8StringEncoding error:nil]);
-    }
-    chunks = [NSMutableArray array];
-    NSMutableArray<NSDictionary *> *rules = [NSMutableArray arrayWithCapacity:25000];
-    NSCharacterSet *invalidCharacters = [[NSCharacterSet characterSetWithCharactersInString:
-        @"abcdefghijklmnopqrstuvwxyz0123456789.-"] invertedSet];
-    for (NSString *domain in domains) {
-        if ([domain rangeOfCharacterFromSet:invalidCharacters].location != NSNotFound) continue;
-        NSString *escapedDomain = [domain stringByReplacingOccurrencesOfString:@"." withString:@"\\."];
-        NSString *URLFilter = [NSString stringWithFormat:@"^https?://([a-z0-9-]+\\.)*%@(:[0-9]+)?/", escapedDomain];
-        [rules addObject:@{
-            @"trigger": @{
-                @"url-filter": URLFilter,
-                @"load-type": @[@"third-party"]
-            },
-            @"action": @{@"type": @"block"}
-        }];
-        if (rules.count == 25000) {
-            NSData *data = [NSJSONSerialization dataWithJSONObject:rules options:0 error:nil];
-            if (data == nil) return nil;
-            [chunks addObject:[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]];
-            [sourceIDs addObject:@"dns"];
-            [rules removeAllObjects];
+    // A deleted/edited personal rule must never reappear through an older cache.
+    [enabled addObject:[NSUserDefaults.standardUserDefaults stringForKey:kBrowserAdBlockUserFiltersKey] ?: @""];
+    return BrowserFilterDigest([NSJSONSerialization dataWithJSONObject:enabled options:0 error:nil]);
+}
+
+static NSArray *BrowserFilterSourceDescriptors(void) {
+    NSMutableArray *sources = [NSMutableArray array];
+    NSString *epoch = [NSUserDefaults.standardUserDefaults stringForKey:@"AdBlockRebuildIdentity"] ?: @"";
+    for (NSDictionary *source in BrowserAdBlockSources()) {
+        if (!BrowserAdBlockSourceEnabled(source[@"id"])) continue;
+        NSMutableDictionary *descriptor = [@{@"id":source[@"id"], @"trusted":@([source[@"id"] isEqual:@"ubo"]), @"epoch":epoch} mutableCopy];
+        if ([source[@"id"] isEqual:@"custom"]) descriptor[@"text"] = [NSUserDefaults.standardUserDefaults stringForKey:kBrowserAdBlockUserFiltersKey] ?: @"";
+        else {
+            NSURL *url = BrowserAdBlockSourceURL(source);
+            if (url) { descriptor[@"url"] = url.absoluteString; descriptor[@"available"]=@([NSFileManager.defaultManager fileExistsAtPath:url.path]); }
         }
+        [sources addObject:descriptor];
     }
-    if (rules.count > 0) {
-        NSData *data = [NSJSONSerialization dataWithJSONObject:rules options:0 error:nil];
-        if (data == nil) return nil;
-        [chunks addObject:[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]];
-        [sourceIDs addObject:@"dns"];
+    return sources;
+}
+
+static NSArray *BrowserReadFilterLists(NSArray *descriptors) {
+    NSMutableArray *lists = [NSMutableArray array];
+    for (NSDictionary *source in descriptors) {
+        NSString *text = source[@"text"];
+        if (!text) {
+            if ([source[@"available"] isEqual:@NO]) continue;
+            text = [NSString stringWithContentsOfURL:[NSURL URLWithString:source[@"url"] ?: @""] encoding:NSUTF8StringEncoding error:nil];
+            if (!text.length) return nil;
+        }
+        if (text.length) [lists addObject:@{@"id":source[@"id"], @"text":text, @"trusted":source[@"trusted"] ?: @NO, @"epoch":source[@"epoch"] ?: @""}];
     }
-    for (NSDictionary<NSString *, NSString *> *source in BrowserAdBlockSources()) {
-        if ([source[@"id"] isEqualToString:@"dns"] || !BrowserAdBlockSourceEnabled(source[@"id"])) continue;
+    return lists;
+}
+
+static BOOL BrowserFilterGenerationCurrent(NSUInteger generation);
+
+static BOOL BrowserNativeConversionValid(NSDictionary *value, NSString *sourceKey) {
+    if (![value isKindOfClass:NSDictionary.class] || ![value[@"format"] isEqual:@"lossless-native-v2"] || ![value[@"sourceKey"] isEqual:sourceKey]) return NO;
+    NSArray *chunks=value[@"chunks"];
+    if (![chunks isKindOfClass:NSArray.class]) return NO;
+    for (id chunk in chunks) if (![chunk isKindOfClass:NSString.class]) return NO;
+    for (NSString *key in @[@"rules",@"advanced",@"discarded",@"errors"]) if (![value[key] isKindOfClass:NSNumber.class]) return NO;
+    NSData *data=[NSJSONSerialization dataWithJSONObject:chunks options:NSJSONWritingSortedKeys error:nil];
+    return data && [value[@"chunksDigest"] isEqual:BrowserFilterDigest(data)] && [value[@"discarded"] unsignedIntegerValue]==0;
+}
+
+static NSArray<NSDictionary *> *BrowserAdBlockRuleChunks(NSString *dynamicPolicy, BOOL early, NSUInteger generation, NSMutableSet *failedSources, void (^prepared)(NSDictionary *)) {
+    NSURL *directory = BrowserFilterCacheDirectory(@"BrowserContentRules");
+    NSMutableArray *chunks = [NSMutableArray array];
+    NSString *epoch = [NSUserDefaults.standardUserDefaults stringForKey:@"AdBlockRebuildIdentity"] ?: @"";
+    NSArray *dynamic = [BrowserAdBlockPolicy nativeRulesForPolicy:dynamicPolicy];
+    for (NSDictionary *source in BrowserAdBlockSources()) {
+        if (!BrowserAdBlockSourceEnabled(source[@"id"]) || (early && ![source[@"id"] isEqual:@"ubo"])) continue;
+        if (!BrowserFilterGenerationCurrent(generation)) return nil;
         @autoreleasepool {
             NSString *filter = BrowserAdBlockSourceText(source);
-            if (filter.length == 0) continue;
-            NSDictionary *converted = [BrowserAdBlockConverter convertRules:filter];
-            if ([converted[@"rules"] integerValue] == 0 && [converted[@"advanced"] integerValue] > 0) continue;
-            NSString *json = converted[@"json"];
-            if (![json isKindOfClass:NSString.class] || json.length == 0) {
-                [failedSources addObject:source[@"id"]];
-                BrowserLog(@"[AdBlock] source=%@ conversion failed", source[@"id"]);
+            if (!filter.length) {
+                if (![source[@"id"] isEqual:@"custom"] && [NSFileManager.defaultManager fileExistsAtPath:BrowserAdBlockSourceURL(source).path]) [failedSources addObject:source[@"id"]];
                 continue;
             }
-            [chunks addObject:json];
-            [sourceIDs addObject:source[@"id"]];
-            BrowserLog(@"[AdBlock] source=%@ rules=%ld advanced=%ld discarded=%ld errors=%ld", source[@"id"],
-                  (long)[converted[@"rules"] integerValue], (long)[converted[@"advanced"] integerValue],
-                  (long)[converted[@"discarded"] integerValue], (long)[converted[@"errors"] integerValue]);
+            NSString *sourceKey = BrowserFilterDigest([[NSString stringWithFormat:@"native-source-v2|%@|%@|%@", source[@"id"], epoch, filter] dataUsingEncoding:NSUTF8StringEncoding]);
+            NSURL *cacheURL = [directory URLByAppendingPathComponent:[NSString stringWithFormat:@"ConvertedSource-%@.plist", sourceKey]];
+            NSDictionary *converted = [NSDictionary dictionaryWithContentsOfURL:cacheURL];
+            NSArray *jsonChunks = converted[@"chunks"];
+            if (!BrowserNativeConversionValid(converted,sourceKey)) {
+                if ([source[@"id"] isEqual:@"dns"]) {
+                    NSMutableOrderedSet *domains = [NSMutableOrderedSet orderedSet];
+                    BrowserAddAdBlockHosts(domains, filter);
+                    NSMutableArray *generated = [NSMutableArray array], *rules = [NSMutableArray arrayWithCapacity:10000];
+                    for (NSString *domain in domains) {
+                        NSString *escaped = [domain stringByReplacingOccurrencesOfString:@"." withString:@"\\."];
+                        // WebKit canonicalizes HTTP(S) scheme/hostname to lowercase.
+                        // [: /] terminates the same canonical host as the old numeric-port suffix.
+                        NSString *pattern = [NSString stringWithFormat:@"^https?://([a-z0-9-]+\\.)*%@[:/]", escaped];
+                        [rules addObject:@{@"trigger":@{@"url-filter":pattern, @"url-filter-is-case-sensitive":@YES, @"load-type":@[@"third-party"]}, @"action":@{@"type":@"block"}}];
+                        if (rules.count == 10000) {
+                            NSData *data = [NSJSONSerialization dataWithJSONObject:rules options:NSJSONWritingSortedKeys error:nil];
+                            if (!data) return nil;
+                            [generated addObject:[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]];
+                            [rules removeAllObjects];
+                        }
+                    }
+                    if (rules.count) {
+                        NSData *data = [NSJSONSerialization dataWithJSONObject:rules options:NSJSONWritingSortedKeys error:nil];
+                        if (!data) return nil;
+                        [generated addObject:[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]];
+                    }
+                    converted = @{@"chunks":generated, @"rules":@(domains.count), @"advanced":@0, @"discarded":@0, @"errors":@0};
+                } else converted = [BrowserNativeRuleConverter convertRuleChunks:filter];
+                jsonChunks = converted[@"chunks"];
+                if (![jsonChunks isKindOfClass:NSArray.class] || [converted[@"discarded"] unsignedIntegerValue] > 0) {
+                    [failedSources addObject:source[@"id"]]; continue;
+                }
+                NSMutableDictionary *stored = [converted mutableCopy]; stored[@"format"] = @"lossless-native-v2"; stored[@"sourceKey"]=sourceKey; stored[@"chunksDigest"]=BrowserFilterDigest([NSJSONSerialization dataWithJSONObject:jsonChunks options:NSJSONWritingSortedKeys error:nil]);
+                [stored writeToURL:cacheURL atomically:YES];
+                BrowserLog(@"[AdBlock] source=%@ chunks=%lu rules=%ld advanced=%ld discarded=%ld errors=%ld", source[@"id"], (unsigned long)jsonChunks.count, (long)[converted[@"rules"] integerValue], (long)[converted[@"advanced"] integerValue], (long)[converted[@"discarded"] integerValue], (long)[converted[@"errors"] integerValue]);
+            }
+            NSUInteger ordinal = 0;
+            for (NSString *baseJSON in jsonChunks) {
+                NSString *json = baseJSON;
+                if (dynamic.count) {
+                    NSArray *base = [NSJSONSerialization JSONObjectWithData:[baseJSON dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
+                    if (![base isKindOfClass:NSArray.class]) { [failedSources addObject:source[@"id"]]; continue; }
+                    NSMutableArray *combined = [base mutableCopy]; [combined addObjectsFromArray:dynamic];
+                    NSData *data = [NSJSONSerialization dataWithJSONObject:combined options:NSJSONWritingSortedKeys error:nil];
+                    if (!data) return nil;
+                    json = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+                }
+                NSString *key = BrowserFilterDigest([[NSString stringWithFormat:@"native-chunk-v2|%@|%lu|%@|%@", source[@"id"], (unsigned long)ordinal++, epoch, json] dataUsingEncoding:NSUTF8StringEncoding]);
+                unsigned shard = (unsigned)strtoul([[key substringToIndex:8] UTF8String], NULL, 16) % 4;
+                NSDictionary *chunk=@{@"json":json, @"source":source[@"id"], @"sourceKey":sourceKey, @"identifier":[BrowserAdBlockRuleListIdentifierPrefix stringByAppendingFormat:@"-content-%@", key], @"shard":@(shard)};
+                [chunks addObject:chunk]; if (prepared) prepared(chunk);
+            }
         }
     }
-    if (failedSources.count == 0) {
-        [@{@"identifier":baseIdentity, @"format":@"individual-dns-v1", @"chunks":chunks, @"sources":sourceIDs}
-            writeToURL:baseCacheURL atomically:YES];
-    }
-    }
-    NSArray *dynamic = [BrowserAdBlockPolicy nativeRulesForPolicy:dynamicPolicy];
-    if (dynamic.count && chunks.count == 0) {
-        NSData *data = [NSJSONSerialization dataWithJSONObject:dynamic options:0 error:nil];
-        if (!data) return nil;
-        [chunks addObject:[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]];
-        [sourceIDs addObject:@"dynamic"];
-    } else if (dynamic.count) {
-        for (NSUInteger index = 0; index < chunks.count; index++) {
-            NSData *data = [chunks[index] dataUsingEncoding:NSUTF8StringEncoding];
-            NSArray *parsed = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
-            if (![parsed isKindOfClass:NSArray.class]) return nil;
-            NSMutableArray *combined = [parsed mutableCopy]; [combined addObjectsFromArray:dynamic];
-            NSData *output = [NSJSONSerialization dataWithJSONObject:combined options:0 error:nil];
-            if (!output) return nil;
-            chunks[index] = [[NSString alloc] initWithData:output encoding:NSUTF8StringEncoding];
-        }
+    if (!chunks.count && dynamic.count) {
+        NSData *data = [NSJSONSerialization dataWithJSONObject:dynamic options:NSJSONWritingSortedKeys error:nil];
+        NSString *key = BrowserFilterDigest(data);
+        [chunks addObject:@{@"json":[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding], @"source":@"dynamic", @"identifier":[BrowserAdBlockRuleListIdentifierPrefix stringByAppendingFormat:@"-content-%@", key], @"shard":@0}];
     }
     return chunks;
 }
@@ -299,302 +334,393 @@ NSString *BrowserDynamicHostRules(void) {
 
 typedef void (^BrowserAdBlockRuleListCompletion)(NSArray *ruleLists, NSError *error);
 
-static void BrowserCompileAdBlockChunks(id store, NSString *identifier, NSArray<NSString *> *chunks,
-    NSArray<NSString *> *sourceIDs, NSMutableSet<NSString *> *failedSources,
-    void (^completion)(NSArray *ruleLists, NSSet<NSString *> *failedSources, NSError *error)) {
-    SEL lookupSelector = NSSelectorFromString(@"lookUpContentRuleListForIdentifier:completionHandler:");
-    SEL compileSelector = NSSelectorFromString(@"compileContentRuleListForIdentifier:encodedContentRuleList:completionHandler:");
-    NSMutableArray *ruleLists = [NSMutableArray arrayWithCapacity:chunks.count];
-    for (NSUInteger index = 0; index < chunks.count; index++) [ruleLists addObject:NSNull.null];
-    __block NSError *lastError = nil;
-    __block NSUInteger nextIndex = 0, active = 0, remaining = chunks.count;
-    __block void (^startNext)(void);
-    startNext = ^{
-        // WebKit owns the worker threads. Keep at most 14 independent chunk
-        // requests in flight, then refill a slot whenever one completes.
-        while (active < 14 && nextIndex < chunks.count) {
-            NSUInteger index = nextIndex++;
-            active++;
-            NSString *chunkIdentifier = [identifier stringByAppendingFormat:@"-%lu", (unsigned long)index];
-            void (^finishChunk)(id, NSError *) = ^(id ruleList, NSError *error) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    if (ruleList == nil) {
-                        NSString *sourceID = sourceIDs[index];
-                        [failedSources addObject:sourceID];
-                        lastError = error;
-                        BrowserLog(@"[AdBlock] source=%@ chunk=%lu compile failed: %@",
-                              sourceID, (unsigned long)index, error.localizedDescription ?: @"unknown error");
-                    } else {
-                        ruleLists[index] = ruleList;
-                    }
-                    active--;
-                    remaining--;
-                    if (remaining == 0) {
-                        NSMutableArray *successful = [NSMutableArray arrayWithCapacity:ruleLists.count];
-                        for (id value in ruleLists) if (value != NSNull.null) [successful addObject:value];
-                        completion(successful.count > 0 || failedSources.count == 0 ? [successful copy] : nil,
-                                   [failedSources copy], lastError);
-                        startNext = nil;
-                    } else {
-                        startNext();
-                    }
-                });
-            };
-            void (^compileChunk)(void) = ^{
-                ((void (*)(id, SEL, NSString *, NSString *, void (^)(id, NSError *)))objc_msgSend)(
-                    store, compileSelector, chunkIdentifier, chunks[index], finishChunk);
-            };
-            if ([store respondsToSelector:lookupSelector]) {
-                ((void (*)(id, SEL, NSString *, void (^)(id, NSError *)))objc_msgSend)(
-                    store, lookupSelector, chunkIdentifier, ^(id ruleList, NSError *error) {
-                        (void)error;
-                        if (ruleList != nil) finishChunk(ruleList, nil);
-                        else dispatch_async(dispatch_get_main_queue(), compileChunk);
-                    });
-            } else {
-                compileChunk();
-            }
-        }
-    };
-    if (remaining == 0) { completion(@[], [failedSources copy], nil); return; }
-    startNext();
+static NSMutableDictionary *sNativeChunkJobs;
+static NSMutableDictionary *sNativeChunkMemory;
+static NSMutableDictionary *sNativeChunkFailures;
+static NSMutableArray *sNativeStores;
+static NSMutableArray *sNativeShardQueues;
+static NSMutableIndexSet *sNativeBusyShards;
+static NSMutableDictionary *sLatestNativeManifests;
+static NSURL *sRuntimeSnapshotURL;
+static BOOL sRuntimeSnapshotPersisted;
+static NSString *sRuntimeConfiguration;
+
+static NSError *BrowserFilterError(NSInteger code, NSString *message) {
+    return [NSError errorWithDomain:@"BrowserAdBlock" code:code userInfo:@{NSLocalizedDescriptionKey:message}];
 }
 
-// A manifest lets us look up compiled chunks before parsing or converting filters.
-// Only complete, successful compilations are eligible for this fast path.
-static void BrowserLookUpAdBlockManifest(id store, NSURL *manifestURL, NSString *identifier,
-                                       BrowserAdBlockRuleListCompletion completion) {
-    NSDictionary *manifest = [NSDictionary dictionaryWithContentsOfURL:manifestURL];
-    SEL lookupSelector = NSSelectorFromString(@"lookUpContentRuleListForIdentifier:completionHandler:");
-    id storedIdentifier = manifest[@"identifier"];
-    id storedCount = manifest[@"chunkCount"];
-    if (![storedIdentifier isKindOfClass:NSString.class] ||
-        ![storedIdentifier isEqualToString:identifier] ||
-        ![storedCount isKindOfClass:NSNumber.class] ||
-        ![store respondsToSelector:lookupSelector]) {
-        completion(nil, nil);
-        return;
+static id BrowserNativeStore(NSUInteger shard) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        // Startup can reach the service before BrowserWebView loads WebKit.
+        // Use the same runtime locations as that host, including tvOS's
+        // private/staged framework paths, before memoizing preparation errors.
+        for (NSString *path in @[@"/System/Library/Frameworks/WebKit.framework/WebKit",
+                                 @"/System/Library/PrivateFrameworks/WebKit.framework/WebKit",
+                                 @"/System/Library/StagedFrameworks/Safari/WebKit.framework/WebKit"]) {
+            if (NSClassFromString(@"WKContentRuleListStore") != Nil) break;
+            dlopen(path.UTF8String, RTLD_LAZY | RTLD_GLOBAL);
+        }
+        sNativeStores = [NSMutableArray array]; sNativeShardQueues = [NSMutableArray array];
+        sNativeChunkJobs = [NSMutableDictionary dictionary]; sNativeChunkMemory = [NSMutableDictionary dictionary]; sNativeChunkFailures=[NSMutableDictionary dictionary];
+        sNativeBusyShards = [NSMutableIndexSet indexSet]; sLatestNativeManifests = [NSMutableDictionary dictionary];
+        for (NSUInteger i=0; i<4; i++) { [sNativeStores addObject:NSNull.null]; [sNativeShardQueues addObject:[NSMutableArray array]]; }
+    });
+    if (shard >= sNativeStores.count) return nil;
+    if (sNativeStores[shard] == NSNull.null) {
+        Class cls = NSClassFromString(@"WKContentRuleListStore"); SEL create = NSSelectorFromString(@"storeWithURL:");
+        NSURL *directory = [BrowserFilterCacheDirectory(@"BrowserContentRules") URLByAppendingPathComponent:[NSString stringWithFormat:@"Compiled-%lu", (unsigned long)shard] isDirectory:YES];
+        NSError *error = nil;
+        [NSFileManager.defaultManager createDirectoryAtURL:directory withIntermediateDirectories:YES attributes:nil error:&error];
+        id store = !error && [cls respondsToSelector:create] ? ((id (*)(id, SEL, id))objc_msgSend)((id)cls, create, directory) : nil;
+        if (store) sNativeStores[shard] = store;
     }
-    NSInteger count = [storedCount integerValue];
-    if (count <= 0 || count > 1024) {
-        completion(nil, nil);
-        return;
+    return sNativeStores[shard] == NSNull.null ? nil : sNativeStores[shard];
+}
+
+static void BrowserPumpNativeShard(NSUInteger shard) {
+    if ([sNativeBusyShards containsIndex:shard]) return;
+    NSMutableArray *queue = sNativeShardQueues[shard];
+    if (!queue.count) return;
+    NSMutableDictionary *job;
+    while (queue.count) {
+        job=queue.firstObject; [queue removeObjectAtIndex:0];
+        BOOL wanted=NO;
+        for (NSDictionary *listener in job[@"listeners"]) if ([listener[@"generation"] unsignedIntegerValue]==sBrowserAdBlockRulesGeneration) wanted=YES;
+        if (wanted) break;
+        [sNativeChunkJobs removeObjectForKey:job[@"identifier"]];
+        for (NSDictionary *listener in job[@"listeners"]) { void (^callback)(id,NSError *)=listener[@"callback"]; callback(nil,BrowserFilterError(3,@"Filter preparation was superseded.")); }
+        job=nil;
     }
-    NSMutableArray *ruleLists = [NSMutableArray arrayWithCapacity:(NSUInteger)count];
-    for (NSInteger index = 0; index < count; index++) [ruleLists addObject:NSNull.null];
-    __block NSInteger remaining = count;
-    __block BOOL missingChunk = NO;
-    for (NSInteger index = 0; index < count; index++) {
-        NSString *chunkIdentifier = [identifier stringByAppendingFormat:@"-%lu", (unsigned long)index];
-        ((void (*)(id, SEL, NSString *, void (^)(id, NSError *)))objc_msgSend)(
-            store, lookupSelector, chunkIdentifier, ^(id ruleList, NSError *error) {
-                (void)error;
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    if (ruleList != nil) ruleLists[(NSUInteger)index] = ruleList;
-                    else missingChunk = YES;
-                    remaining--;
-                    if (remaining == 0) completion(missingChunk ? nil : [ruleLists copy], nil);
+    if (!job) return;
+    NSString *identifier=job[@"identifier"];
+    id store = BrowserNativeStore(shard);
+    [sNativeBusyShards addIndex:shard];
+    void (^finish)(id, NSError *) = ^(id ruleList, NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (ruleList) sNativeChunkMemory[identifier] = ruleList;
+            else if (error && error.code!=3) sNativeChunkFailures[identifier]=@{@"generation":@(sBrowserAdBlockRulesGeneration),@"error":error};
+            [sNativeChunkJobs removeObjectForKey:identifier]; [sNativeBusyShards removeIndex:shard];
+            for (NSDictionary *listener in [job[@"listeners"] copy]) { void (^callback)(id,NSError *) = listener[@"callback"]; callback(ruleList,error); }
+            BrowserPumpNativeShard(shard);
+        });
+    };
+    if (!store) { finish(nil,BrowserFilterError(1,@"WebKit content rules are unavailable.")); return; }
+    SEL lookup = NSSelectorFromString(@"lookUpContentRuleListForIdentifier:completionHandler:");
+    SEL compile = NSSelectorFromString(@"compileContentRuleListForIdentifier:encodedContentRuleList:completionHandler:");
+    if (![store respondsToSelector:lookup] || ![store respondsToSelector:compile]) { finish(nil,BrowserFilterError(1,@"WebKit content rule compilation is unavailable.")); return; }
+    ((void (*)(id,SEL,id,id))objc_msgSend)(store,lookup,identifier,^(id list,NSError *error) {
+        if (list) { finish(list,nil); return; }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            BOOL stillWanted = NO;
+            for (NSDictionary *listener in job[@"listeners"]) if ([listener[@"generation"] unsignedIntegerValue] == sBrowserAdBlockRulesGeneration) stillWanted = YES;
+            if (!stillWanted) { finish(nil,BrowserFilterError(3,@"Filter preparation was superseded.")); return; }
+            ((void (*)(id,SEL,id,id,id))objc_msgSend)(store,compile,identifier,job[@"json"],finish);
+        });
+    });
+}
+
+static void BrowserLoadNativeChunk(NSDictionary *chunk, NSUInteger generation, void (^completion)(id,NSError *)) {
+    NSUInteger shard = [chunk[@"shard"] unsignedIntegerValue]; BrowserNativeStore(shard);
+    NSString *identifier = chunk[@"identifier"];
+    id cached = sNativeChunkMemory[identifier]; if (cached) { completion(cached,nil); return; }
+    NSDictionary *failure=sNativeChunkFailures[identifier];
+    if ([failure[@"generation"] unsignedIntegerValue]==generation && failure[@"error"]) { completion(nil,failure[@"error"]); return; }
+    NSDictionary *listener = @{@"generation":@(generation), @"callback":[completion copy]};
+    NSMutableDictionary *job = sNativeChunkJobs[identifier];
+    if (job) { [job[@"listeners"] addObject:listener]; return; }
+    job = [@{@"identifier":identifier, @"json":chunk[@"json"], @"listeners":[NSMutableArray arrayWithObject:listener]} mutableCopy];
+    sNativeChunkJobs[identifier] = job; [sNativeShardQueues[shard] addObject:job]; BrowserPumpNativeShard(shard);
+}
+
+static NSArray *BrowserNativeReferences(NSArray *chunks) {
+    NSMutableArray *references = [NSMutableArray array];
+    for (NSDictionary *chunk in chunks) [references addObject:@{@"identifier":chunk[@"identifier"],@"shard":chunk[@"shard"],@"source":chunk[@"source"] ?: @"",@"sourceKey":chunk[@"sourceKey"] ?: @""}];
+    return references;
+}
+
+static void BrowserLookUpAdBlockManifest(NSDictionary *manifest, void (^completion)(NSArray *,NSError *)) {
+    if (![manifest isKindOfClass:NSDictionary.class]) { completion(nil,nil); return; }
+    NSArray *references = manifest[@"chunks"];
+    if (![manifest[@"format"] isEqual:@"native-manifest-v2"] || ![references isKindOfClass:NSArray.class] || references.count > 2048) { completion(nil,nil); return; }
+    NSData *encoded=[NSJSONSerialization isValidJSONObject:references] ? [NSJSONSerialization dataWithJSONObject:references options:NSJSONWritingSortedKeys error:nil] : nil;
+    if (![manifest[@"chunkCount"] isKindOfClass:NSNumber.class] || [manifest[@"chunkCount"] unsignedIntegerValue]!=references.count || !encoded || ![manifest[@"chunksDigest"] isEqual:BrowserFilterDigest(encoded)]) { completion(nil,nil); return; }
+    if (!references.count) { completion(@[],nil); return; }
+    NSMutableArray *lists = [NSMutableArray array]; for (NSUInteger i=0;i<references.count;i++) [lists addObject:NSNull.null];
+    __block NSUInteger remaining = references.count; __block BOOL failed = NO;
+    [references enumerateObjectsUsingBlock:^(NSDictionary *reference, NSUInteger index, BOOL *stop) {
+        BOOL valid=[reference isKindOfClass:NSDictionary.class] && [reference[@"identifier"] isKindOfClass:NSString.class] && [reference[@"source"] isKindOfClass:NSString.class] && [reference[@"shard"] isKindOfClass:NSNumber.class];
+        id value=valid ? reference[@"identifier"] : nil; NSUInteger shard=valid ? [reference[@"shard"] unsignedIntegerValue] : 4;
+        id store = shard < 4 ? BrowserNativeStore(shard) : nil; SEL lookup = NSSelectorFromString(@"lookUpContentRuleListForIdentifier:completionHandler:");
+        void (^found)(id,NSError *) = ^(id list,NSError *error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (list) { lists[index]=list; sNativeChunkMemory[value]=list; } else failed=YES;
+                if (--remaining==0) completion(failed ? nil : [lists copy],nil);
+            });
+        };
+        if (![value isKindOfClass:NSString.class] || !store || ![store respondsToSelector:lookup]) found(nil,nil);
+        else ((void (*)(id,SEL,id,id))objc_msgSend)(store,lookup,value,found);
+    }];
+}
+
+static void BrowserPruneNativeRules(void) {
+    if (sNativeLoads || sNativeChunkJobs.count) return;
+    NSURL *directory = BrowserFilterCacheDirectory(@"BrowserContentRules");
+    NSMutableSet *keep = [NSMutableSet setWithArray:sInstalledNativeRules.allKeys ?: @[]];
+    NSMutableArray *manifests = [NSMutableArray array];
+    for (NSString *policy in @[@"standard",@"allow",@"block"]) for (NSString *phase in @[@"full",@"early"]) for (NSString *suffix in @[@"",@"-previous"]) {
+        NSString *name=[NSString stringWithFormat:@"NativeManifest-%@-%@%@.plist",phase,policy,suffix];
+        NSDictionary *manifest=[NSDictionary dictionaryWithContentsOfURL:[directory URLByAppendingPathComponent:name]];
+        if (manifest) [manifests addObject:manifest];
+    }
+    NSDictionary *last=[NSDictionary dictionaryWithContentsOfURL:[directory URLByAppendingPathComponent:@"LastSuccessfulFilters.plist"]];
+    if ([last[@"native"] isKindOfClass:NSDictionary.class]) [manifests addObjectsFromArray:[last[@"native"] allValues]];
+    for (NSDictionary *manifest in manifests) {
+        if (![manifest isKindOfClass:NSDictionary.class] || ![manifest[@"chunks"] isKindOfClass:NSArray.class]) continue;
+        for (NSDictionary *chunk in manifest[@"chunks"]) if ([chunk isKindOfClass:NSDictionary.class] && [chunk[@"identifier"] isKindOfClass:NSString.class]) [keep addObject:chunk[@"identifier"]];
+    }
+    NSMutableSet *sourceKeys=[NSMutableSet set];
+    for (NSDictionary *manifest in manifests) {
+        if (![manifest isKindOfClass:NSDictionary.class] || ![manifest[@"chunks"] isKindOfClass:NSArray.class]) continue;
+        for (NSDictionary *chunk in manifest[@"chunks"]) if ([chunk isKindOfClass:NSDictionary.class] && [chunk[@"sourceKey"] isKindOfClass:NSString.class]) [sourceKeys addObject:chunk[@"sourceKey"]];
+    }
+    NSArray *files=[NSFileManager.defaultManager contentsOfDirectoryAtURL:directory includingPropertiesForKeys:@[NSURLContentModificationDateKey] options:0 error:nil];
+    NSMutableArray *converted=[NSMutableArray array];
+    for (NSURL *url in files) if ([url.lastPathComponent hasPrefix:@"ConvertedSource-"] && [url.pathExtension isEqual:@"plist"]) [converted addObject:url];
+    [converted sortUsingComparator:^NSComparisonResult(NSURL *a,NSURL *b) {
+        NSDate *ad,*bd; [a getResourceValue:&ad forKey:NSURLContentModificationDateKey error:nil]; [b getResourceValue:&bd forKey:NSURLContentModificationDateKey error:nil];
+        return [bd ?: NSDate.distantPast compare:ad ?: NSDate.distantPast];
+    }];
+    NSUInteger spare=0;
+    for (NSURL *url in converted) {
+        NSString *key=[url.lastPathComponent.stringByDeletingPathExtension substringFromIndex:@"ConvertedSource-".length];
+        if ([sourceKeys containsObject:key]) continue;
+        if (spare++<8) continue;
+        [NSFileManager.defaultManager removeItemAtURL:url error:nil];
+    }
+    for (NSString *identifier in [sNativeChunkMemory.allKeys copy]) if (![keep containsObject:identifier]) [sNativeChunkMemory removeObjectForKey:identifier];
+    NSUInteger generation=sBrowserAdBlockRulesGeneration;
+    for (NSUInteger shard=0;shard<4;shard++) {
+        id store=BrowserNativeStore(shard); SEL list=NSSelectorFromString(@"getAvailableContentRuleListIdentifiers:"), remove=NSSelectorFromString(@"removeContentRuleListForIdentifier:completionHandler:");
+        if (![store respondsToSelector:list] || ![store respondsToSelector:remove]) continue;
+        ((void (*)(id,SEL,id))objc_msgSend)(store,list,^(NSArray *identifiers) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (generation!=sBrowserAdBlockRulesGeneration || sNativeLoads || sNativeChunkJobs.count) return;
+                for (NSString *identifier in identifiers) if ([identifier hasPrefix:BrowserAdBlockRuleListIdentifierPrefix] && ![keep containsObject:identifier]) ((void (*)(id,SEL,id,id))objc_msgSend)(store,remove,identifier,^(__unused NSError *error){});
+            });
+        });
+    }
+}
+
+static void BrowserLoadNativeRules(NSString *dynamicPolicy, BOOL early, BrowserAdBlockRuleListCompletion completion) {
+    dynamicPolicy=[@[@"allow",@"block"] containsObject:dynamicPolicy] ? dynamicPolicy : @"standard";
+    if (!sBrowserAdBlockCachedPolicies) sBrowserAdBlockCachedPolicies=[NSMutableDictionary dictionary];
+    NSString *stateKey=[NSString stringWithFormat:@"%@:%@",early ? @"early" : @"full",dynamicPolicy];
+    NSMutableDictionary *state=sBrowserAdBlockCachedPolicies[stateKey];
+    if (!state) { state=[NSMutableDictionary dictionary]; sBrowserAdBlockCachedPolicies[stateKey]=state; }
+    NSString *requestedIdentifier=BrowserAdBlockRuleListIdentifier(YES,dynamicPolicy);
+    if (state[@"rules"] && [state[@"identity"] isEqual:requestedIdentifier]) { completion(state[@"rules"],nil); return; }
+    if (!state[@"callbacks"]) state[@"callbacks"]=[NSMutableArray array];
+    [state[@"callbacks"] addObject:[completion copy]];
+    if ([state[@"compiling"] boolValue]) return;
+    state[@"compiling"]=@YES; BrowserBeginFilterPreparation(); sNativeLoads++;
+    NSUInteger generation=sBrowserAdBlockRulesGeneration;
+    NSString *identifier=BrowserAdBlockRuleListIdentifier(YES,dynamicPolicy), *configuration=BrowserFilterConfiguration();
+    NSURL *directory=BrowserFilterCacheDirectory(@"BrowserContentRules");
+    NSURL *manifestURL=[directory URLByAppendingPathComponent:[NSString stringWithFormat:@"NativeManifest-%@-%@.plist",early ? @"early" : @"full",dynamicPolicy]];
+    NSDictionary *manifest=[NSDictionary dictionaryWithContentsOfURL:manifestURL];
+    void (^finish)(NSArray *,NSSet *,NSError *)=^(NSArray *lists,NSSet *failures,NSError *error) {
+        sNativeLoads--; state[@"compiling"]=@NO;
+        NSArray *callbacks=[state[@"callbacks"] copy]; [state[@"callbacks"] removeAllObjects];
+        if (generation!=sBrowserAdBlockRulesGeneration || ![identifier isEqual:BrowserAdBlockRuleListIdentifier(YES,dynamicPolicy)]) {
+            for (BrowserAdBlockRuleListCompletion callback in callbacks) BrowserLoadNativeRules(dynamicPolicy,early,callback);
+            return;
+        }
+        if (!early) sBrowserAdBlockRuleFailures=failures;
+        if (lists && !error && !failures.count) { state[@"rules"]=lists; state[@"identity"]=identifier; }
+        [NSNotificationCenter.defaultCenter postNotificationName:BrowserAdBlockSourceStatusDidChangeNotification object:nil];
+        for (BrowserAdBlockRuleListCompletion callback in callbacks) callback(lists,error);
+        if (lists && !error && !failures.count) BrowserPruneNativeRules();
+    };
+    BrowserLookUpAdBlockManifest([manifest[@"identifier"] isEqual:identifier] ? manifest : nil,^(NSArray *cached,NSError *lookupError) {
+        if (cached) { if (!early) sLatestNativeManifests[dynamicPolicy]=manifest; finish(cached,[NSSet set],nil); return; }
+        if (!early) sFilterBakePending=YES;
+        NSTimeInterval started=NSProcessInfo.processInfo.systemUptime;
+        __block NSTimeInterval webKitStarted=0;
+        static dispatch_queue_t conversionQueue; static dispatch_once_t once;
+        dispatch_once(&once,^{ conversionQueue=dispatch_queue_create("browser.adblock.native.conversion",dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL,QOS_CLASS_USER_INITIATED,0)); });
+        dispatch_async(conversionQueue,^{
+            NSMutableSet *failures=[NSMutableSet set];
+            NSArray *chunks=BrowserAdBlockRuleChunks(dynamicPolicy,early,generation,failures,^(NSDictionary *chunk) {
+                dispatch_async(dispatch_get_main_queue(),^{
+                    if (generation!=sBrowserAdBlockRulesGeneration) return;
+                    if (webKitStarted==0) webKitStarted=NSProcessInfo.processInfo.systemUptime;
+                    BrowserLoadNativeChunk(chunk,generation,^(__unused id list,__unused NSError *error){});
                 });
             });
-    }
-}
-
-void BrowserLoadAdBlockRuleList(NSString *dynamicPolicy, BrowserAdBlockRuleListCompletion completion) {
-    // A view chooses a fixed variant from its top-page policy. Each variant
-    // appends its action to every chunk, avoiding cross-chunk allow leaks and
-    // unsupported intersections of WebKit top-URL conditions. Noop uses base
-    // static chunks, so it never clears static protection.
-    dynamicPolicy = [@[@"allow", @"block"] containsObject:dynamicPolicy] ? dynamicPolicy : @"standard";
-    if (!sBrowserAdBlockCachedPolicies) sBrowserAdBlockCachedPolicies = [NSMutableDictionary dictionary];
-    NSMutableDictionary *state = sBrowserAdBlockCachedPolicies[dynamicPolicy];
-    if (!state) { state = [NSMutableDictionary dictionary]; sBrowserAdBlockCachedPolicies[dynamicPolicy] = state; }
-    if (state[@"rules"]) { sBrowserAdBlockRuleFailures = [NSSet set]; completion(state[@"rules"], nil); return; }
-    NSMutableArray *pendingCompletions = state[@"callbacks"];
-    if (!pendingCompletions) { pendingCompletions = [NSMutableArray array]; state[@"callbacks"] = pendingCompletions; }
-    Class storeClass = NSClassFromString(@"WKContentRuleListStore");
-    SEL customStoreSelector = NSSelectorFromString(@"storeWithURL:");
-    SEL compileSelector = NSSelectorFromString(@"compileContentRuleListForIdentifier:encodedContentRuleList:completionHandler:");
-    NSURL *cacheURL = [[[NSFileManager defaultManager] URLsForDirectory:NSCachesDirectory inDomains:NSUserDomainMask].firstObject
-        URLByAppendingPathComponent:@"BrowserContentRules" isDirectory:YES];
-    NSError *directoryError = nil;
-    if (cacheURL != nil) {
-        [[NSFileManager defaultManager] createDirectoryAtURL:cacheURL
-                                  withIntermediateDirectories:YES attributes:nil error:&directoryError];
-    }
-    id store = cacheURL != nil && directoryError == nil && storeClass != Nil && [storeClass respondsToSelector:customStoreSelector]
-        ? ((id (*)(id, SEL, NSURL *))objc_msgSend)((id)storeClass, customStoreSelector, cacheURL) : nil;
-    if (store == nil || ![store respondsToSelector:compileSelector]) {
-        NSError *error = [NSError errorWithDomain:@"BrowserAdBlock" code:1
-                                        userInfo:@{NSLocalizedDescriptionKey: directoryError.localizedDescription ?: @"WebKit content rule lists are unavailable on this device."}];
-        completion(nil, error);
-        return;
-    }
-    if (pendingCompletions == nil) {
-        pendingCompletions = [NSMutableArray array];
-    }
-    [pendingCompletions addObject:[completion copy]];
-    if ([state[@"compiling"] boolValue]) {
-        return;
-    }
-    state[@"compiling"] = @YES;
-    BrowserBeginFilterPreparation();
-    sNativeLoads++;
-    NSUInteger generation = sBrowserAdBlockRulesGeneration;
-    BOOL includeOnlineHosts = NO;
-    for (NSDictionary<NSString *, NSString *> *source in BrowserAdBlockSources()) {
-        if (BrowserAdBlockSourceEnabled(source[@"id"]) &&
-            [NSFileManager.defaultManager fileExistsAtPath:BrowserAdBlockSourceURL(source).path]) {
-            includeOnlineHosts = YES;
-            break;
-        }
-    }
-    NSString *identifier = BrowserAdBlockRuleListIdentifier(includeOnlineHosts, dynamicPolicy);
-    NSURL *manifestURL = [cacheURL URLByAppendingPathComponent:[dynamicPolicy isEqual:@"standard"] ? @"CompiledRulesManifest.plist" : [NSString stringWithFormat:@"CompiledRulesManifest-%@.plist", dynamicPolicy]];
-    void (^finishLoading)(NSArray *, NSSet<NSString *> *, NSError *) =
-        ^(NSArray *ruleLists, NSSet<NSString *> *ruleFailures, NSError *error) {
-        sNativeLoads--;
-        if (generation != sBrowserAdBlockRulesGeneration ||
-            ![identifier isEqualToString:BrowserAdBlockRuleListIdentifier(includeOnlineHosts, dynamicPolicy)]) {
-            state[@"compiling"] = @NO;
-            NSArray *callbacks = [pendingCompletions copy];
-            [pendingCompletions removeAllObjects];
-            for (id callbackObject in callbacks) BrowserLoadAdBlockRuleList(dynamicPolicy, callbackObject);
-            return;
-        }
-        sBrowserAdBlockRuleFailures = ruleFailures;
-        [NSNotificationCenter.defaultCenter postNotificationName:BrowserAdBlockSourceStatusDidChangeNotification object:nil];
-        if (ruleLists && !error && ruleFailures.count == 0) state[@"rules"] = ruleLists;
-        state[@"compiling"] = @NO;
-        NSArray *callbacks = [pendingCompletions copy];
-        [pendingCompletions removeAllObjects];
-        for (id callbackObject in callbacks) {
-            BrowserAdBlockRuleListCompletion callback = callbackObject;
-            callback(ruleLists, error);
-        }
-        if (ruleLists && !error && !ruleFailures.count) BrowserPruneNativeRules(store, cacheURL);
-    };
-    BrowserLookUpAdBlockManifest(store, manifestURL, identifier, ^(NSArray *cachedRuleLists, NSError *error) {
-        (void)error;
-        if (cachedRuleLists != nil) {
-            BrowserLog(@"[AdBlock] restored %lu compiled chunks without filter conversion", (unsigned long)cachedRuleLists.count);
-            finishLoading(cachedRuleLists, [NSSet set], nil);
-            return;
-        }
-        sFilterBakePending = YES;
-        NSTimeInterval conversionStarted = NSProcessInfo.processInfo.systemUptime;
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-            NSMutableArray<NSString *> *sourceIDs = [NSMutableArray array];
-            NSMutableSet<NSString *> *failedSources = [NSMutableSet set];
-            NSArray<NSString *> *chunks = BrowserAdBlockRuleChunks(includeOnlineHosts, dynamicPolicy, sourceIDs, failedSources);
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (generation != sBrowserAdBlockRulesGeneration ||
-                    ![identifier isEqualToString:BrowserAdBlockRuleListIdentifier(includeOnlineHosts, dynamicPolicy)]) {
-                    finishLoading(nil, [NSSet set], nil);
-                    return;
-                }
-                if (chunks == nil) {
-                    NSError *preparationError = [NSError errorWithDomain:@"BrowserAdBlock" code:2
-                        userInfo:@{NSLocalizedDescriptionKey: @"Ad Block rules could not be prepared."}];
-                    finishLoading(nil, [failedSources copy], preparationError);
-                    return;
-                }
-                sFilterStageDurations[@"nativeConversion"] = @(NSProcessInfo.processInfo.systemUptime - conversionStarted);
-                NSTimeInterval webKitStarted = NSProcessInfo.processInfo.systemUptime;
-                BrowserCompileAdBlockChunks(store, identifier, chunks, sourceIDs, failedSources,
-                    ^(NSArray *ruleLists, NSSet<NSString *> *ruleFailures, NSError *compileError) {
-                    if (generation == sBrowserAdBlockRulesGeneration)
-                        sFilterStageDurations[@"nativeWebKit"] = @(NSProcessInfo.processInfo.systemUptime - webKitStarted);
-                    if (generation == sBrowserAdBlockRulesGeneration &&
-                        [identifier isEqualToString:BrowserAdBlockRuleListIdentifier(includeOnlineHosts, dynamicPolicy)] &&
-                        ruleFailures.count == 0 && ruleLists.count > 0 && ruleLists.count == chunks.count) {
-                        [@{@"identifier": identifier, @"chunkCount": @(chunks.count)}
-                            writeToURL:manifestURL atomically:YES];
+            dispatch_async(dispatch_get_main_queue(),^{
+                if (generation!=sBrowserAdBlockRulesGeneration || ![identifier isEqual:BrowserAdBlockRuleListIdentifier(YES,dynamicPolicy)]) { finish(nil,[NSSet set],nil); return; }
+                if (!chunks || failures.count) { finish(nil,failures,BrowserFilterError(2,@"Ad Block rules could not be converted without loss.")); return; }
+                if (!early) sFilterStageDurations[@"nativeConversion"]=@(NSProcessInfo.processInfo.systemUptime-started);
+                if (webKitStarted==0) webKitStarted=NSProcessInfo.processInfo.systemUptime;
+                NSMutableArray *lists=[NSMutableArray array]; for (NSUInteger i=0;i<chunks.count;i++) [lists addObject:NSNull.null];
+                __block NSUInteger remaining=chunks.count; __block NSError *lastError;
+                void (^compiled)(void)=^{
+                    if (!early && generation==sBrowserAdBlockRulesGeneration) sFilterStageDurations[@"nativeWebKit"]=@(NSProcessInfo.processInfo.systemUptime-webKitStarted);
+                    if (!lastError && generation==sBrowserAdBlockRulesGeneration) {
+                        NSArray *references=BrowserNativeReferences(chunks);
+                        NSDictionary *next=@{@"format":@"native-manifest-v2",@"identifier":identifier,@"configuration":configuration,@"chunks":references,@"chunkCount":@(references.count),@"chunksDigest":BrowserFilterDigest([NSJSONSerialization dataWithJSONObject:references options:NSJSONWritingSortedKeys error:nil])};
+                        NSDictionary *previous=[NSDictionary dictionaryWithContentsOfURL:manifestURL];
+                        if (previous) [previous writeToURL:[directory URLByAppendingPathComponent:[NSString stringWithFormat:@"NativeManifest-%@-%@-previous.plist",early ? @"early" : @"full",dynamicPolicy]] atomically:YES];
+                        [next writeToURL:manifestURL atomically:YES];
+                        if (!early) sLatestNativeManifests[dynamicPolicy]=next;
                     }
-                    finishLoading(ruleLists, ruleFailures, compileError);
-                });
+                    finish(lastError ? nil : [lists copy],failures,lastError);
+                };
+                if (!remaining) { compiled(); return; }
+                [chunks enumerateObjectsUsingBlock:^(NSDictionary *chunk,NSUInteger index,BOOL *stop) {
+                    BrowserLoadNativeChunk(chunk,generation,^(id list,NSError *error) {
+                        if (list) lists[index]=list;
+                        else { [failures addObject:chunk[@"source"]]; lastError=error ?: BrowserFilterError(2,@"Native filter compilation failed."); }
+                        if (--remaining==0) compiled();
+                    });
+                }];
             });
         });
     });
 }
 
+void BrowserLoadAdBlockRuleList(NSString *dynamicPolicy, BrowserAdBlockRuleListCompletion completion) {
+    BrowserLoadNativeRules(dynamicPolicy,NO,completion);
+}
+
+static BOOL BrowserFilterGenerationCurrent(NSUInteger generation) {
+    if (NSThread.isMainThread) return generation==sBrowserAdBlockRulesGeneration;
+    __block BOOL current;
+    dispatch_sync(dispatch_get_main_queue(), ^{ current=generation==sBrowserAdBlockRulesGeneration; });
+    return current;
+}
+
+static NSString *BrowserExtendedFingerprint(void) {
+    static NSString *fingerprint; static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        NSMutableData *bytes=[NSMutableData dataWithData:[@"extended-v4" dataUsingEncoding:NSUTF8StringEncoding]];
+        for (NSString *name in @[@"UBlockParser.js",@"UBlockScriptlets.json",@"UBlockRuntime.js",@"UBlockDomains.js",@"UBlockCosmetics.js",@"UBlockProcedural.js"]) {
+            NSData *data=[NSData dataWithContentsOfURL:[NSBundle.mainBundle URLForResource:name withExtension:nil]];
+            if (data) [bytes appendData:data];
+        }
+        fingerprint=BrowserFilterDigest(bytes);
+    });
+    return fingerprint;
+}
+
+static BOOL BrowserExtendedCacheValid(NSDictionary *value, BOOL modern) {
+    return [value isKindOfClass:NSDictionary.class] && [value[@"scripts"] isKindOfClass:NSDictionary.class] &&
+        [value[@"scripts"][@"MAIN"] isKindOfClass:NSString.class] && [value[@"scripts"][@"ISOLATED"] isKindOfClass:NSString.class] &&
+        [value[@"stats"] isKindOfClass:NSDictionary.class] && [value[@"rejected"] isKindOfClass:NSDictionary.class] &&
+        (!modern || ([value[@"format"] isKindOfClass:NSNumber.class] && [value[@"format"] integerValue]==4 && [value[@"configurationMode"] isKindOfClass:NSString.class] && [value[@"configurationMode"] isEqual:@"separate-v1"]));
+}
+
 void BrowserLoadUBlockRuntime(void (^completion)(NSDictionary *)) {
-    NSString *identifier = BrowserAdBlockFilterIdentifier(YES);
-    if (sBrowserUBlockRuntime && [identifier isEqualToString:sBrowserUBlockRuntimeIdentifier]) { completion(sBrowserUBlockRuntime); return; }
+    NSString *identifier=BrowserAdBlockFilterIdentifier(YES), *configuration=BrowserFilterConfiguration();
+    if (sBrowserUBlockRuntime && [identifier isEqual:sBrowserUBlockRuntimeIdentifier] && [sBrowserNetworkSummary[@"available"] boolValue] && [sBrowserNetworkSummary[@"identity"] isEqual:identifier] && ![sBrowserNetworkSummary[@"stale"] boolValue]) { completion(sBrowserUBlockRuntime); return; }
     if (sBrowserUBlockPendingCallbacks) { [sBrowserUBlockPendingCallbacks addObject:[completion copy]]; return; }
     BrowserBeginFilterPreparation();
-    sBrowserUBlockPendingCallbacks = [NSMutableArray arrayWithObject:[completion copy]];
-    NSUInteger generation = sBrowserAdBlockRulesGeneration;
-    NSMutableArray *lists = [NSMutableArray array];
-    for (NSDictionary *source in BrowserAdBlockSources()) {
-        if (!BrowserAdBlockSourceEnabled(source[@"id"])) continue;
-        NSString *text = BrowserAdBlockSourceText(source);
-        if (text.length) [lists addObject:@{@"id":source[@"id"], @"text":text, @"trusted":@([source[@"id"] isEqualToString:@"ubo"])}];
-    }
-    dispatch_group_t preparation = dispatch_group_create();
-    dispatch_group_enter(preparation);
-    dispatch_group_enter(preparation);
-    __block NSDictionary *preparedNetwork;
-    __block NSDictionary *preparedRuntime;
-    __block NSURL *preparedDirectory;
-    __block NSURL *preparedSnapshot;
-    __block BOOL saved = NO;
-    __block BOOL restored = NO;
-    NSTimeInterval runtimeStarted = NSProcessInfo.processInfo.systemUptime;
-    __block NSTimeInterval networkDuration = 0, extendedDuration = 0;
-    // Each stage owns its VM/queue. Publish once both finish, retaining the
-    // previous runtime until the current generation is ready.
-    dispatch_group_notify(preparation, dispatch_get_main_queue(), ^{
-        NSArray *callbacks = [sBrowserUBlockPendingCallbacks copy]; sBrowserUBlockPendingCallbacks = nil;
-        if (generation != sBrowserAdBlockRulesGeneration || ![identifier isEqualToString:BrowserAdBlockFilterIdentifier(YES)]) {
-            for (id callback in callbacks) BrowserLoadUBlockRuntime(callback);
+    sBrowserUBlockPendingCallbacks=[NSMutableArray arrayWithObject:[completion copy]];
+    NSUInteger generation=sBrowserAdBlockRulesGeneration;
+    NSArray *descriptors=BrowserFilterSourceDescriptors();
+    dispatch_group_t preparation=dispatch_group_create(); dispatch_group_enter(preparation); dispatch_group_enter(preparation);
+    __block NSDictionary *preparedNetwork, *preparedRuntime;
+    __block NSURL *snapshotURL;
+    __block BOOL restored=NO, saved=NO;
+    NSTimeInterval started=NSProcessInfo.processInfo.systemUptime;
+    __block NSTimeInterval networkDuration=0,extendedDuration=0;
+    dispatch_group_notify(preparation,dispatch_get_main_queue(),^{
+        NSArray *callbacks=[sBrowserUBlockPendingCallbacks copy]; sBrowserUBlockPendingCallbacks=nil;
+        if (generation!=sBrowserAdBlockRulesGeneration || ![identifier isEqual:BrowserAdBlockFilterIdentifier(YES)]) {
+            for (void (^callback)(NSDictionary *) in callbacks) BrowserLoadUBlockRuntime(callback);
             return;
         }
-        sBrowserNetworkSummary = preparedNetwork;
+        if ([preparedNetwork[@"available"] boolValue] || ![sBrowserNetworkSummary[@"available"] boolValue] || ![sRuntimeConfiguration isEqual:configuration]) sBrowserNetworkSummary=preparedNetwork;
         if (preparedRuntime) {
-            sBrowserUBlockRuntime = preparedRuntime; sBrowserUBlockRuntimeIdentifier = identifier;
-            sBrowserUBlockStatistics = preparedRuntime[@"stats"];
-            if (saved) BrowserPruneSnapshots(preparedDirectory, @"extended-v", preparedSnapshot);
-            if (!restored || ![preparedNetwork[@"cached"] boolValue]) sFilterBakePending = YES;
+            sBrowserUBlockRuntime=preparedRuntime; sBrowserUBlockRuntimeIdentifier=identifier; sRuntimeConfiguration=configuration; sRuntimeSnapshotURL=snapshotURL; sRuntimeSnapshotPersisted=saved;
+            sBrowserUBlockStatistics=preparedRuntime[@"stats"];
+            if (saved) BrowserPruneSnapshots(snapshotURL.URLByDeletingLastPathComponent,@"extended-v",snapshotURL);
+            if (!restored || ![preparedNetwork[@"cached"] boolValue]) sFilterBakePending=YES;
         }
-        sFilterStageDurations[@"network"] = @(networkDuration);
-        sFilterStageDurations[@"extended"] = @(extendedDuration);
+        sFilterStageDurations[@"network"]=@(networkDuration); sFilterStageDurations[@"extended"]=@(extendedDuration);
         [NSNotificationCenter.defaultCenter postNotificationName:BrowserAdBlockSourceStatusDidChangeNotification object:nil];
-        if (!preparedRuntime) BrowserLog(@"[AdBlock] uBO parser/runtime unavailable");
         for (void (^callback)(NSDictionary *) in callbacks) callback(preparedRuntime ?: sBrowserUBlockRuntime);
     });
-    [BrowserNetworkFilterEngine prepareLists:lists identity:identifier completion:^(NSDictionary *network) {
-        preparedNetwork = network;
-        networkDuration = NSProcessInfo.processInfo.systemUptime - runtimeStarted;
-        BrowserLog(@"[AdBlock] network available=%d filters=%ld cached=%d snapshot=%d prepare-ms=%ld error=%ld", [network[@"available"] boolValue], (long)[network[@"count"] integerValue], [network[@"cached"] boolValue], [network[@"snapshot"] boolValue], (long)[network[@"prepareMilliseconds"] integerValue], (long)[network[@"error"] integerValue]);
+    [BrowserNetworkFilterEngine prepareSources:descriptors identity:identifier configuration:configuration completion:^(NSDictionary *network) {
+        preparedNetwork=network; networkDuration=NSProcessInfo.processInfo.systemUptime-started;
+        if (generation==sBrowserAdBlockRulesGeneration && [network[@"available"] boolValue]) sBrowserNetworkSummary=network;
+        BrowserLog(@"[AdBlock] network available=%d filters=%ld cached=%d snapshot=%d prepare-ms=%ld error=%ld",[network[@"available"] boolValue],(long)[network[@"count"] integerValue],[network[@"cached"] boolValue],[network[@"snapshot"] boolValue],(long)[network[@"prepareMilliseconds"] integerValue],(long)[network[@"error"] integerValue]);
         dispatch_group_leave(preparation);
     }];
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0),^{
         @autoreleasepool {
-            CFAbsoluteTime started = CFAbsoluteTimeGetCurrent();
-            NSURL *directory = [[[NSFileManager.defaultManager URLsForDirectory:NSCachesDirectory inDomains:NSUserDomainMask].firstObject URLByAppendingPathComponent:@"BrowserExtendedRules" isDirectory:YES] copy];
-            [NSFileManager.defaultManager createDirectoryAtURL:directory withIntermediateDirectories:YES attributes:nil error:nil];
-            uint64_t fingerprint = 14695981039346656037ULL;
-            for (NSString *name in @[@"UBlockParser.js", @"UBlockScriptlets.json", @"UBlockRuntime.js", @"UBlockDomains.js", @"UBlockCosmetics.js", @"UBlockProcedural.js"]) {
-                NSData *bytes = [NSData dataWithContentsOfURL:[NSBundle.mainBundle URLForResource:name withExtension:nil]];
-                const uint8_t *p = bytes.bytes; for (NSUInteger i = 0; i < bytes.length; i++) fingerprint = (fingerprint ^ p[i]) * 1099511628211ULL;
-            }
-            NSURL *snapshotURL = [directory URLByAppendingPathComponent:[NSString stringWithFormat:@"extended-v3-%@-%016llx.json", identifier, fingerprint]];
-            NSData *data = [NSData dataWithContentsOfURL:snapshotURL];
-            NSDictionary *compiled = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
-            restored = [compiled isKindOfClass:NSDictionary.class] && [compiled[@"scripts"] isKindOfClass:NSDictionary.class] &&
-                [compiled[@"scripts"][@"MAIN"] isKindOfClass:NSString.class] && [compiled[@"scripts"][@"ISOLATED"] isKindOfClass:NSString.class] &&
-                [compiled[@"stats"] isKindOfClass:NSDictionary.class] && [compiled[@"rejected"] isKindOfClass:NSDictionary.class];
-            saved = restored;
+            NSURL *directory=BrowserFilterCacheDirectory(@"BrowserExtendedRules");
+            snapshotURL=[directory URLByAppendingPathComponent:[NSString stringWithFormat:@"extended-v4-%@-%@.json",identifier,BrowserExtendedFingerprint()]];
+            NSData *data=[NSData dataWithContentsOfURL:snapshotURL];
+            NSDictionary *compiled=data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+            restored=BrowserExtendedCacheValid(compiled,YES);
+            // Existing v3 data remain a valid universal-script warm path. Never
+            // relabel them as v4 or claim their scripts use separate configuration.
             if (!restored) {
-                compiled = [BrowserAdBlockConverter compileUBlockLists:lists];
-                NSData *cache = compiled ? [NSJSONSerialization dataWithJSONObject:compiled options:0 error:nil] : nil;
-                saved = cache && [cache writeToURL:snapshotURL options:NSDataWritingAtomic error:nil];
+                uint64_t legacy=14695981039346656037ULL;
+                for (NSString *name in @[@"UBlockParser.js",@"UBlockScriptlets.json",@"UBlockRuntime.js",@"UBlockDomains.js",@"UBlockCosmetics.js",@"UBlockProcedural.js"]) {
+                    NSData *bytes=[NSData dataWithContentsOfURL:[NSBundle.mainBundle URLForResource:name withExtension:nil]]; const uint8_t *p=bytes.bytes;
+                    for (NSUInteger i=0;i<bytes.length;i++) legacy=(legacy^p[i])*1099511628211ULL;
+                }
+                NSURL *old=[directory URLByAppendingPathComponent:[NSString stringWithFormat:@"extended-v3-%@-%016llx.json",identifier,legacy]];
+                NSData *legacyData=[NSData dataWithContentsOfURL:old]; NSDictionary *value=legacyData ? [NSJSONSerialization JSONObjectWithData:legacyData options:0 error:nil] : nil;
+                if (BrowserExtendedCacheValid(value,NO) && !value[@"configurationMode"]) { compiled=value; restored=YES; snapshotURL=old; }
             }
-            preparedRuntime = compiled; preparedDirectory = directory; preparedSnapshot = snapshotURL;
-            extendedDuration = NSProcessInfo.processInfo.systemUptime - runtimeStarted;
-            BrowserLog(@"[AdBlock] advanced cached=%d prepare-ms=%ld", restored, (long)((CFAbsoluteTimeGetCurrent() - started) * 1000));
+            saved=restored;
+            if (!restored && BrowserFilterGenerationCurrent(generation)) {
+                NSArray *lists=BrowserReadFilterLists(descriptors);
+                compiled=lists ? [BrowserAdBlockConverter compileUBlockLists:lists cancelled:^BOOL { return !BrowserFilterGenerationCurrent(generation); }] : nil;
+                if (BrowserExtendedCacheValid(compiled,YES) && BrowserFilterGenerationCurrent(generation)) {
+                    NSData *cache=[NSJSONSerialization dataWithJSONObject:compiled options:0 error:nil];
+                    saved=cache && [cache writeToURL:snapshotURL options:NSDataWritingAtomic error:nil];
+                } else compiled=nil;
+            }
+            if (compiled) {
+                NSMutableDictionary *ready=[compiled mutableCopy]; ready[@"artifactIdentity"]=snapshotURL.lastPathComponent; preparedRuntime=ready;
+            }
+            extendedDuration=NSProcessInfo.processInfo.systemUptime-started;
+            BrowserLog(@"[AdBlock] advanced cached=%d prepare-ms=%ld",restored,(long)(extendedDuration*1000));
         }
         dispatch_group_leave(preparation);
+    });
+}
+
+static void BrowserRestoreLastGoodRuntime(void (^completion)(NSDictionary *)) {
+    NSString *configuration=BrowserFilterConfiguration(); NSUInteger generation=sBrowserAdBlockRulesGeneration;
+    if (sBrowserUBlockRuntime && [sRuntimeConfiguration isEqual:configuration] && [sBrowserNetworkSummary[@"available"] boolValue]) { completion(sBrowserUBlockRuntime); return; }
+    NSURL *pointerURL=[BrowserFilterCacheDirectory(@"BrowserContentRules") URLByAppendingPathComponent:@"LastSuccessfulFilters.plist"];
+    NSDictionary *pointer=[NSDictionary dictionaryWithContentsOfURL:pointerURL];
+    NSString *file=pointer[@"extendedFile"];
+    if (![pointer[@"identity"] isKindOfClass:NSString.class] || ![pointer[@"configuration"] isEqual:configuration] || ![pointer[@"extendedFingerprint"] isEqual:BrowserExtendedFingerprint()] ||
+        ![file isKindOfClass:NSString.class] || ![file.lastPathComponent isEqual:file] || ![file hasPrefix:@"extended-v"]) { completion(nil); return; }
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0),^{
+        NSURL *url=[BrowserFilterCacheDirectory(@"BrowserExtendedRules") URLByAppendingPathComponent:file];
+        NSData *data=[NSData dataWithContentsOfURL:url]; NSDictionary *compiled=data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+        if (!BrowserExtendedCacheValid(compiled,[file hasPrefix:@"extended-v4-"])) { dispatch_async(dispatch_get_main_queue(),^{completion(nil);}); return; }
+        dispatch_async(dispatch_get_main_queue(),^{
+            if (generation!=sBrowserAdBlockRulesGeneration || ![configuration isEqual:BrowserFilterConfiguration()]) { completion(nil); return; }
+            [BrowserNetworkFilterEngine restoreIdentity:pointer[@"identity"] configuration:configuration completion:^(NSDictionary *network) {
+                if (generation!=sBrowserAdBlockRulesGeneration || ![configuration isEqual:BrowserFilterConfiguration()] || ![network[@"available"] boolValue]) { completion(nil); return; }
+                if (!sBrowserUBlockRuntime) {
+                    NSMutableDictionary *ready=[compiled mutableCopy]; ready[@"artifactIdentity"]=file;
+                    sBrowserUBlockRuntime=ready; sBrowserUBlockRuntimeIdentifier=pointer[@"identity"]; sRuntimeConfiguration=configuration; sRuntimeSnapshotURL=url; sRuntimeSnapshotPersisted=YES;
+                    sBrowserUBlockStatistics=ready[@"stats"];
+                }
+                sBrowserNetworkSummary=network;
+                completion([sRuntimeConfiguration isEqual:configuration] ? sBrowserUBlockRuntime : nil);
+            }];
+        });
     });
 }
 
@@ -602,67 +728,74 @@ static NSMutableSet<NSString *> *sBrowserAdBlockCheckingSources = nil;
 static NSMutableSet<NSString *> *sBrowserAdBlockFailedSources = nil;
 static BOOL sBrowserAdBlockPendingDownloadChanges = NO;
 
+static NSString *BrowserSourceFileSignature(NSURL *url) {
+    NSDictionary *attributes=[NSFileManager.defaultManager attributesOfItemAtPath:url.path error:nil];
+    if (!attributes) return @"";
+    return [NSString stringWithFormat:@"%.9f:%lld",[attributes[NSFileModificationDate] timeIntervalSince1970],[attributes[NSFileSize] longLongValue]];
+}
+
+static void BrowserPublishSourceChanges(void) {
+    static BOOL scheduled=NO;
+    if (scheduled || !sBrowserAdBlockPendingDownloadChanges || sBrowserAdBlockCheckingSources.count) return;
+    scheduled=YES;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.25*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
+        scheduled=NO;
+        if (sBrowserAdBlockCheckingSources.count || !sBrowserAdBlockPendingDownloadChanges) return;
+        sBrowserAdBlockPendingDownloadChanges=NO;
+        sBrowserAdBlockRulesGeneration++; [BrowserNetworkFilterEngine cancelPreparation]; sBrowserAdBlockCachedPolicies=nil;
+        [sNativeChunkFailures removeAllObjects];
+        [NSNotificationCenter.defaultCenter postNotificationName:BrowserAdBlockRulesDidUpdateNotification object:nil];
+    });
+}
+
 static void BrowserCheckForAdBlockUpdate(BOOL force) {
-    static NSMutableDictionary<NSString *, NSDate *> *lastAttempts = nil;
-    if (lastAttempts == nil) lastAttempts = [NSMutableDictionary dictionary];
-    if (sBrowserAdBlockCheckingSources == nil) sBrowserAdBlockCheckingSources = [NSMutableSet set];
-    if (sBrowserAdBlockFailedSources == nil) sBrowserAdBlockFailedSources = [NSMutableSet set];
-    NSDate *now = NSDate.date;
-    for (NSDictionary<NSString *, NSString *> *source in BrowserAdBlockSources()) {
-        NSString *identifier = source[@"id"];
-        if ([source[@"url"] length] == 0 || !BrowserAdBlockSourceEnabled(identifier) ||
-            [sBrowserAdBlockCheckingSources containsObject:identifier]) continue;
-        NSString *checkKey = [kBrowserAdBlockSourceLastCheckKeyPrefix stringByAppendingString:identifier];
-        NSDate *lastSuccess = [NSUserDefaults.standardUserDefaults objectForKey:checkKey];
-        if (!force && ((lastAttempts[identifier] != nil &&
-                        [now timeIntervalSinceDate:lastAttempts[identifier]] < 3600) ||
-                       (lastSuccess != nil && [now timeIntervalSinceDate:lastSuccess] < 7 * 24 * 3600))) continue;
-        [sBrowserAdBlockCheckingSources addObject:identifier];
-        [sBrowserAdBlockFailedSources removeObject:identifier];
-        lastAttempts[identifier] = now;
+    static NSMutableDictionary<NSString *,NSDate *> *lastAttempts;
+    if (!lastAttempts) lastAttempts=[NSMutableDictionary dictionary];
+    if (!sBrowserAdBlockCheckingSources) sBrowserAdBlockCheckingSources=[NSMutableSet set];
+    if (!sBrowserAdBlockFailedSources) sBrowserAdBlockFailedSources=[NSMutableSet set];
+    NSDate *now=NSDate.date;
+    for (NSDictionary *source in BrowserAdBlockSources()) {
+        NSString *identifier=source[@"id"];
+        if (![source[@"url"] length] || !BrowserAdBlockSourceEnabled(identifier) || [sBrowserAdBlockCheckingSources containsObject:identifier]) continue;
+        NSString *checkKey=[kBrowserAdBlockSourceLastCheckKeyPrefix stringByAppendingString:identifier];
+        NSDate *lastSuccess=[NSUserDefaults.standardUserDefaults objectForKey:checkKey];
+        if (!force && ((lastAttempts[identifier] && [now timeIntervalSinceDate:lastAttempts[identifier]]<3600) || (lastSuccess && [now timeIntervalSinceDate:lastSuccess]<7*24*3600))) continue;
+        [sBrowserAdBlockCheckingSources addObject:identifier]; [sBrowserAdBlockFailedSources removeObject:identifier]; lastAttempts[identifier]=now;
         [NSNotificationCenter.defaultCenter postNotificationName:BrowserAdBlockSourceStatusDidChangeNotification object:nil];
-        NSURL *sourceURL = [NSURL URLWithString:source[@"url"]];
-        NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithURL:sourceURL
-        completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-            BOOL validResponse = error == nil && [response isKindOfClass:NSHTTPURLResponse.class] &&
-                ((NSHTTPURLResponse *)response).statusCode == 200 && data.length > 10000 && data.length < 20000000;
-            NSString *filter = validResponse ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
-            BOOL validFilter = NO;
-            if ([identifier isEqualToString:@"dns"]) {
-                validFilter = BrowserAddAdBlockHosts([NSMutableOrderedSet orderedSet], filter) > 100000;
-            } else {
-                validFilter = filter.length > 10000 && [filter containsString:@"||"] &&
-                    ([filter containsString:@"##"] || [filter containsString:@"@@"]);
-            }
-            BOOL updated = NO;
-            BOOL saved = validFilter;
+        NSURL *destination=BrowserAdBlockSourceURL(source);
+        NSString *HTTPKey=[@"AdBlockSourceHTTP." stringByAppendingString:identifier];
+        NSDictionary *HTTP=[NSUserDefaults.standardUserDefaults dictionaryForKey:HTTPKey];
+        NSString *localSignature=BrowserSourceFileSignature(destination);
+        NSMutableURLRequest *request=[NSMutableURLRequest requestWithURL:[NSURL URLWithString:source[@"url"]]];
+        if (localSignature.length && [HTTP[@"signature"] isEqual:localSignature] && [HTTP[@"etag"] isKindOfClass:NSString.class]) [request setValue:HTTP[@"etag"] forHTTPHeaderField:@"If-None-Match"];
+        NSURLSessionDataTask *task=[NSURLSession.sharedSession dataTaskWithRequest:request completionHandler:^(NSData *data,NSURLResponse *response,NSError *error) {
+            NSHTTPURLResponse *HTTPResponse=[response isKindOfClass:NSHTTPURLResponse.class] ? (NSHTTPURLResponse *)response : nil;
+            BOOL notModified=!error && HTTPResponse.statusCode==304 && localSignature.length && [localSignature isEqual:BrowserSourceFileSignature(destination)];
+            BOOL validResponse=!error && HTTPResponse.statusCode==200 && data.length>10000 && data.length<20000000;
+            NSString *filter=validResponse ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
+            BOOL validFilter=[identifier isEqual:@"dns"] ? BrowserAddAdBlockHosts([NSMutableOrderedSet orderedSet],filter)>100000 :
+                (filter.length>10000 && [filter containsString:@"||"] && ([filter containsString:@"##"] || [filter containsString:@"@@"]));
+            BOOL updated=NO,saved=notModified;
             if (validFilter) {
-                NSURL *destination = BrowserAdBlockSourceURL(source);
-                [NSFileManager.defaultManager createDirectoryAtURL:destination.URLByDeletingLastPathComponent
-                    withIntermediateDirectories:YES attributes:nil error:nil];
-                NSData *previous = [NSData dataWithContentsOfURL:destination];
-                if (![previous isEqualToData:data]) {
-                    saved = [data writeToURL:destination options:NSDataWritingAtomic error:nil];
-                    updated = saved;
-                }
+                [NSFileManager.defaultManager createDirectoryAtURL:destination.URLByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil];
+                NSData *previous=[NSData dataWithContentsOfURL:destination];
+                saved=[previous isEqualToData:data];
+                if (!saved) { saved=[data writeToURL:destination options:NSDataWritingAtomic error:nil]; updated=saved; }
             }
-            dispatch_async(dispatch_get_main_queue(), ^{
+            NSString *etag=[HTTPResponse valueForHTTPHeaderField:@"ETag"], *signature=saved ? BrowserSourceFileSignature(destination) : nil;
+            dispatch_async(dispatch_get_main_queue(),^{
                 [sBrowserAdBlockCheckingSources removeObject:identifier];
                 if (saved) {
                     [NSUserDefaults.standardUserDefaults setObject:NSDate.date forKey:checkKey];
+                    if (etag.length && signature.length) [NSUserDefaults.standardUserDefaults setObject:@{@"etag":etag,@"signature":signature} forKey:HTTPKey];
+                    else if (!notModified) [NSUserDefaults.standardUserDefaults removeObjectForKey:HTTPKey];
                 } else {
                     [sBrowserAdBlockFailedSources addObject:identifier];
-                    BrowserLog(@"[AdBlock] source=%@ update failed: %@", identifier,
-                          error.localizedDescription ?: @"invalid filter response");
+                    BrowserLog(@"[AdBlock] source=%@ update failed: %@",identifier,error.localizedDescription ?: @"invalid filter response");
                 }
                 [NSNotificationCenter.defaultCenter postNotificationName:BrowserAdBlockSourceStatusDidChangeNotification object:nil];
-                if (updated) sBrowserAdBlockPendingDownloadChanges = YES;
-                if (sBrowserAdBlockCheckingSources.count == 0 && sBrowserAdBlockPendingDownloadChanges) {
-                    sBrowserAdBlockPendingDownloadChanges = NO;
-                    sBrowserAdBlockRulesGeneration++;
-                    sBrowserAdBlockCachedPolicies = nil;
-                    [NSNotificationCenter.defaultCenter postNotificationName:BrowserAdBlockRulesDidUpdateNotification object:nil];
-                }
+                if (updated) sBrowserAdBlockPendingDownloadChanges=YES;
+                BrowserPublishSourceChanges();
             });
         }];
         [task resume];
@@ -703,6 +836,73 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 
 
 @implementation BrowserAdBlockService
++ (void)prepareForLaunch {
+    NSAssert(NSThread.isMainThread,@"Ad Block launch preparation belongs to the main queue.");
+    BrowserNativeStore(0);
+    static NSString *scheduled;
+    NSString *identity=BrowserAdBlockFilterIdentifier(YES);
+    if ([scheduled isEqual:identity]) return;
+    scheduled=identity;
+    [self prepareEarlyProtectionForPolicy:@"standard" completion:^(__unused NSArray *rules,__unused NSDictionary *runtime,__unused NSError *error) {}];
+    __block BOOL nativeReady=NO,runtimeReady=NO;
+    NSTimeInterval started=NSProcessInfo.processInfo.systemUptime;
+    void (^finish)(void)=^{ if (nativeReady && runtimeReady) [BrowserAdBlockService recordCompletedPreparationSince:started]; };
+    BrowserLoadAdBlockRuleList(@"standard",^(NSArray *rules,NSError *error){ nativeReady=rules!=nil && !error; finish(); });
+    BrowserLoadUBlockRuntime(^(NSDictionary *runtime){ runtimeReady=runtime!=nil; finish(); });
+}
+
++ (void)prepareEarlyProtectionForPolicy:(NSString *)policy completion:(void (^)(NSArray *,NSDictionary *,NSError *))completion {
+    NSAssert(NSThread.isMainThread,@"Ad Block readiness belongs to the main queue.");
+    BrowserNativeStore(0);
+    policy=[@[@"allow",@"block"] containsObject:policy] ? policy : @"standard";
+    NSUInteger generation=sBrowserAdBlockRulesGeneration; NSString *configuration=BrowserFilterConfiguration();
+    __block NSArray *readyRules; __block NSDictionary *readyRuntime;
+    __block BOOL nativeDone=NO,runtimeDone=NO,finished=NO;
+    __block NSUInteger nativePending=1,runtimePending=2;
+    __block NSError *nativeError,*runtimeError;
+    void (^finish)(void)=^{
+        if (finished || !nativeDone || !runtimeDone) return;
+        finished=YES;
+        if (generation!=sBrowserAdBlockRulesGeneration || ![configuration isEqual:BrowserFilterConfiguration()]) {
+            completion(nil,nil,BrowserFilterError(3,@"Filter preparation was superseded.")); return;
+        }
+        NSError *error=nativeError ?: runtimeError;
+        completion(error ? nil : readyRules,error ? nil : readyRuntime,error);
+    };
+    NSDictionary *last=[NSDictionary dictionaryWithContentsOfURL:[BrowserFilterCacheDirectory(@"BrowserContentRules") URLByAppendingPathComponent:@"LastSuccessfulFilters.plist"]];
+    if (BrowserAdBlockSourceEnabled(@"ubo") && [last[@"configuration"] isEqual:configuration] && [last[@"native"] isKindOfClass:NSDictionary.class]) {
+        nativePending++;
+        BrowserLookUpAdBlockManifest(last[@"native"][policy],^(NSArray *rules,__unused NSError *error) {
+            nativePending--;
+            if (nativeDone) return;
+            if (rules) { readyRules=rules; nativeError=nil; nativeDone=YES; }
+            else if (!nativePending) nativeDone=YES;
+            finish();
+        });
+    }
+    BrowserLoadNativeRules(policy,BrowserAdBlockSourceEnabled(@"ubo"),^(NSArray *rules,NSError *error) {
+        nativePending--;
+        if (nativeDone) return;
+        if (rules && !error) { readyRules=rules; nativeError=nil; nativeDone=YES; }
+        else { nativeError=error ?: BrowserFilterError(2,@"Early native protection is unavailable."); nativeDone=nativePending==0; }
+        finish();
+    });
+    BrowserRestoreLastGoodRuntime(^(NSDictionary *runtime) {
+        runtimePending--;
+        if (runtimeDone) return;
+        if (runtime) { readyRuntime=runtime; runtimeError=nil; runtimeDone=YES; }
+        else if (!runtimePending) { runtimeError=BrowserFilterError(2,@"Early filter runtime is unavailable."); runtimeDone=YES; }
+        finish();
+    });
+    BrowserLoadUBlockRuntime(^(NSDictionary *runtime) {
+        runtimePending--;
+        if (runtimeDone) return;
+        if (runtime && [sBrowserNetworkSummary[@"available"] boolValue] && [sRuntimeConfiguration isEqual:configuration]) { readyRuntime=runtime; runtimeError=nil; runtimeDone=YES; }
+        else { runtimeError=BrowserFilterError(2,@"Early filter runtime is unavailable."); runtimeDone=runtimePending==0; }
+        finish();
+    });
+}
+
 + (NSString *)dynamicAdBlockPolicyForHost:(NSString *)host {
     return [BrowserAdBlockPolicy validatedPolicies:[NSUserDefaults.standardUserDefaults dictionaryForKey:@"AdBlockDynamicSitePolicies"]][host] ?: @"inherit";
 }
@@ -740,6 +940,7 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     [NSUserDefaults.standardUserDefaults setBool:enabled forKey:
         [kBrowserAdBlockSourceEnabledKeyPrefix stringByAppendingString:identifier]];
     sBrowserAdBlockRulesGeneration++;
+    [BrowserNetworkFilterEngine cancelPreparation];
     sBrowserAdBlockCachedPolicies = nil;
     [NSNotificationCenter.defaultCenter postNotificationName:BrowserAdBlockRulesDidUpdateNotification object:nil userInfo:@{@"explicitReload":@YES}];
 }
@@ -785,6 +986,7 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     [NSUserDefaults.standardUserDefaults setObject:identity forKey:@"AdBlockRebuildIdentity"];
     [NSUserDefaults.standardUserDefaults setObject:identity forKey:@"AdBlockRebuildPendingApply"];
     sBrowserAdBlockRulesGeneration++;
+    [BrowserNetworkFilterEngine cancelPreparation];
     sBrowserAdBlockCachedPolicies = nil;
     sFilterBakePending = YES;
     [NSNotificationCenter.defaultCenter postNotificationName:BrowserAdBlockRulesDidUpdateNotification object:nil];
@@ -812,15 +1014,26 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 
 
 + (NSUInteger)generation { return sBrowserAdBlockRulesGeneration; }
++ (BOOL)runtimeCurrent { NSString *identity=BrowserAdBlockFilterIdentifier(YES); return sBrowserUBlockRuntime && [sBrowserUBlockRuntimeIdentifier isEqual:identity] && [sBrowserNetworkSummary[@"available"] boolValue] && [sBrowserNetworkSummary[@"identity"] isEqual:identity] && ![sBrowserNetworkSummary[@"stale"] boolValue]; }
 + (NSDictionary *)runtime { return sBrowserUBlockRuntime; }
 + (NSString *)runtimeIdentifier { return sBrowserUBlockRuntimeIdentifier; }
 + (NSDictionary *)statistics { return sBrowserUBlockStatistics; }
 + (NSDictionary *)networkSummary { return sBrowserNetworkSummary; }
 + (NSDictionary *)lastFilterBake { return [NSUserDefaults.standardUserDefaults dictionaryForKey:@"AdBlockLastSuccessfulBake"]; }
 + (void)recordCompletedPreparationSince:(NSTimeInterval)started {
-    if (!sFilterBakePending || ![sBrowserNetworkSummary[@"available"] boolValue] || !sBrowserUBlockRuntime || self.nativePreparationFailed ||
+    if (!sFilterBakePending || [sBrowserNetworkSummary[@"stale"] boolValue] || ![sBrowserNetworkSummary[@"available"] boolValue] || ![sBrowserNetworkSummary[@"identity"] isEqual:BrowserAdBlockFilterIdentifier(YES)] || !sBrowserUBlockRuntime || self.nativePreparationFailed ||
         ![sBrowserUBlockRuntimeIdentifier isEqualToString:BrowserAdBlockFilterIdentifier(YES)]) return;
     sFilterBakePending = NO;
+    NSDictionary *networkPointer=[NSDictionary dictionaryWithContentsOfURL:[BrowserFilterCacheDirectory(@"BrowserNetworkRules") URLByAppendingPathComponent:@"LastGood.plist"]];
+    if (sRuntimeSnapshotPersisted && sRuntimeSnapshotURL && sLatestNativeManifests.count && [networkPointer[@"identity"] isEqual:BrowserAdBlockFilterIdentifier(YES)] && [networkPointer[@"configuration"] isEqual:BrowserFilterConfiguration()]) {
+        NSMutableDictionary *native=[NSMutableDictionary dictionary];
+        for (NSString *policy in sLatestNativeManifests) {
+            NSDictionary *manifest=sLatestNativeManifests[policy];
+            if ([manifest[@"identifier"] isEqual:BrowserAdBlockRuleListIdentifier(YES,policy)]) native[policy]=manifest;
+        }
+        NSDictionary *pointer=@{@"format":@1,@"configuration":BrowserFilterConfiguration(),@"identity":BrowserAdBlockFilterIdentifier(YES),@"extendedFile":sRuntimeSnapshotURL.lastPathComponent,@"extendedFingerprint":BrowserExtendedFingerprint(),@"native":native};
+        [pointer writeToURL:[BrowserFilterCacheDirectory(@"BrowserContentRules") URLByAppendingPathComponent:@"LastSuccessfulFilters.plist"] atomically:YES];
+    }
     if (sFilterPreparationStarted > 0) started = MIN(started, sFilterPreparationStarted);
     NSTimeInterval duration = MAX(0, NSProcessInfo.processInfo.systemUptime - started);
     NSDate *completed = NSDate.date;
@@ -856,19 +1069,28 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
 }
 + (BOOL)applyNativeRules:(NSArray *)rules toController:(id)controller replacing:(NSArray *)previous {
     if ([rules isEqualToArray:previous]) return YES;
-    SEL add = NSSelectorFromString(@"addContentRuleList:"), remove = NSSelectorFromString(@"removeContentRuleList:");
+    SEL add=NSSelectorFromString(@"addContentRuleList:"),remove=NSSelectorFromString(@"removeContentRuleList:");
     if ((rules.count && ![controller respondsToSelector:add]) || (previous.count && ![controller respondsToSelector:remove])) return NO;
-    if (!sInstalledNativeRules) sInstalledNativeRules = [NSMutableDictionary dictionary];
-    for (id rule in previous) {
-        ((void (*)(id, SEL, id))objc_msgSend)(controller, remove, rule);
-        NSString *identifier = [rule valueForKey:@"identifier"];
-        NSUInteger count = [sInstalledNativeRules[identifier] unsignedIntegerValue];
-        if (count > 1) sInstalledNativeRules[identifier] = @(count - 1); else [sInstalledNativeRules removeObjectForKey:identifier];
-    }
+    if (!sInstalledNativeRules) sInstalledNativeRules=[NSMutableDictionary dictionary];
+    NSMutableSet *oldIDs=[NSMutableSet set],*newIDs=[NSMutableSet set];
+    for (id rule in previous) { NSString *identifier=[rule valueForKey:@"identifier"]; if (identifier) [oldIDs addObject:identifier]; }
+    for (id rule in rules) { NSString *identifier=[rule valueForKey:@"identifier"]; if (identifier) [newIDs addObject:identifier]; }
+    // Install replacements first, retaining every unchanged content-addressed
+    // list (including the early bundled list) throughout the handoff.
+    NSMutableSet *added=[NSMutableSet set];
     for (id rule in rules) {
-        ((void (*)(id, SEL, id))objc_msgSend)(controller, add, rule);
-        NSString *identifier = [rule valueForKey:@"identifier"];
-        sInstalledNativeRules[identifier] = @([sInstalledNativeRules[identifier] unsignedIntegerValue] + 1);
+        NSString *identifier=[rule valueForKey:@"identifier"];
+        if (!identifier || [oldIDs containsObject:identifier] || [added containsObject:identifier]) continue;
+        ((void (*)(id,SEL,id))objc_msgSend)(controller,add,rule); [added addObject:identifier];
+        sInstalledNativeRules[identifier]=@([sInstalledNativeRules[identifier] unsignedIntegerValue]+1);
+    }
+    NSMutableSet *removed=[NSMutableSet set];
+    for (id rule in previous) {
+        NSString *identifier=[rule valueForKey:@"identifier"];
+        if (!identifier || [newIDs containsObject:identifier] || [removed containsObject:identifier]) continue;
+        ((void (*)(id,SEL,id))objc_msgSend)(controller,remove,rule); [removed addObject:identifier];
+        NSUInteger count=[sInstalledNativeRules[identifier] unsignedIntegerValue];
+        if (count>1) sInstalledNativeRules[identifier]=@(count-1); else [sInstalledNativeRules removeObjectForKey:identifier];
     }
     return YES;
 }

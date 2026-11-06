@@ -1,8 +1,14 @@
 /* BrowserUBlock: native WKUserScript adapter for pinned full uBO components. */
 (function(){
 'use strict';
+// A fresh configuration script immediately precedes this reusable source in
+// the same content world. Consume it before any website/scriptlet code runs.
+const browserConfigurationDescriptor = Object.getOwnPropertyDescriptor(globalThis, '__browserUBlockPendingConfiguration');
 const config = __BROWSER_CONFIG__;
-if (!config.enabled || globalThis.__browserUBlockInstalled) return;
+if (browserConfigurationDescriptor?.configurable) delete globalThis.__browserUBlockPendingConfiguration;
+if (!config || typeof config !== 'object' || config.enabled !== true ||
+    typeof config.token !== 'string' || config.token === '' ||
+    typeof config.topHost !== 'string' || globalThis.__browserUBlockInstalled) return;
 globalThis.__browserUBlockInstalled = true;
 const hostname = location.hostname.toLowerCase().replace(/\.$/, '') || config.topHost;
 __BROWSER_DOMAINS__
