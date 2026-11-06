@@ -29,6 +29,9 @@ specialization and host-side on-demand retrieval remain deferred.
 
 ### Follow-up checkpoint — generic cosmetics and remaining cold-path work
 
+The first follow-up is committed as `88d2933`. Its final assembled ISOLATED runtime
+also passed syntax parsing without execution. Version remains 2.21.2.
+
 The user authorized local commits and asked fast workers to take the next plan
 steps, then supplied a further ten-minute window. The follow-up changes are:
 
@@ -85,6 +88,21 @@ Swift resource refactor on macOS and confirm existing network cache fingerprints
 remain valid. These changes alone do not establish the <=30 s goal.
 
 ## Objective and constraints
+
+Final follow-up: `compile.js` now checks a per-compilation
+`browserExtendedPreparationCancelled` hook at source boundaries and every 256 input
+lines, including lists that emit no extended records. The scoped Swift context owns
+the bridged block; both closure parameters are escaping and a JS exception rejects
+partial results. `BrowserAdBlockService.m` publishes its main-owned generation into
+an atomic cancellation tag at all three increment sites; worker polling no longer
+dispatches synchronously to main. The standard asset builder regenerated the parser;
+syntax parsing and exact maintained-adapter inclusion passed without execution.
+
+Branch provenance checked at the user's request: remote PR `ublock #15` head
+`451ca21` has zero code diff under `_Project/Browser` and `_Project/Vendor` against
+our base `248b9dc`. Its squash `fb46ce4` is already in base history. The historical
+2026-10-17 removal note does not describe the actual code present in this checkout;
+do not infer removal from that note. No feature merge or remote push was performed.
 
 Preserve the existing uBO engines, every supported rule, exception, source order,
 trust boundary and website preference while adopting Brave's preparation lifecycle.

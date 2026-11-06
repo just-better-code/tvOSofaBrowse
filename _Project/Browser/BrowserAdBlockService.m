@@ -4,6 +4,7 @@
 #import <objc/message.h>
 #import <CommonCrypto/CommonDigest.h>
 #import <dlfcn.h>
+#import <stdatomic.h>
 
 @interface BrowserNativeRuleConverter : NSObject
 + (NSDictionary *)convertRuleChunks:(NSString *)source;
@@ -31,6 +32,13 @@ static NSString * const kBrowserAdBlockSourceLastCheckKeyPrefix = @"AdBlockSourc
 static NSMutableDictionary *sBrowserAdBlockCachedPolicies = nil;
 static NSSet<NSString *> *sBrowserAdBlockRuleFailures = nil;
 static NSUInteger sBrowserAdBlockRulesGeneration = 0;
+// Main owns the state; workers only need its cancellation tag. Publishing the
+// tag avoids synchronous main-queue round trips while parsing large lists.
+static _Atomic(NSUInteger) sBrowserFilterPublishedGeneration = 0;
+static void BrowserAdvanceFilterGeneration(void) {
+    sBrowserAdBlockRulesGeneration++;
+    atomic_store_explicit(&sBrowserFilterPublishedGeneration, sBrowserAdBlockRulesGeneration, memory_order_relaxed);
+}
 static NSString * const kBrowserAdBlockTrustedSitesKey = @"AdBlockTrustedSites";
 static NSString * const kBrowserAdBlockUserFiltersKey = @"AdBlockUserFilters";
 static NSDictionary *sBrowserUBlockRuntime;
@@ -595,10 +603,7 @@ void BrowserLoadAdBlockRuleList(NSString *dynamicPolicy, BrowserAdBlockRuleListC
 }
 
 static BOOL BrowserFilterGenerationCurrent(NSUInteger generation) {
-    if (NSThread.isMainThread) return generation==sBrowserAdBlockRulesGeneration;
-    __block BOOL current;
-    dispatch_sync(dispatch_get_main_queue(), ^{ current=generation==sBrowserAdBlockRulesGeneration; });
-    return current;
+    return generation == atomic_load_explicit(&sBrowserFilterPublishedGeneration, memory_order_relaxed);
 }
 
 static NSString *BrowserExtendedFingerprint(void) {
@@ -742,7 +747,7 @@ static void BrowserPublishSourceChanges(void) {
         scheduled=NO;
         if (sBrowserAdBlockCheckingSources.count || !sBrowserAdBlockPendingDownloadChanges) return;
         sBrowserAdBlockPendingDownloadChanges=NO;
-        sBrowserAdBlockRulesGeneration++; [BrowserNetworkFilterEngine cancelPreparation]; sBrowserAdBlockCachedPolicies=nil;
+        BrowserAdvanceFilterGeneration(); [BrowserNetworkFilterEngine cancelPreparation]; sBrowserAdBlockCachedPolicies=nil;
         [sNativeChunkFailures removeAllObjects];
         [NSNotificationCenter.defaultCenter postNotificationName:BrowserAdBlockRulesDidUpdateNotification object:nil];
     });
@@ -939,7 +944,7 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     if (!known || BrowserAdBlockSourceEnabled(identifier) == enabled) return;
     [NSUserDefaults.standardUserDefaults setBool:enabled forKey:
         [kBrowserAdBlockSourceEnabledKeyPrefix stringByAppendingString:identifier]];
-    sBrowserAdBlockRulesGeneration++;
+    BrowserAdvanceFilterGeneration();
     [BrowserNetworkFilterEngine cancelPreparation];
     sBrowserAdBlockCachedPolicies = nil;
     [NSNotificationCenter.defaultCenter postNotificationName:BrowserAdBlockRulesDidUpdateNotification object:nil userInfo:@{@"explicitReload":@YES}];
@@ -985,7 +990,7 @@ static NSString *BrowserAdBlockSourceRevision(NSURL *url) {
     NSString *identity = NSUUID.UUID.UUIDString;
     [NSUserDefaults.standardUserDefaults setObject:identity forKey:@"AdBlockRebuildIdentity"];
     [NSUserDefaults.standardUserDefaults setObject:identity forKey:@"AdBlockRebuildPendingApply"];
-    sBrowserAdBlockRulesGeneration++;
+    BrowserAdvanceFilterGeneration();
     [BrowserNetworkFilterEngine cancelPreparation];
     sBrowserAdBlockCachedPolicies = nil;
     sFilterBakePending = YES;

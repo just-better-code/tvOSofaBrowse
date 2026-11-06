@@ -788,3 +788,22 @@ Static JavaScript syntax and whitespace checks passed; focused peer review found
 remaining blocking defect in the final changed adapters. No app tests, Apple SDK
 compilation, Simulator/device action or remote push ran. Performance and browser
 equivalence, including the full-cold <=30 s target, remain unverified on tvOS.
+
+The follow-up above is committed as `88d2933`; its final assembled ISOLATED runtime
+also passed syntax parsing without execution. A final bounded stage adds a scoped
+extended-parser cancellation hook, checked every 256 input lines and at source
+boundaries, so network/DNS-only input cannot postpone cancellation until an accepted
+extended-record batch. Exceptions reject partial output. Peer review caught the
+cost of synchronous main-queue generation polling; replace that checker with an
+atomic tag published at all three main-owned generation increment sites. Regenerate
+the parser using the standard asset builder and confirm syntax plus exact maintained
+adapter inclusion. No app tests or Apple build/device work ran.
+
+At the user's request, inspect the original uBlock/third-party branch provenance.
+The remote has master and release/2.20.4 heads; fetch the retained PR #15 head into a
+local tracking ref. Head `451ca21` has zero code differences under `_Project/Browser`
+and `_Project/Vendor` against the current base `248b9dc`; squash `fb46ce4` is already
+an ancestor. Therefore the third-party implementation is in the actual base used
+here. The historical removal entry is retained as history but does not match this
+checkout's code. No feature merge or remote push occurred. The user then requested
+finalization; no further feature scope was started.

@@ -13,6 +13,7 @@ Published packages are available for [2.21.1](https://github.com/just-better-cod
 
 - Reuse unchanged native filter artifacts, overlap conversion with bounded compilation through four WebKit stores, and coalesce conditional filter updates ([Preparation lifecycle](_Project/Vendor/UBlock/README.md)).
 - Read the network engine bundle once per preparation or restoration operation ([Network preparation](_Project/Vendor/UBlock/README.md)).
+- Cancel obsolete extended-rule parsing at input-line boundaries without waiting on the main queue ([Preparation lifecycle](_Project/Vendor/UBlock/README.md)).
 - Preserve oversized native rule sets and their ordered exceptions instead of truncating compatible rules, and reject corrupt or obsolete replacement caches ([Native converter](_Project/Vendor/AdGuardConverter/README.md), [Implementation evidence](docs/agent/DEVELOPMENT_HISTORY.md)).
 
 ## 2.21.1 - 2026-10-16

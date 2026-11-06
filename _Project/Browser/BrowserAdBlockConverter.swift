@@ -108,7 +108,7 @@ extension BrowserAdBlockConverter {
         return autoreleasepool { compileScripts(lists, cancelled: cancelled) }
     }
 
-    private static func compileScripts(_ lists: NSArray, cancelled: () -> Bool) -> NSDictionary? {
+    private static func compileScripts(_ lists: NSArray, cancelled: @escaping () -> Bool) -> NSDictionary? {
         guard !cancelled(), let library = scriptletLibrary(),
               let runtime = resource("UBlockRuntime", "js"),
               let domains = resource("UBlockDomains", "js"),
@@ -182,6 +182,8 @@ extension BrowserAdBlockConverter {
         let buckets = ["MAIN": Buckets(), "ISOLATED": Buckets()]
         let counters: (NSDictionary, NSDictionary)? = autoreleasepool {
             guard let context = makeContext() else { return nil }
+            let cancellationProbe: @convention(block) () -> Bool = { cancelled() }
+            context.setObject(cancellationProbe, forKeyedSubscript: "browserExtendedPreparationCancelled" as NSString)
             // Release the VM before assembling the scripts; it owns neither
             // the final bucket buffers nor the returned counters.
             context.exception = nil
