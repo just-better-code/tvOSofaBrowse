@@ -23,7 +23,66 @@ rule-equivalence/runtime tests. No app build, Simulator/TV action or remote push
 Remaining platform work: on an authorized macOS environment, compile the application
 and perform requested rule/lifecycle verification; on an explicitly authorized tvOS
 27 target, measure full cold readiness and memory. The <=30 s outcome is unverified.
-Per-frame payload specialization and class/ID-driven generic retrieval remain deferred.
+The follow-up source stage adds local generic class/ID surveying, indexed exceptions
+and one network-bundle read per preparation/restoration. Full per-frame payload
+specialization and host-side on-demand retrieval remain deferred.
+
+### Follow-up checkpoint — generic cosmetics and remaining cold-path work
+
+The user authorized local commits and asked fast workers to take the next plan
+steps, then supplied a further ten-minute window. The follow-up changes are:
+
+- `UBlockCosmetics.js`: after the original applicability/exception/dedup checks,
+  defer only exact ordinary ASCII `.class`/`#id` rules without positive domain
+  scopes. Keep domain-specific, escaped, compound and procedural paths unchanged;
+  quirks-mode documents move every deferred candidate back to eager installation.
+  Survey the initial tree, added subtrees and changed class/ID elements. Keep an
+  active TreeWalker across cooperative 8 ms batches, coalesce queued mutation roots
+  without restarting that walk, and install each rule once. Full root replacement
+  replays retained CSS through the bounded queue because reattaching a style can
+  recreate its sheet. BFcache return queues a fresh full scan to cover mutations
+  discarded by observer disconnection. No node-count or fruitless-survey cutoff
+  permanently disables rules.
+- `UBlockRuntime.js`: build `Map(kind) -> Set(key)` from applicable exceptions once;
+  exact keys and wildcard `*` preserve the previous boolean exception behavior.
+- `BrowserNetworkFilterEngine.swift`: load immutable engine source, PSL and the
+  unchanged fingerprint once per prepare/restore operation, then pass that value
+  into `createContext`. Do not retain another process-global copy of large assets.
+
+Reference inspection: Brave's `ios/browser/brave_shields/cosmetic_filtering/resources/
+cosmetic_filtering.ts` class/ID queues and uBO `contentscript.js` DOM surveyor plus
+`cosmetic-filtering.js` generic-selector/Set-based exception retrieval. The tvOS
+adapter keeps the full universal payload and filters locally; it does not add
+Brave's synchronous messaging, first-party policy or native Rust matcher.
+
+Peer review caught and resolved shared/duplicate survey timers, BFcache resurvey,
+quirks case matching, mutation-flood starvation and CSSOM replay after root replacement.
+Syntax parsing of the changed adapters and whitespace checks passed. Apple
+compilation, browser behavior and rule-equivalence measurements remain unperformed.
+
+Next independent implementation candidates, after platform compilation/measurement:
+
+1. Source text currently opens/decodes independently for native, extended and core
+   cold paths. Do not simply retain every full list forever: design a bounded,
+   generation-bound per-source handoff, release it when all subscribed backends
+   finish, and reject a file/configuration change before publication. Keep lazy
+   cache-hit paths that never read source text. Measure peak memory before enabling.
+2. Nondefault native allow/block variants parse and serialize every base chunk to
+   append policy. Cache policy variants by the complete base chunk and policy, or
+   safely append serialized array contents without changing order. Keep integrity
+   validation, empty-array handling, native limits and following-exception behavior.
+3. For host/frame-specific delivery, first specify a document-start transport with
+   authoritative frame URL/origin, top/ancestor context and navigation generation.
+   Keep universal fallback for initial/dynamic/nested/about:blank/srcdoc/blob realms;
+   never send an asynchronous reply into a new document. Compare ordered selected
+   records, negative scopes and dependency closure before reducing injected bytes.
+
+Exact follow-up verification when requested: inspect ordinary and quirks documents,
+generic/domain-specific exceptions and wildcard exceptions, late class/ID mutation,
+large continuously mutating trees, root replacement and BFcache return. Compare
+the eventually installed selector set with the original eager path. Compile the
+Swift resource refactor on macOS and confirm existing network cache fingerprints
+remain valid. These changes alone do not establish the <=30 s goal.
 
 ## Objective and constraints
 
@@ -323,8 +382,9 @@ artifacts. Do not derive TV timing or memory limits from Node/macOS-only observa
 
 ### Deliberately deferred work
 
-Page/frame-specific payload delivery and class/ID-driven generic selector retrieval
-are not implemented by this first integration. Current v4 reuses complete immutable
+Page/frame-specific payload delivery and host-side class/ID selector retrieval
+are not implemented. The follow-up adds local surveying of simple generic selectors;
+current v4 still reuses complete immutable
 all-frame scripts; it does not claim smaller per-frame rule sets. A later implementation
 must first define how every dynamic realm receives matching document-start scriptlets,
 including inherited origins, srcdoc/blob, path/entity/regex/ancestor scopes and all

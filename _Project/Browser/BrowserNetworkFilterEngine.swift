@@ -20,6 +20,12 @@ private final class BrowserNetworkPreparationToken {
     func cancel() { lock.lock(); stopped = true; lock.unlock() }
 }
 
+private struct BrowserNetworkBundleResources {
+    let source: String
+    let suffixes: String
+    let fingerprint: String
+}
+
 @objc(BrowserNetworkFilterEngine)
 final class BrowserNetworkFilterEngine: NSObject {
     // Access these only on the main queue.
@@ -81,10 +87,8 @@ final class BrowserNetworkFilterEngine: NSObject {
         }
     }
 
-    private static func createContext(runtime: BrowserNetworkRuntime) -> JSContext? {
-        guard let context = JSContext(),
-              let url = Bundle.main.url(forResource: "UBlockNetwork", withExtension: "js"),
-              let source = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+    private static func createContext(runtime: BrowserNetworkRuntime, resources: BrowserNetworkBundleResources) -> JSContext? {
+        guard let context = JSContext() else { return nil }
         let normalize: @convention(block) (String) -> String = { host in
             guard !host.contains("/"), !host.contains("@"), !host.contains(":") else { return "" }
             return URL(string: "https://\(host)/")?.host?.lowercased() ?? ""
@@ -113,7 +117,7 @@ final class BrowserNetworkFilterEngine: NSObject {
         globalThis.TextDecoder=class {decode(bytes){return browserDecodeBytes(Array.from(bytes||[]));}};
         globalThis.URL=class {constructor(){this._hostname='';}get hostname(){return this._hostname;}set hostname(value){this._hostname=browserNormalizeHostname(value);}};
         """)
-        context.evaluateScript(source)
+        context.evaluateScript(resources.source)
         return context.exception == nil ? context : nil
     }
 
@@ -154,12 +158,16 @@ final class BrowserNetworkFilterEngine: NSObject {
         return !text.isEmpty || accepted == 0
     }
 
-    private static func engineResources() -> (String, String)? {
+    private static func engineResources() -> BrowserNetworkBundleResources? {
         guard let suffixURL = Bundle.main.url(forResource: "PublicSuffixList", withExtension: "dat"),
-              let suffixes = try? String(contentsOf: suffixURL, encoding: .utf8),
+              let suffixData = try? Data(contentsOf: suffixURL),
+              let suffixes = String(data: suffixData, encoding: .utf8),
               let engineURL = Bundle.main.url(forResource: "UBlockNetwork", withExtension: "js"),
-              let engine = try? Data(contentsOf: engineURL) else { return nil }
-        return (suffixes, digest(engine + Data(suffixes.utf8)))
+              let engineData = try? Data(contentsOf: engineURL),
+              let source = String(data: engineData, encoding: .utf8) else { return nil }
+        // Preserve the previous fingerprint input exactly: engine bytes followed
+        // by the UTF-8 re-encoding of the decoded PSL string.
+        return BrowserNetworkBundleResources(source: source, suffixes: suffixes, fingerprint: digest(engineData + Data(suffixes.utf8)))
     }
 
     private static func restoreRecords(_ cache: [String: Any], directory: URL, fingerprint: String) -> [[String: Any]]? {
@@ -211,8 +219,10 @@ final class BrowserNetworkFilterEngine: NSObject {
             func fail(_ error: Int) {
                 DispatchQueue.main.async { completion(["available": false, "error": error, "superseded": token.cancelled]) }
             }
-            guard !token.cancelled, let context = createContext(runtime: candidate),
-                  let (suffixes, fingerprint) = engineResources() else { fail(1); return }
+            guard !token.cancelled, let resources = engineResources(),
+                  let context = createContext(runtime: candidate, resources: resources) else { fail(1); return }
+            let suffixes = resources.suffixes
+            let fingerprint = resources.fingerprint
             candidate.context = context
             let cancelled: @convention(block) () -> Bool = { token.cancelled }
             context.setObject(cancelled, forKeyedSubscript: "browserPreparationCancelled" as NSString)
@@ -326,10 +336,11 @@ final class BrowserNetworkFilterEngine: NSObject {
             guard !identity.contains("/"), !identity.contains("..") else { DispatchQueue.main.async { completion(["available": false]) }; return }
             let file = "network-v4-\(identity).json"
             guard let cache = readCache(directory.appendingPathComponent(file)), cache["format"] as? Int == 4, cache["identity"] as? String == identity, cache["configuration"] as? String == configuration,
-                  let (suffixes, fingerprint) = engineResources(), cache["engineFingerprint"] as? String == fingerprint,
-                  let snapshot = cache["snapshot"] as? String, let context = createContext(runtime: candidate) else {
+                  let resources = engineResources(), cache["engineFingerprint"] as? String == resources.fingerprint,
+                  let snapshot = cache["snapshot"] as? String, let context = createContext(runtime: candidate, resources: resources) else {
                 DispatchQueue.main.async { completion(["available": false]) }; return
             }
+            let suffixes = resources.suffixes
             candidate.context = context
             guard var summary = context.objectForKeyedSubscript("browserRestoreNetwork")?.call(withArguments: [snapshot, suffixes])?.toDictionary() as? [String: Any], context.exception == nil else {
                 DispatchQueue.main.async { completion(["available": false]) }; return

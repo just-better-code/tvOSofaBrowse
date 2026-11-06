@@ -756,3 +756,35 @@ release/tag, merge or remote Git push occurred. The <=30 s full-cold goal, rule-
 runtime equivalence, real playback behavior and memory/jetsam effects remain
 unverified. The detailed execution plan records exact next validation steps and the
 deferred mechanisms so another agent can resume without reconstructing the chat.
+
+### Follow-up implementation — generic cosmetics and network bundle loading
+
+The user requested commits and clarified that fast subagents should take the next
+implementation steps, then supplied an additional ten-minute window. Adapt Brave's
+class/ID queue and uBO's generic DOM survey/Set-based exception mechanisms around the
+existing engine. In standards-mode documents, defer only simple ASCII generic
+`.class`/`#id` declarations until their exact token is observed. Retain domain-specific,
+escaped, compound and procedural paths, all applicable exceptions, the complete
+universal payload and native CSS. Use cooperative 8 ms batches and retain pending
+work; do not copy upstream survey shutdown/node limits that could omit later rules.
+Quirks documents retain eager CSS to preserve case-insensitive matching.
+
+Peer review resolved duplicate/shared survey timers, missing BFcache resurvey,
+mutation-flood starvation and CSSOM loss after document-root replacement. Changed
+class/ID attributes inspect their element directly; added subtrees use a retained
+walker. Index applicable exception keys by kind once per document, preserving exact
+and wildcard behavior. A separate fast worker removed the second engine-bundle read
+inside each network prepare/restore, passing one immutable resource value into the
+new JS context while retaining the exact previous engine/PSL fingerprint formula.
+
+Read the local Brave `cosmetic_filtering.ts` and uBO `contentscript.js`/
+`cosmetic-filtering.js` implementations before adapting this stage. This implements
+local installation selection, not native on-demand retrieval or smaller per-frame
+injected sources. Keep version 2.21.2 as the same unreleased change set and consolidate
+its changelog entry. Document the remaining shared-source and policy-variant work,
+including memory/generation/order safeguards, in the execution plan.
+
+Static JavaScript syntax and whitespace checks passed; focused peer review found no
+remaining blocking defect in the final changed adapters. No app tests, Apple SDK
+compilation, Simulator/device action or remote push ran. Performance and browser
+equivalence, including the full-cold <=30 s target, remain unverified on tvOS.
