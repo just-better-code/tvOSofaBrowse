@@ -807,3 +807,26 @@ an ancestor. Therefore the third-party implementation is in the actual base used
 here. The historical removal entry is retained as history but does not match this
 checkout's code. No feature merge or remote push occurred. The user then requested
 finalization; no further feature scope was started.
+
+
+## 2026-11-07 — Manual branch CI and Linux GitHub CLI
+
+The user requested manual CI builds before release and installation of GitHub CLI
+on Linux. Add workflow_dispatch to the existing build workflow, derive and validate
+the shared semantic marketing version without a tag for manual runs, and retain
+strict release-tag validation for release publication. Build both Simulator Debug
+and Apple TV Release with the existing unsigned packaging and artifact retention.
+Gate the release-upload job to the release event so manual runs only save artifacts.
+Document branch selection, CLI dispatch/download and the default-branch workflow
+registration prerequisite. Keep app version 2.21.2; this changes delivery tooling.
+
+Install the official Linux amd64 gh release after SHA-256 verification. Passwordless
+sudo was unavailable; the user explicitly preferred a graphical password dialog.
+System authorization through pkexec succeeded and the verified binary was installed
+system-wide. Record that reusable preference in AGENTS.md. gh reports version 2.103.3;
+GitHub authentication is not configured. No credentials were requested in chat.
+
+Python AST parsing, workflow YAML parsing, manual-dispatch/release-upload guard
+inspection and whitespace checks passed. No workflow, Apple build, app tests, release,
+Git remote push or physical device action ran. Publishing the workflow to the default
+branch and GitHub authentication remain prerequisites for remote manual dispatch.

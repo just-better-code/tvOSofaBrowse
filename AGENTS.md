@@ -10,6 +10,7 @@
 - Use the Apple TV Simulator by default. Discovering, inspecting, installing, launching, or interacting with a physical Apple TV requires the user’s permission for that work. A request to deploy to a physical Apple TV grants permission for that device work. An instruction to push app changes immediately remains authorization to build, install and launch subsequent changes until explicitly revoked. Historical deliveries in development notes do not grant current device authorization.
 - In app-delivery context, unqualified “push” / “запуш” means delivery to Apple TV; an explicit Simulator target takes precedence. A request to push the repository or GitHub means Git remote push.
 - Commit completed implementation stages separately, after their requested build/delivery, so each stage can be reviewed and reverted independently.
+- On local Linux, prefer a native graphical authorization dialog for necessary administrative actions; never request the system password in chat.
 - Git commits are authorized. Push the Git repository only when the user explicitly asks to push to GitHub or the remote repository.
 - Preserve automatic signing and the effective local development-team and bundle-identifier settings. Personal values belong in the ignored `Signing.local.xcconfig`; shared configuration uses neutral defaults.
 - Add or run tests only when the user asks for testing or verification. Run builds when requested. Report exactly what was checked; compilation or launch alone does not prove an interaction bug is fixed.

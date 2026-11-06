@@ -1,6 +1,6 @@
 # Install and renew tvOSofaBrowse from Linux
 
-GitHub Actions builds an **unsigned Apple TV IPA** when a maintainer manually publishes a GitHub Release. A Linux machine at home runs [atvloadly](https://github.com/bitxeno/atvloadly), signs the IPA with your Apple Account, installs it over the local network, and renews its provisioning before it expires. The Linux machine does not need Xcode or a paid Apple Developer membership.
+GitHub Actions builds an **unsigned Apple TV IPA** after manual workflow dispatch or when a maintainer manually publishes a GitHub Release. Manual runs keep packages in Actions artifacts; release runs also attach them to the release. A Linux machine at home runs [atvloadly](https://github.com/bitxeno/atvloadly), signs the IPA with your Apple Account, installs it over the local network, and renews its provisioning before it expires. The Linux machine does not need Xcode or a paid Apple Developer membership.
 
 ## Requirements
 
@@ -109,9 +109,25 @@ To confirm the outcome, open tvOSofaBrowse on the TV, check its version, then ch
 - **Backups:** back up the whole `data/` directory while the service is stopped. It contains sensitive account and pairing state. Avoid `docker compose down --volumes` and deleting the data directory during ordinary upgrades.
 - **Update atvloadly:** review upstream release notes, change the image tag in `compose.yaml`, then run `docker compose pull` and `docker compose up -d`.
 
+## Maintainers: build a branch without publishing a release
+
+The build workflow supports `workflow_dispatch`. In GitHub Actions, select **Build tvOSofaBrowse**, click **Run workflow**, and choose the branch or tag to build. Both Simulator Debug and Apple TV Release are built without signing; download the packages from the run artifacts. This does not create a release or upload release assets.
+
+From Linux with authenticated GitHub CLI:
+
+```sh
+gh auth login
+gh workflow run build.yml --ref YOUR_BRANCH
+gh run list --workflow build.yml --event workflow_dispatch
+gh run watch RUN_ID --exit-status
+gh run download RUN_ID --name tvOSofaBrowse-device-Release-COMMIT_SHA
+```
+
+The selected revision must contain this workflow and the optional-tag version helper. For manual dispatch, the workflow must also be registered with `workflow_dispatch` on the repository's default branch. Pushing a feature branch alone does not establish that prerequisite. Manual builds validate that Debug and Release share a semantic marketing version, without requiring a release tag. The IPA still requires local signing before installation. Workflow completion does not prove Simulator interaction, TV behavior or filter preparation timing.
+
 ## Maintainers: publish a release manually
 
-The only automatic build trigger is **`release: published`**. Pushes, tags alone, pull requests and release edits do not start builds. The release workflow uses GitHub-hosted macOS with Xcode; everyday editing and release creation can happen from Linux.
+Release publication uses **`release: published`**; manual branch builds use **`workflow_dispatch`**. Pushes, tags alone, pull requests and release edits do not start builds. The release workflow uses GitHub-hosted macOS with Xcode; everyday editing and release creation can happen from Linux.
 
 1. Set the same `MARKETING_VERSION` in Debug and Release, and maintain the corresponding changelog entry.
 2. Commit and push the intended source. Create a `vMAJOR.MINOR.PATCH` tag on that exact commit and push the tag.

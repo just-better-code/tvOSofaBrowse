@@ -1,6 +1,7 @@
 name: Build tvOSofaBrowse
 
 on:
+  workflow_dispatch:
   release:
     types: [published]
 
@@ -13,7 +14,7 @@ concurrency:
 
 jobs:
   version:
-    name: Validate release version
+    name: Validate app version
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -27,7 +28,11 @@ jobs:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
-          version=$(python3 scripts/ci-release.py version "$RELEASE_TAG")
+          if [[ "$GITHUB_EVENT_NAME" == release ]]; then
+            version=$(python3 scripts/ci-release.py version "$RELEASE_TAG")
+          else
+            version=$(python3 scripts/ci-release.py version)
+          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
   build:
@@ -146,6 +151,7 @@ jobs:
 
   publish:
     name: Attach verified release files
+    if: ${{ github.event_name == 'release' }}
     needs: [version, build]
     runs-on: ubuntu-latest
     permissions:

@@ -376,7 +376,7 @@ Work through these checks before calling integration complete:
    names; these edits are compatibility maintenance, not a passed test result.
 4. Follow AGENTS.md before tests/builds/delivery. This request authorized implementation;
    no app tests, app build, TV discovery or TV installation have been run here. Linux
-   lacks Xcode and the tvOS SDK. Do not bypass release-only CI or push Git to get a build.
+   lacks Xcode and the tvOS SDK. Manual branch CI is now supported through workflow_dispatch once registered on the default branch; remote Git push still requires explicit authorization.
 5. Once source integration is complete, update the user guide, uBO/component README,
    development history and both marketing versions together. Use patch 2.21.2 for this
    refinement of existing Ad Block; keep build number/signing unchanged. Add one

@@ -6,6 +6,7 @@ Published packages are available for [2.21.1](https://github.com/just-better-cod
 
 ### Changed
 
+- Allow manual branch builds in GitHub Actions with downloadable unsigned packages before release publication ([Linux build workflow](docs/DEPLOYMENT.md)).
 - Prepare early Ad Block protection before website navigation and reuse compatible ready-state caches and immutable page scripts across launches and navigation ([Ad Block controls](docs/USER_GUIDE.md), [Preparation lifecycle](_Project/Vendor/UBlock/README.md)).
 - Install simple generic cosmetic selectors when their class or ID appears, retain all other selector paths, and index applicable exceptions once per document ([Cosmetic filtering](_Project/Vendor/UBlock/README.md)).
 
