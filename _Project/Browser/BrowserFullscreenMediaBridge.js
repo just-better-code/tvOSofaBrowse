@@ -139,7 +139,7 @@ function publishNativeMedia(state) {
     if (window !== window.top) return;
     try {
         window.webkit.messageHandlers.browserFullscreenMedia.postMessage(
-            Object.assign({token: nativeToken, session: mediaSessionID, active: mediaActive}, state || {}));
+            Object.assign({token: nativeToken, session: mediaSessionID, active: mediaActive}, state || {}, {pageTitle: document.title.slice(0, 512)}));
     } catch (error) {}
 }
 function requestMediaState(request, volume) {
@@ -201,7 +201,8 @@ function performMediaCommand(command, value, request) {
     // Hardware media actions may belong to the embedding page, not the video frame.
     var trackAction = command === 'previous' ? 'previoustrack' : command === 'next' ? 'nexttrack' : null;
     if (trackAction && mediaHandlers[trackAction]) {
-        try { mediaHandlers[trackAction]({action: trackAction}); return true; } catch (error) {}
+        try { mediaHandlers[trackAction]({action: trackAction}); } catch (error) {}
+        return true; // A throwing handler may already have submitted the action.
     }
     var frame = mediaFrame();
     if (trackAction && window === window.top && frame && (!mediaFrameState ||

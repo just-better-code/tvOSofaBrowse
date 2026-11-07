@@ -17,6 +17,8 @@ static NSInteger const BrowserMediaIconTag = 891;
 
 @interface BrowserFullscreenMediaControlsController ()
 @property (nonatomic) UIView *panel;
+@property (nonatomic) UIView *header;
+@property (nonatomic) UILabel *pageTitle;
 @property (nonatomic) UIProgressView *progress;
 @property (nonatomic) UILabel *timeLabel;
 @property (nonatomic) NSArray<UIButton *> *buttons;
@@ -31,6 +33,27 @@ static NSInteger const BrowserMediaIconTag = 891;
 - (void)loadView {
     self.view = [BrowserMediaOverlayView new];
     self.view.backgroundColor = UIColor.clearColor;
+    self.header = [UIView new];
+    self.header.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:self.header];
+    UIVisualEffectView *headerGlass = [self glassBackdrop];
+    [self.header addSubview:headerGlass];
+    [self fillView:headerGlass inView:self.header];
+    self.pageTitle = [UILabel new];
+    self.pageTitle.translatesAutoresizingMaskIntoConstraints = NO;
+    self.pageTitle.font = [UIFont systemFontOfSize:26 weight:UIFontWeightSemibold];
+    self.pageTitle.textColor = UIColor.whiteColor;
+    self.pageTitle.lineBreakMode = NSLineBreakByTruncatingTail;
+    [self.header addSubview:self.pageTitle];
+    [NSLayoutConstraint activateConstraints:@[
+        [self.header.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [self.header.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.header.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.header.heightAnchor constraintEqualToConstant:90],
+        [self.pageTitle.leadingAnchor constraintEqualToAnchor:self.header.leadingAnchor constant:80],
+        [self.pageTitle.trailingAnchor constraintEqualToAnchor:self.header.trailingAnchor constant:-80],
+        [self.pageTitle.centerYAnchor constraintEqualToAnchor:self.header.centerYAnchor]
+    ]];
     UIView *panel = [UIView new];
     panel.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:panel]; self.panel = panel;
@@ -76,7 +99,7 @@ static NSInteger const BrowserMediaIconTag = 891;
         [buttons addObject:button];
     }
     self.buttons = buttons;
-    buttons[1].hidden = YES; buttons[8].hidden = YES;
+    ((UIButton *)buttons[1]).hidden = YES; ((UIButton *)buttons[8]).hidden = YES;
     UIStackView *row = [[UIStackView alloc] initWithArrangedSubviews:@[buttons[0], buttons[2], buttons[3], buttons[4], buttons[5], buttons[6], buttons[7]]];
     row.translatesAutoresizingMaskIntoConstraints = NO; row.spacing = 10;
     row.alignment = UIStackViewAlignmentCenter; [panel addSubview:row];
@@ -127,6 +150,7 @@ static NSInteger const BrowserMediaIconTag = 891;
     [self loadViewIfNeeded];
     BOOL wasPlaying = self.mediaState && ![self.mediaState[@"paused"] boolValue] && [self.mediaState[@"available"] boolValue];
     self.mediaState = state;
+    self.pageTitle.text = state[@"pageTitle"];
     double current = [state[@"currentTime"] doubleValue], duration = [state[@"duration"] doubleValue];
     self.progress.progress = duration > 0 ? MIN(1, MAX(0, current / duration)) : 0;
     self.timeLabel.text = [NSString stringWithFormat:@"%@ / %@", [self timeText:current], duration > 0 ? [self timeText:duration] : @"--:--"];
@@ -174,6 +198,7 @@ static NSInteger const BrowserMediaIconTag = 891;
     BOOL visible = paused || self.cursorVisible || self.seekTimer != nil || self.hideTimer != nil;
     BOOL changed = self.panel.hidden == visible;
     self.panel.hidden = !visible;
+    self.header.hidden = !visible || self.pageTitle.text.length == 0;
     if (changed) {
         [self.parentViewController setNeedsFocusUpdate];
         [self.parentViewController updateFocusIfNeeded];

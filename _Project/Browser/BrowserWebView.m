@@ -849,6 +849,7 @@ static id BrowserPersistentWebsiteDataStore(void) {
         return;
     }
     NSMutableDictionary *state = [NSMutableDictionary dictionaryWithObject:body[@"session"] forKey:@"session"];
+    state[@"pageTitle"] = [body[@"pageTitle"] isKindOfClass:NSString.class] && [body[@"pageTitle"] length] <= 512 ? body[@"pageTitle"] : @"";
     for (NSString *key in @[@"active", @"available", @"paused", @"seekAtStart", @"seekAtEnd", @"canSeekBack", @"canSeekForward", @"canPrevious", @"canNext", @"routesNext", @"routesPrevious", @"canRestart", @"canEnd", @"muted", @"canMute", @"canVolume"]) {
         state[key] = @([body[key] isKindOfClass:NSNumber.class] && [body[key] boolValue]);
     }
@@ -1301,7 +1302,7 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 }
 
 - (void)setFullscreenMediaControlsSuspended:(BOOL)suspended {
-    if (suspended) [self evaluateJavaScript:@"window.__browserTVResetClickSequence && window.__browserTVResetClickSequence()" completionHandler:nil];
+    if (suspended) [self evaluateJavaScript:@"window.__browserTVResetClickSequence && window.__browserTVResetClickSequence()" completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
     NSString *script = [NSString stringWithFormat:@"window.__browserTVSetFullscreenMediaSuspended && window.__browserTVSetFullscreenMediaSuspended(%@)", suspended ? @"true" : @"false"];
     [self evaluateJavaScript:script completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
 }
