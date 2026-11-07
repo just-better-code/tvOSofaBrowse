@@ -2,6 +2,12 @@
 
 Published packages are available for [2.21.6](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.6), [2.21.5](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.5), [2.21.4](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.4), [2.21.3](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.3), [2.21.2](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.2), [2.21.1](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.1) and [2.20.4](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.20.4); other entries reconstruct development history and do not represent separately published releases or tags.
 
+## 2.21.8 - 2026-11-07
+
+### Fixed
+
+- Resolve Starlight Previous from the host's published episode catalog when its previous-source endpoint is unavailable, and show the active Starlight video's title after episode changes ([Playback controls](docs/USER_GUIDE.md), [Investigation](docs/agent/plans/teleportal-player.md)).
+
 ## 2.21.7 - 2026-11-07
 
 ### Fixed

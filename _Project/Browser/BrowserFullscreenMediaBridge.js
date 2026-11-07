@@ -76,6 +76,14 @@ document.addEventListener('loadedmetadata', function(event) {
     if (event.target && event.target.tagName === 'VIDEO') mediaVolumeVideos.delete(event.target);
 }, true);
 function restoreMediaVideoVolume(preference) {
+    if (preference && preference.episodes && typeof preference.episodes.project === 'string' && Array.isArray(preference.episodes.episodes)) {
+        var incoming = preference.episodes;
+        if (starlightCatalog && starlightCatalog.project === incoming.project && starlightCatalog.season === incoming.season) {
+            var known = new Set(incoming.episodes.map(function(item) { return item.hash; }));
+            incoming.episodes = incoming.episodes.concat(starlightCatalog.episodes.filter(function(item) { return !known.has(item.hash); })).slice(0, 2000);
+        }
+        starlightCatalog = incoming;
+    } else if (preference && preference.episodes === null) starlightCatalog = null;
     var v = mediaVideo();
     var value = preference && preference.volume;
     if (!v || !Number.isFinite(value) || value < 0 || value > 1) return;
@@ -115,41 +123,77 @@ function playerTrackControl(previous) {
     return button && button.isConnected && !button.hidden && button.getAttribute('aria-disabled') !== 'true' &&
         getComputedStyle(button).display !== 'none' ? button : null;
 }
-var previousSourceRequest = null;
-function previousSourceFetcher() {
+// Starlight adapter. Keep the working Next control route unchanged.
+var starlightCatalog = null;
+var starlightCatalogRequest = null;
+var starlightCatalogPath = null;
+var starlightPreviousRequest = null;
+function starlightPlayer() {
     var p = window.player;
-    // Shared source/playlist contract; no vendor or domain gate on configured callbacks.
-    if (!p || typeof p.previous !== 'function' || !p.source || !p.source.id || !p.group || !Array.isArray(p.group.playlist)) return null;
-    if (p.config && p.config.ui && typeof p.config.ui.fetch_previous === 'function')
-        return function(source) { return p.config.ui.fetch_previous(source); };
-    // Optional adapter when the player has no configured previous-source callback.
-    if (window.starlight && typeof starlight.fetchPrevious === 'function' && typeof window.PAGE_REFERER === 'string')
-        return function(source) { return starlight.fetchPrevious(source, window.PAGE_REFERER, window.sld_locale || 'ua'); };
-    return null;
+    return window.adt && adt.player && window.starlight && typeof starlight.fetchVideo === 'function' &&
+        p && p.source && p.source.id && p.group && Array.isArray(p.group.playlist) ? p : null;
 }
-function requestPreviousSource() {
-    var fetchPrevious = previousSourceFetcher();
-    if (!fetchPrevious) return false;
-    if (previousSourceRequest) return true;
-    var p = window.player, source = p.source, group = p.group;
-    // Use the loaded predecessor when one exists. The site control otherwise
-    // calls previous() on a one-item playlist and cannot discover the episode.
-    var index = group.playlist.indexOf(source);
-    if (index < 0) return false;
-    if (index > 0) { p.previous(); return true; }
-    var request = {}, originalFullscreen = fullscreenTarget;
-    previousSourceRequest = request;
-    Promise.resolve().then(function() { return fetchPrevious(source); }).then(function(previous) {
-        if (previousSourceRequest !== request || window.player !== p || p.source !== source || p.group !== group ||
-            (originalFullscreen && fullscreenTarget !== originalFullscreen) || (!mediaActive && window === window.top)) return;
-        if (!previous || !previous.id || previous.id === source.id) return;
-        var existing = group.playlist.find(function(item) { return item.id === previous.id; });
-        if (!existing) { group.playlist.splice(Math.max(0, index), 0, previous); existing = previous; }
+function starlightSourceTitle() {
+    var p = starlightPlayer();
+    if (!p || typeof p.source.title !== 'string') return '';
+    var parsed = new DOMParser().parseFromString(p.source.title.slice(0, 4096), 'text/html');
+    return (parsed.body.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 512);
+}
+function starlightEpisodeNumber(name) {
+    var match = typeof name === 'string' && /^(?:Серія|Серия|Episode)\s+(\d+)$/i.exec(name.trim());
+    return match ? Number(match[1]) : null;
+}
+function starlightPredecessor() {
+    var p = starlightPlayer();
+    if (!p || !starlightCatalog) return null;
+    var number = starlightEpisodeNumber(p.source.name);
+    var title = starlightSourceTitle();
+    if (!number || !title.startsWith(starlightCatalog.project + ' | ' + starlightCatalog.season + ' ')) return null;
+    if (!starlightCatalog.episodes.some(function(item) { return item.hash === p.source.id; }))
+        starlightCatalog.episodes.push({hash:p.source.id,number:number});
+    return starlightCatalog.episodes.find(function(item) { return item.number === number - 1; }) || null;
+}
+function requestStarlightPrevious() {
+    var p = starlightPlayer(), previous = starlightPredecessor();
+    if (!p || !previous) return false;
+    if (starlightPreviousRequest) return true;
+    var source = p.source, group = p.group, scope = fullscreenTarget, request = {};
+    starlightPreviousRequest = request;
+    // fetchPrevious/get/prev is 404 on the observed server. Resolve the actual
+    // preceding hash from the host's published season index and use fetchVideo.
+    Promise.resolve().then(function() {
+        return starlight.fetchVideo(previous.hash, window.PAGE_REFERER, window.sld_locale || 'ua');
+    }).then(function(resolved) {
+        if (starlightPreviousRequest !== request || window.player !== p || p.source !== source || p.group !== group ||
+            (scope && fullscreenTarget !== scope) || !resolved || resolved.id !== previous.hash) return;
+        var existing = group.playlist.find(function(item) { return item.id === resolved.id; });
+        var index = group.playlist.indexOf(source);
+        if (index < 0) return;
+        if (!existing) { group.playlist.splice(index, 0, resolved); existing = resolved; }
         p.source = existing;
     }).catch(function() {}).then(function() {
-        if (previousSourceRequest === request) previousSourceRequest = null;
+        if (starlightPreviousRequest === request) starlightPreviousRequest = null;
     });
     return true;
+}
+function prepareStarlightCatalog() {
+    // Teleportal host metadata adapter, separate from the Starlight player API.
+    if (window !== window.top || location.hostname !== 'teleportal.ua') return;
+    var path = location.pathname;
+    if (starlightCatalogPath !== path) { starlightCatalogPath = path; starlightCatalogRequest = null; starlightCatalog = null; }
+    if (starlightCatalogRequest) return;
+    if (!/^\/(ua|ru)\/(serials|show)\/[^/]+\/[^/]+\/[^/]+\/[^/]+\/?$/.test(path)) return;
+    starlightCatalogRequest = fetch('https://tp-back.starlight.digital' + path).then(function(response) {
+        if (!response.ok) throw new Error('metadata');
+        return response.json();
+    }).then(function(data) {
+        if (location.pathname !== path || !data.seasonGallery || !Array.isArray(data.seasonGallery.items) ||
+            typeof data.projectTitle !== 'string' || typeof data.seasonSlug !== 'string' || typeof data.hash !== 'string') return;
+        var episodes = data.seasonGallery.items.concat([{hash:data.hash,seriesTitle:data.seriesTitle}]).map(function(item) {
+            return {hash:item.hash,number:Number(item.seriesTitle)};
+        }).filter(function(item) { return typeof item.hash === 'string' && /^[a-f0-9]{64}$/.test(item.hash) && Number.isInteger(item.number) && item.number > 0; });
+        starlightCatalog = {project:data.projectTitle.slice(0,512),season:data.seasonSlug.slice(0,128),episodes:episodes.slice(0,2000)};
+    }).catch(function() {});
 }
 function mediaState() {
     var v = mediaVideo();
@@ -164,10 +208,11 @@ function mediaState() {
         canSeekForward: seekable || !!mediaHandlers.seekforward,
         seekAtStart: seekable ? current <= v.seekable.start(0) : !!v && current <= 0,
         seekAtEnd: seekable ? current >= v.seekable.end(v.seekable.length - 1) : duration > 0 && current >= duration,
-        canPrevious: !!mediaHandlers.previoustrack || !!previousSourceFetcher() || !!playerTrackControl(true) || (current > 5 && (seekable || !!mediaHandlers.seekto)),
+        canPrevious: !!mediaHandlers.previoustrack || !!starlightPredecessor() || !!playerTrackControl(true) || (current > 5 && (seekable || !!mediaHandlers.seekto)),
         canNext: !!mediaHandlers.nexttrack || !!playerTrackControl(false),
         routesNext: !!mediaHandlers.nexttrack || !!playerTrackControl(false),
-        routesPrevious: !!mediaHandlers.previoustrack || !!previousSourceFetcher() || !!playerTrackControl(true),
+        routesPrevious: !!mediaHandlers.previoustrack || !!starlightPredecessor() || !!playerTrackControl(true),
+        adapterTitle: starlightSourceTitle(),
         canRestart: seekable || !!mediaHandlers.seekto,
         canEnd: duration > 0 && (seekable || !!mediaHandlers.seekto)};
 }
@@ -175,7 +220,7 @@ function publishNativeMedia(state) {
     if (window !== window.top) return;
     try {
         window.webkit.messageHandlers.browserFullscreenMedia.postMessage(
-            Object.assign({token: nativeToken, session: mediaSessionID, active: mediaActive}, state || {}, {pageTitle: document.title.slice(0, 512)}));
+            Object.assign({token: nativeToken, session: mediaSessionID, active: mediaActive}, state || {}, {pageTitle: state && typeof state.adapterTitle === 'string' && state.adapterTitle ? state.adapterTitle.slice(0,512) : document.title.slice(0, 512)}));
     } catch (error) {}
 }
 function requestMediaState(request, volume) {
@@ -211,9 +256,11 @@ function refreshFullscreenMedia() {
         if (mediaFrameState && Date.now() - mediaFrameStateTime > 2000) {
             mediaFrameState = null; publishNativeMedia();
         }
-        if (mediaVolumeReady) requestMediaState(++mediaRequestSerial, {volume: mediaSavedVolume, session: mediaSessionID});
+        prepareStarlightCatalog();
+        if (mediaVolumeReady) requestMediaState(++mediaRequestSerial, {volume: mediaSavedVolume, session: mediaSessionID, episodes:starlightCatalog});
         else publishNativeMedia({loadVolume: true});
     }
+    prepareStarlightCatalog();
     tick(); mediaTimer = setInterval(tick, 500);
 }
 function receiveMediaState(event, data) {
@@ -230,7 +277,7 @@ function receiveMediaState(event, data) {
 }
 function performMediaCommand(command, value, request) {
     if (command === 'status') { requestMediaState(request, value); return true; }
-    if (command === 'next' || command === 'exit') previousSourceRequest = null;
+    if (command === 'next' || command === 'exit') starlightPreviousRequest = null;
     if (command === 'endNext') {
         performMediaCommand('end', 0, request);
         return performMediaCommand('next', 0, request);
@@ -248,7 +295,7 @@ function performMediaCommand(command, value, request) {
         frame.contentWindow.postMessage({browserTVFullscreenCommand: secret, action: 'media', command: command, value: value, request: request}, '*');
         return true;
     }
-    if (command === 'previous' && requestPreviousSource()) return true;
+    if (command === 'previous' && requestStarlightPrevious()) return true;
     if (command === 'next' || command === 'previous') {
         var trackControl = playerTrackControl(command === 'previous');
         if (trackControl) { trackControl.click(); return true; }
@@ -331,7 +378,7 @@ window.__browserTVRestoreFullscreenVolume = function(session, volume) {
     if (window !== window.top || !mediaActive || session !== mediaSessionID || mediaVolumeReady) return;
     mediaSavedVolume = Number.isFinite(volume) ? volume : null;
     mediaVolumeReady = true;
-    requestMediaState(++mediaRequestSerial, {volume: mediaSavedVolume, session: mediaSessionID});
+    requestMediaState(++mediaRequestSerial, {volume: mediaSavedVolume, session: mediaSessionID, episodes:starlightCatalog});
 };
 window.__browserTVSendFullscreenMediaCommand = function(command, value, session) {
     if (window !== window.top || mediaSuspended || !mediaActive || session !== mediaSessionID) return false;
