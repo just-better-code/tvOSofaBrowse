@@ -11,7 +11,7 @@ Use the existing translucent browser menu and `BrowserTVAppearance.h` as the vis
 ## Layout and controls
 
 - Preserve the existing browser menu layout and its translucent panel. Use `BrowserTVPanelEffect` and the shared surface and text colors for app-owned dialogs.
-- Use the shared dark graphite/metallic preparation background and a native spinner for initial waiting states; avoid a white waiting screen. Preserve website-owned colors once content is shown.
+- Keep filter-preparation feedback non-obscuring; use the existing status badge rather than a full-screen overlay over website content.
 - Let modern system glass buttons draw their own surfaces; do not add a separate rectangular background beneath their capsule or replace the accepted native focus appearance.
 - Respect tvOS focus and remote behavior. Center activates the focused control; Play/Pause uses the screen's documented shortcut. Prefer UIKit controls over HTML for app UI.
 - Keep labels readable and avoid full-width buttons when the action is short and a compact button fits the panel.

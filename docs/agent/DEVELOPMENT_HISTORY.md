@@ -942,3 +942,29 @@ menu/placeholder appearance remains pending user observation. The preceding user
 measurement of 27.0 s full preparation is recorded in the separate measurement entry.
 Release work is complete; do not move v2.21.2 or recreate its published packages.
 Future app fixes should advance the patch version rather than changing this release.
+
+
+## 2026-11-07 — Urgent 2.21.3 rollback of the obstructing preparation backdrop
+
+The user reports that the gray 2.21.2 waiting screen covers website content and
+requests immediate removal and release; they confirm the menu buttons now look good.
+Restore BrowserWebView.m and BrowserTVAppearance.h byte-for-byte from pre-overlay
+b3d89de. Keep BrowserMenuCoordinator.m and all filter acceleration unchanged. Source
+acef30c is published on master as immutable tag v2.21.3, version 2.21.3/build 3024.
+The urgent release workflow itself builds the exact restored sources; no redundant
+branch-only build is required before it. Update the changelog/guide/history after
+that build, without moving the published tag.
+
+[Release CI 42319189344](https://github.com/just-better-code/tvOSofaBrowse/actions/runs/42319189344)
+passes version validation, Simulator Debug, Device Release and verified release
+upload. The [release](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.3)
+contains the unsigned IPA (20,574,073 bytes), notices and SHA256SUMS. The user explicitly
+requests notification only, so no 2.21.3 package is downloaded/copied to Downloads.
+The restored source matches the earlier compiled version; new physical-TV visual
+behavior is not independently observed by the agent.
+
+The user also reports that installation succeeds after rebooting TV and suspects the
+running browser prevents replacement. Record reboot-then-update success as their
+observation; a running-app dependency remains a hypothesis pending targeted checks.
+Investigate atvloadly v0.8.2 settings and plumesign help without operating the TV.
+No device reboot, force quit, install or launch is performed by the agent.

@@ -1,6 +1,12 @@
 # Changelog
 
-Published packages are available for [2.21.2](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.2), [2.21.1](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.1) and [2.20.4](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.20.4); other entries reconstruct development history and do not represent separately published releases or tags.
+Published packages are available for [2.21.3](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.3), [2.21.2](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.2), [2.21.1](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.1) and [2.20.4](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.20.4); other entries reconstruct development history and do not represent separately published releases or tags.
+
+## 2.21.3 - 2026-11-07
+
+### Fixed
+
+- Restore unobstructed website display by removing the full-screen preparation overlay while retaining the native menu button improvements ([Ad Block controls](docs/USER_GUIDE.md)).
 
 ## 2.21.2 - 2026-11-07
 

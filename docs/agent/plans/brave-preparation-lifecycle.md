@@ -2,8 +2,10 @@
 
 ## Latest status — 2026-11-07
 
-Released **2.21.2/build 3023** as immutable tag `v2.21.2`, master merge
-`4474b4edd228f65092787b934f30780adfb696a7` from PR #17. Both branch run
+Released **2.21.3/build 3024** as immutable tag `v2.21.3` at `acef30c`.
+It removes the obstructing 2.21.2 backdrop while retaining the confirmed menu buttons
+and all filtering work from PR #17 (`4474b4e`). Release CI `42319189344` passed both
+platforms and asset upload. The preceding 2.21.2 evidence follows. Both branch run
 `42317274608` and release run `42317891377` passed Simulator Debug and Device Release;
 the release upload and downloaded IPA/notices integrity checks passed. The stable
 GitHub release has all three assets. Final documentation commits may follow the tag.
@@ -553,3 +555,27 @@ bytes). The new IPA is in Downloads and the previous build is retained separatel
 GitHub's public feed confirms v2.21.2 with its asset. Measurement history and the
 cross-computer handoff are updated. Release task is complete; remaining requests are
 runtime/visual checks, repeatability/memory measurement and deferred host specialization.
+
+
+Urgent rollback checkpoint: the user reports the 2.21.2 gray waiting backdrop obscures
+the whole website and explicitly requests reverting it, keeping the now-confirmed
+menu buttons, and publishing urgently. Restore BrowserWebView.m and BrowserTVAppearance.h
+byte-for-byte from pre-overlay b3d89de; keep BrowserMenuCoordinator.m unchanged.
+Source commit acef30c advances to 2.21.3/build 3024 and is pushed to master. Immutable
+tag v2.21.3 is published and release run 42319189344 is building. No branch-only
+rebuild is necessary for an exact restoration of the previously compiled UI sources;
+release CI still builds both platforms before attaching assets. After it succeeds,
+update changelog/guide/style/history/handoff to remove the withdrawn overlay promise,
+verify/download the release package, put 2.21.3 in Downloads, and commit/push docs.
+All filter acceleration and menu fixes remain. No agent TV delivery is authorized.
+
+Latest user steering overrides the Downloads step above: do not copy/download the
+2.21.3 package into Downloads. Finish release verification and notify when the
+published IPA is ready. Existing local files remain untouched.
+
+
+2.21.3 final result: release run 42319189344 passed both builds and asset upload.
+Published IPA is 20,574,073 bytes; no Downloads copy was made, as requested. The
+backdrop is fully rolled back, menus/filter mechanisms are retained and documentation
+is updated after the build. The user reports rebooting TV permitted an update;
+running-app replacement remains under atvloadly investigation, with no agent TV work.
