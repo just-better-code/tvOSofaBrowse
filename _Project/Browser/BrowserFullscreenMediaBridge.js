@@ -76,14 +76,9 @@ document.addEventListener('loadedmetadata', function(event) {
     if (event.target && event.target.tagName === 'VIDEO') mediaVolumeVideos.delete(event.target);
 }, true);
 function restoreMediaVideoVolume(preference) {
-    if (preference && preference.episodes && typeof preference.episodes.project === 'string' && Array.isArray(preference.episodes.episodes)) {
-        var incoming = preference.episodes;
-        if (starlightCatalog && starlightCatalog.project === incoming.project && starlightCatalog.season === incoming.season) {
-            var known = new Set(incoming.episodes.map(function(item) { return item.hash; }));
-            incoming.episodes = incoming.episodes.concat(starlightCatalog.episodes.filter(function(item) { return !known.has(item.hash); })).slice(0, 2000);
-        }
-        starlightCatalog = incoming;
-    } else if (preference && preference.episodes === null) starlightCatalog = null;
+    if (preference && preference.episodes && typeof preference.episodes.scope === 'string' && Array.isArray(preference.episodes.episodes))
+        starlightCatalog = preference.episodes;
+    else if (preference && preference.episodes === null) starlightCatalog = null;
     var v = mediaVideo();
     var value = preference && preference.volume;
     if (!v || !Number.isFinite(value) || value < 0 || value > 1) return;
@@ -139,19 +134,23 @@ function starlightSourceTitle() {
     var parsed = new DOMParser().parseFromString(p.source.title.slice(0, 4096), 'text/html');
     return (parsed.body.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 512);
 }
-function starlightEpisodeNumber(name) {
-    var match = typeof name === 'string' && /^(?:Серія|Серия|Episode)\s+(\d+)$/i.exec(name.trim());
-    return match ? Number(match[1]) : null;
-}
 function starlightPredecessor() {
     var p = starlightPlayer();
-    if (!p || !starlightCatalog) return null;
-    var number = starlightEpisodeNumber(p.source.name);
-    var title = starlightSourceTitle();
-    if (!number || !title.startsWith(starlightCatalog.project + ' | ' + starlightCatalog.season + ' ')) return null;
-    if (!starlightCatalog.episodes.some(function(item) { return item.hash === p.source.id; }))
-        starlightCatalog.episodes.push({hash:p.source.id,number:number});
-    return starlightCatalog.episodes.find(function(item) { return item.number === number - 1; }) || null;
+    if (!p) return null;
+    // Teleportal's season catalog is newest-first. Never parse display labels.
+    if (starlightCatalog) {
+        var episodes = starlightCatalog.episodes;
+        var index = episodes.findIndex(function(item) { return item.hash === p.source.id; });
+        if (index >= 0) {
+            var previous = episodes[index + 1];
+            return previous && previous.hash && previous.hash !== p.source.id ? previous : null;
+        }
+    }
+    // Next appends its resolved source to the player's chronological playlist.
+    // This also covers newly available episodes absent from the host catalog.
+    var loaded = p.group.playlist, current = loaded.indexOf(p.source);
+    var predecessor = current > 0 ? loaded[current - 1] : null;
+    return predecessor && predecessor.id && predecessor.id !== p.source.id ? {hash:predecessor.id} : null;
 }
 function requestStarlightPrevious() {
     var p = starlightPlayer(), previous = starlightPredecessor();
@@ -179,20 +178,20 @@ function requestStarlightPrevious() {
 function prepareStarlightCatalog() {
     // Teleportal host metadata adapter, separate from the Starlight player API.
     if (window !== window.top || location.hostname !== 'teleportal.ua') return;
-    var path = location.pathname;
+    var path = location.pathname.replace(/\/[^/]+\/?$/, '');
     if (starlightCatalogPath !== path) { starlightCatalogPath = path; starlightCatalogRequest = null; starlightCatalog = null; }
     if (starlightCatalogRequest) return;
-    if (!/^\/(ua|ru)\/(serials|show)\/[^/]+\/[^/]+\/[^/]+\/[^/]+\/?$/.test(path)) return;
+    if (!/^\/(ua|ru)\/(serials|show)\/[^/]+\/[^/]+\/[^/]+$/.test(path)) return;
     starlightCatalogRequest = fetch('https://tp-back.starlight.digital' + path).then(function(response) {
         if (!response.ok) throw new Error('metadata');
         return response.json();
     }).then(function(data) {
-        if (location.pathname !== path || !data.seasonGallery || !Array.isArray(data.seasonGallery.items) ||
-            typeof data.projectTitle !== 'string' || typeof data.seasonSlug !== 'string' || typeof data.hash !== 'string') return;
-        var episodes = data.seasonGallery.items.concat([{hash:data.hash,seriesTitle:data.seriesTitle}]).map(function(item) {
-            return {hash:item.hash,number:Number(item.seriesTitle)};
-        }).filter(function(item) { return typeof item.hash === 'string' && /^[a-f0-9]{64}$/.test(item.hash) && Number.isInteger(item.number) && item.number > 0; });
-        starlightCatalog = {project:data.projectTitle.slice(0,512),season:data.seasonSlug.slice(0,128),episodes:episodes.slice(0,2000)};
+        if (location.pathname.replace(/\/[^/]+\/?$/, '') !== path || !data.seasonGallery || !Array.isArray(data.seasonGallery.items)) return;
+        // Keep slots in order: an invalid neighbor must not skip another episode.
+        var episodes = data.seasonGallery.items.slice(0, 2000).map(function(item) {
+            return {hash:item && typeof item.hash === 'string' && /^[a-f0-9]{64}$/.test(item.hash) ? item.hash : null};
+        });
+        starlightCatalog = {scope:path,episodes:episodes};
     }).catch(function() {});
 }
 function mediaState() {
@@ -211,7 +210,7 @@ function mediaState() {
         canPrevious: !!mediaHandlers.previoustrack || !!starlightPredecessor() || !!playerTrackControl(true) || (current > 5 && (seekable || !!mediaHandlers.seekto)),
         canNext: !!mediaHandlers.nexttrack || !!playerTrackControl(false),
         routesNext: !!mediaHandlers.nexttrack || !!playerTrackControl(false),
-        routesPrevious: !!mediaHandlers.previoustrack || !!starlightPredecessor() || !!playerTrackControl(true),
+        routesPrevious: !!mediaHandlers.previoustrack || !!(starlightPlayer() && starlightCatalog) || !!playerTrackControl(true),
         adapterTitle: starlightSourceTitle(),
         canRestart: seekable || !!mediaHandlers.seekto,
         canEnd: duration > 0 && (seekable || !!mediaHandlers.seekto)};
@@ -294,6 +293,10 @@ function performMediaCommand(command, value, request) {
     if (frame && frame.isConnected && frame.contentWindow) {
         frame.contentWindow.postMessage({browserTVFullscreenCommand: secret, action: 'media', command: command, value: value, request: request}, '*');
         return true;
+    }
+    if (command === 'previous' && starlightPlayer() && starlightCatalog) {
+        requestStarlightPrevious();
+        return true; // No predecessor means stop, never wrap through the site's control.
     }
     if (command === 'previous' && requestStarlightPrevious()) return true;
     if (command === 'next' || command === 'previous') {
