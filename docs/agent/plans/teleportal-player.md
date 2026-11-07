@@ -26,3 +26,7 @@ All three source stages are implemented. Playback interaction acceptance is pend
 ## TV feedback and next checkpoint
 
 User installed 2.21.5 and confirmed Next, title and double click. Previous and held seeking failed. Follow-up 2.21.6 adds the Previous control fallback and replaces seek gestures with Select press lifecycle handling. Pending: requested build and real remote checks for short press, hold beyond 0.6 s, acceleration, release/cancel, context-menu priority, and restart then Previous within five seconds. Natural EOF and double advancement remain unverified.
+
+## 2.21.7 checkpoint
+
+User confirms 2.21.6 Center seek press/hold works, Previous still fails, and physical arrows fail with possible duplicate press/release actions. Source follow-up adds recognized Starlight fetchPrevious source resolution and routes only native playback-owned presses before UIKit. Shared press driver now serves buttons and arrows. Preserve successful Next/Media Session and other-player routes. Pending build and real TV verification; no release is requested for this stage. Check Previous on an initially single-item playlist, subsequent Next, no predecessor, stale fetch on source/fullscreen change, one short action, held arrows and visible-panel focus.

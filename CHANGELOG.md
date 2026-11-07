@@ -2,6 +2,12 @@
 
 Published packages are available for [2.21.6](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.6), [2.21.5](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.5), [2.21.4](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.4), [2.21.3](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.3), [2.21.2](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.2), [2.21.1](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.1) and [2.20.4](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.20.4); other entries reconstruct development history and do not represent separately published releases or tags.
 
+## 2.21.7 - 2026-11-07
+
+### Fixed
+
+- Resolve missing previous episodes through the recognized player's source API and deliver playback-owned remote presses once, including accelerating Left/Right holds while controls are hidden ([Playback controls](docs/USER_GUIDE.md)).
+
 ## 2.21.6 - 2026-11-07
 
 ### Changed

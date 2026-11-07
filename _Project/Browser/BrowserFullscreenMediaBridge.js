@@ -115,6 +115,40 @@ function playerTrackControl(previous) {
     return button && button.isConnected && !button.hidden && button.getAttribute('aria-disabled') !== 'true' &&
         getComputedStyle(button).display !== 'none' ? button : null;
 }
+var previousSourceRequest = null;
+function previousSourceFetcher() {
+    var p = window.player;
+    if (!window.adt || !adt.player || !p || typeof p.previous !== 'function' || !p.source || !p.source.id || !p.group || !Array.isArray(p.group.playlist)) return null;
+    if (p.config && p.config.ui && typeof p.config.ui.fetch_previous === 'function')
+        return function(source) { return p.config.ui.fetch_previous(source); };
+    if (window.starlight && typeof starlight.fetchPrevious === 'function' && typeof window.PAGE_REFERER === 'string')
+        return function(source) { return starlight.fetchPrevious(source, window.PAGE_REFERER, window.sld_locale || 'ua'); };
+    return null;
+}
+function requestPreviousSource() {
+    var fetchPrevious = previousSourceFetcher();
+    if (!fetchPrevious) return false;
+    if (previousSourceRequest) return true;
+    var p = window.player, source = p.source, group = p.group;
+    // Use the loaded predecessor when one exists. The site control otherwise
+    // calls previous() on a one-item playlist and cannot discover the episode.
+    var index = group.playlist.indexOf(source);
+    if (index < 0) return false;
+    if (index > 0) { p.previous(); return true; }
+    var request = {}, originalFullscreen = fullscreenTarget;
+    previousSourceRequest = request;
+    Promise.resolve().then(function() { return fetchPrevious(source); }).then(function(previous) {
+        if (previousSourceRequest !== request || window.player !== p || p.source !== source || p.group !== group ||
+            (originalFullscreen && fullscreenTarget !== originalFullscreen) || (!mediaActive && window === window.top)) return;
+        if (!previous || !previous.id || previous.id === source.id) return;
+        var existing = group.playlist.find(function(item) { return item.id === previous.id; });
+        if (!existing) { group.playlist.splice(Math.max(0, index), 0, previous); existing = previous; }
+        p.source = existing;
+    }).catch(function() {}).then(function() {
+        if (previousSourceRequest === request) previousSourceRequest = null;
+    });
+    return true;
+}
 function mediaState() {
     var v = mediaVideo();
     var current = v && Number.isFinite(v.currentTime) ? v.currentTime : 0;
@@ -128,10 +162,10 @@ function mediaState() {
         canSeekForward: seekable || !!mediaHandlers.seekforward,
         seekAtStart: seekable ? current <= v.seekable.start(0) : !!v && current <= 0,
         seekAtEnd: seekable ? current >= v.seekable.end(v.seekable.length - 1) : duration > 0 && current >= duration,
-        canPrevious: !!mediaHandlers.previoustrack || !!playerTrackControl(true) || (current > 5 && (seekable || !!mediaHandlers.seekto)),
+        canPrevious: !!mediaHandlers.previoustrack || !!previousSourceFetcher() || !!playerTrackControl(true) || (current > 5 && (seekable || !!mediaHandlers.seekto)),
         canNext: !!mediaHandlers.nexttrack || !!playerTrackControl(false),
         routesNext: !!mediaHandlers.nexttrack || !!playerTrackControl(false),
-        routesPrevious: !!mediaHandlers.previoustrack || !!playerTrackControl(true),
+        routesPrevious: !!mediaHandlers.previoustrack || !!previousSourceFetcher() || !!playerTrackControl(true),
         canRestart: seekable || !!mediaHandlers.seekto,
         canEnd: duration > 0 && (seekable || !!mediaHandlers.seekto)};
 }
@@ -194,6 +228,7 @@ function receiveMediaState(event, data) {
 }
 function performMediaCommand(command, value, request) {
     if (command === 'status') { requestMediaState(request, value); return true; }
+    if (command === 'next' || command === 'exit') previousSourceRequest = null;
     if (command === 'endNext') {
         performMediaCommand('end', 0, request);
         return performMediaCommand('next', 0, request);
@@ -211,6 +246,7 @@ function performMediaCommand(command, value, request) {
         frame.contentWindow.postMessage({browserTVFullscreenCommand: secret, action: 'media', command: command, value: value, request: request}, '*');
         return true;
     }
+    if (command === 'previous' && requestPreviousSource()) return true;
     if (command === 'next' || command === 'previous') {
         var trackControl = playerTrackControl(command === 'previous');
         if (trackControl) { trackControl.click(); return true; }
