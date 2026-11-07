@@ -76,7 +76,8 @@ static NSInteger const BrowserMediaIconTag = 891;
         [buttons addObject:button];
     }
     self.buttons = buttons;
-    UIStackView *row = [[UIStackView alloc] initWithArrangedSubviews:@[buttons[0], buttons[2], buttons[3], buttons[1], buttons[4], buttons[8], buttons[5], buttons[6], buttons[7]]];
+    buttons[1].hidden = YES; buttons[8].hidden = YES;
+    UIStackView *row = [[UIStackView alloc] initWithArrangedSubviews:@[buttons[0], buttons[2], buttons[3], buttons[4], buttons[5], buttons[6], buttons[7]]];
     row.translatesAutoresizingMaskIntoConstraints = NO; row.spacing = 10;
     row.alignment = UIStackViewAlignmentCenter; [panel addSubview:row];
     UIStackView *volumeRow = [[UIStackView alloc] initWithArrangedSubviews:@[buttons[10], buttons[9], buttons[11]]];
@@ -145,6 +146,10 @@ static NSInteger const BrowserMediaIconTag = 891;
         button.enabled = button.enabled && duration > 0 && isfinite(duration);
         button.alpha = button.enabled ? 1 : 0.35;
     }
+    self.buttons[0].enabled = current <= 5 ? [state[@"active"] boolValue] : [state[@"canRestart"] boolValue];
+    self.buttons[0].accessibilityLabel = current <= 5 ? @"Previous media" : @"Go to beginning";
+    self.buttons[0].alpha = self.buttons[0].enabled ? 1 : 0.35;
+    self.buttons[7].accessibilityLabel = @"Go to end and next media";
     BOOL paused = [state[@"paused"] boolValue];
     ((UIImageView *)[self.buttons[4] viewWithTag:BrowserMediaIconTag]).image = [self image:@"playpause.fill"];
     self.buttons[4].accessibilityLabel = paused ? @"Play" : @"Pause";
@@ -196,10 +201,10 @@ static NSInteger const BrowserMediaIconTag = 891;
 }
 - (void)buttonPressed:(UIButton *)button {
     [self showControls];
-    if (button.tag == 0) self.sendCommand(@"previous", 0);
+    if (button.tag == 0) { [self stopSeeking]; self.sendCommand([self.mediaState[@"currentTime"] doubleValue] <= 5 ? @"previous" : @"restart", 0); }
     else if (button.tag == 1) { [self stopSeeking]; self.sendCommand(@"restart", 0); }
     else if (button.tag == 4) [self togglePlayback];
-    else if (button.tag == 7) self.sendCommand(@"next", 0);
+    else if (button.tag == 7) { [self stopSeeking]; self.sendCommand(@"endNext", 0); }
     else if (button.tag == 8) { [self stopSeeking]; self.sendCommand(@"end", 0); }
     else if (button.tag == 9) self.sendCommand(@"mute", 0);
     else if (button.tag == 10 || button.tag == 11) self.sendCommand(@"volume", button.tag == 10 ? -0.1 : 0.1);

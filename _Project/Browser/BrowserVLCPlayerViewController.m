@@ -29,6 +29,7 @@
 @property (nonatomic) UIView *controlsView;
 @property (nonatomic) UIButton *playButton;
 @property (nonatomic) UIButton *endButton;
+@property (nonatomic) UIButton *previousButton;
 @property (nonatomic) UIButton *muteButton;
 @property (nonatomic) UIButton *audioTrackButton;
 @property (nonatomic) UIButton *subtitleTrackButton;
@@ -155,7 +156,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     UIButton *backPercent = [self controlButtonWithSymbol:@"backward.fill" label:@"Back 10 percent" action:@selector(seekBackPercentPressed)];
     UIButton *back = [self controlButtonWithSymbol:@"arrowtriangle.left.fill" label:@"Back 10 seconds" action:@selector(seekBackPressed)];
     UIButton *end = [self controlButtonWithSymbol:@"browser.end.fill" label:@"Go to end" action:@selector(endPressed)];
-    self.endButton = end;
+    end.hidden = YES; restart.hidden = YES;
     UIButton *play = [self controlButtonWithSymbol:@"playpause.fill" label:@"Pause" action:@selector(playPausePressed)];
     UIButton *forward = [self controlButtonWithSymbol:@"arrowtriangle.right.fill" label:@"Forward 10 seconds" action:@selector(seekForwardPressed)];
     UIButton *forwardPercent = [self controlButtonWithSymbol:@"forward.fill" label:@"Forward 10 percent" action:@selector(seekForwardPercentPressed)];
@@ -164,10 +165,8 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     UIButton *volumeDown = [self controlButtonWithSymbol:@"speaker.minus.fill" label:@"Volume down" action:@selector(volumeDownPressed)];
     UIButton *volumeUp = [self controlButtonWithSymbol:@"speaker.plus.fill" label:@"Volume up" action:@selector(volumeUpPressed)];
     UIButton *next = [self controlButtonWithSymbol:@"forward.end.fill" label:@"Next file" action:@selector(nextFilePressed)];
-    if (self.webVideoURL) {
-        previous.enabled = NO; next.enabled = NO;
-        previous.alpha = 0.35; next.alpha = 0.35;
-    }
+    self.endButton = next;
+    self.previousButton = previous;
     self.percentSeekButtons = @[backPercent, forwardPercent];
     backPercent.tag = -2;
     back.tag = -1;
@@ -189,7 +188,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
         [button.heightAnchor constraintEqualToConstant:68].active = YES;
     }
     UIStackView *buttons = [[UIStackView alloc] initWithArrangedSubviews:
-        @[previous, backPercent, back, restart, play, end, forward, forwardPercent, next]];
+        @[previous, backPercent, back, play, forward, forwardPercent, next]];
     buttons.translatesAutoresizingMaskIntoConstraints = NO;
     buttons.axis = UILayoutConstraintAxisHorizontal;
     buttons.alignment = UIStackViewAlignmentCenter;
@@ -668,7 +667,11 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
         button.enabled = duration > 0;
         button.alpha = button.enabled ? 1 : 0.35;
     }
-    self.endButton.enabled = duration > 0;
+    self.previousButton.accessibilityLabel = elapsed <= 5000 ? @"Previous file" : @"Go to beginning";
+    self.previousButton.enabled = !self.webVideoURL || elapsed > 5000;
+    self.previousButton.alpha = self.previousButton.enabled ? 1 : 0.35;
+    self.endButton.accessibilityLabel = @"Go to end and next file";
+    self.endButton.enabled = duration > 0 || !self.webVideoURL;
     self.endButton.alpha = self.endButton.enabled ? 1 : 0.35;
     NSTimeInterval now = NSDate.date.timeIntervalSince1970;
     BOOL advanced = elapsed > self.lastPlaybackTime;
@@ -762,7 +765,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     int64_t duration = self.vlcPlayer.media.length.value.longLongValue;
     if (duration <= 0) return;
     [self stopHeldSeek];
-    [self seekToMilliseconds:MAX(0, duration - 1000)];
+    [self seekToMilliseconds:MAX(0, duration - 2000)];
     [self showControls]; [self refreshProgress];
 }
 
@@ -781,9 +784,14 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
 - (void)volumeDownPressed { [self changeVolumeBy:-10]; }
 - (void)volumeUpPressed { [self changeVolumeBy:10]; }
 
-- (void)previousFilePressed { [self switchToAdjacentFileInDirection:-1]; }
+- (void)previousFilePressed {
+    [self stopHeldSeek];
+    int64_t position = self.pendingResumeMs > 0 ? self.pendingResumeMs : self.vlcPlayer.time.value.longLongValue;
+    if (position <= 5000) [self switchToAdjacentFileInDirection:-1];
+    else [self restartPressed];
+}
 
-- (void)nextFilePressed { [self switchToAdjacentFileInDirection:1]; }
+- (void)nextFilePressed { [self endPressed]; [self switchToAdjacentFileInDirection:1]; }
 
 - (void)switchToAdjacentFileInDirection:(NSInteger)direction {
     [self stopHeldSeek];
@@ -796,7 +804,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
         if (direction < 0 && file.index < self.fileIndex && (!candidate || file.index > candidate.index)) candidate = file;
     }
     if (!candidate) {
-        if (direction < 0) self.vlcPlayer.time = [VLCTime timeWithNumber:@0];
+
         [self showControls];
         return;
     }
