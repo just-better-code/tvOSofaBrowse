@@ -1008,3 +1008,8 @@ Set Debug/Release to unreleased 2.21.6. Source/diff inspection only; no build, t
 ### 2.21.6 — Directional short-seek shortcuts
 
 At the user's request, map completed Left/Right presses to the short ±10-second seek while native controls are hidden, in both iframe controls and VLC. Capture the direction at press begin, cancel on press cancellation, and keep controls hidden for repeated shortcut use. Visible controls retain directional focus navigation. Reuse the existing web seek dispatch and VLC seek/recovery path; arrow holding is not the Center-hold acceleration action. Consolidate into unreleased 2.21.6. Source inspection only; no tests, build, device work, release or remote push performed.
+
+
+### 2.21.6 publication — 2026-11-07
+
+At the user's explicit branch-push and release request, push feature/teleportal-player and publish v2.21.6 on immutable source commit 6b7c997. GitHub run 42381878649 passed version validation, Simulator Debug (4m20s), Apple TV Release (4m26s), package verification and asset upload. Confirm Latest is v2.21.6 with the unsigned IPA, notices and SHA256SUMS attached. This supersedes the preceding unreleased status. No application tests or interaction checks were run. Keep the user's manual TV installation preference; no local install/launch or atvloadly changes were made. Previous, held seeking and arrow shortcuts still require observed TV confirmation. Master remains unchanged.
