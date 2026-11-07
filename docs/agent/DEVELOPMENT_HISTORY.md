@@ -1026,3 +1026,8 @@ Unreleased 2.21.7, source inspection only. No build, tests, device work, remote 
 ### Generalize previous-source capability detection
 
 The user explicitly requests capability detection beyond Starlight. Remove the vendor gate from the configured ui.fetch_previous callback route: any player exposing the compatible current source, group playlist, previous action and configured callback can use it. Keep the named Starlight extension as an optional resolver only when the configured callback is absent. Do not guess signatures for arbitrary similarly named methods. Retain existing Media Session priority and no domain restrictions. No build, tests, device verification or remote publication performed.
+
+
+## 2026-11-07 — Build Apple TV Release only in GitHub Actions
+
+At the user's request remove the Simulator Debug matrix entry and simulator archive packaging from the manual/release workflow. Keep a single Apple TV Release job, the established Intel/Xcode toolchain, unsigned IPA verification, artifact names, release attachment, caches and diagnostics. Update public deployment instructions and record the durable CI preference in AGENTS.md. Local Simulator scripts remain available by explicit request. No app-version increment for this CI/documentation change. Source/diff inspection only; no build or tests run. Already published tags retain their own immutable workflow; this edit applies to future runs using the updated source.

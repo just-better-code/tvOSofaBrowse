@@ -111,7 +111,7 @@ To confirm the outcome, open tvOSofaBrowse on the TV, check its version, then ch
 
 ## Maintainers: build a branch without publishing a release
 
-The build workflow supports `workflow_dispatch`. In GitHub Actions, select **Build tvOSofaBrowse**, click **Run workflow**, and choose the branch or tag to build. Both Simulator Debug and Apple TV Release are built without signing; download the packages from the run artifacts. This does not create a release or upload release assets.
+The build workflow supports `workflow_dispatch`. In GitHub Actions, select **Build tvOSofaBrowse**, click **Run workflow**, and choose the branch or tag to build. Apple TV Release is built without signing; download the package from the run artifacts. This does not create a release or upload release assets.
 
 From Linux with authenticated GitHub CLI:
 
@@ -149,7 +149,7 @@ Release publication uses **`release: published`**; manual branch builds use **`w
    gh release view vMAJOR.MINOR.PATCH
    ```
 
-The workflow validates the tag, builds Simulator Debug and Apple TV Release without signing, checks the IPA, and attaches the IPA, notices archive and `SHA256SUMS` only after both builds pass. Simulator packages remain available as Actions artifacts. App artifacts last 14 days and build diagnostics last 7 days; release assets remain until removed.
+The workflow validates the tag, builds Apple TV Release without signing, checks the IPA, and attaches the IPA, notices archive and `SHA256SUMS` only after the device build and package checks pass. App artifacts last 14 days and build diagnostics last 7 days; release assets remain until removed.
 
 An unchanged failed run can be retried with `gh run rerun RUN_ID --failed`; no new release is needed. A source fix belongs in a new commit and a new version/tag, rather than moving an existing published tag. There is no workflow that creates releases automatically.
 
