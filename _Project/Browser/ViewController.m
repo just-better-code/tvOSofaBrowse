@@ -82,6 +82,7 @@ static UIColor *kTextColor(void) {
 
 @property (nonatomic) BrowserFullscreenMediaControlsController *fullscreenMediaControls;
 @property (nonatomic) NSInteger mediaArrowSeekDirection;
+@property (nonatomic) BrowserSeekButton *arrowPressDriver;
 @property (nonatomic, weak) BrowserWebView *fullscreenMediaWebView;
 @property (nonatomic, copy) NSString *fullscreenMediaSession;
 @property (nonatomic) NSUInteger fullscreenMediaGeneration;
@@ -207,6 +208,7 @@ static UIColor *kTextColor(void) {
 #pragma mark - Notifications
 
 - (void)handleApplicationWillResignActive:(NSNotification *)notification {
+    [self.arrowPressDriver handlePlaybackPressPhase:UIPressPhaseCancelled];
     [self.webview setFullscreenMediaControlsSuspended:YES];
     [self removeFullscreenMediaControls];
     (void)notification;
@@ -828,6 +830,7 @@ static UIColor *kTextColor(void) {
 #pragma mark - Fullscreen iframe media controls
 
 - (void)removeFullscreenMediaControls {
+    [self.arrowPressDriver handlePlaybackPressPhase:UIPressPhaseCancelled];
     self.mediaArrowSeekDirection = 0;
     if (!self.fullscreenMediaControls) return;
     [self.fullscreenMediaControls stopSeeking];
@@ -1174,6 +1177,24 @@ static UIColor *kTextColor(void) {
 }
 
 #pragma mark - Presses / Touches
+
+- (void)arrowShortSeek { [self.fullscreenMediaControls seekWithDirection:self.mediaArrowSeekDirection]; }
+- (BOOL)browserHandlePlaybackArrow:(UIPress *)press {
+    if (press.phase == UIPressPhaseBegan) {
+        if (!([self fullscreenMediaInputActive] && !self.fullscreenMediaControls.controlsVisible && !self.presentedViewController)) return NO;
+        self.mediaArrowSeekDirection = press.type == UIPressTypeLeftArrow ? -1 : 1;
+        if (!self.arrowPressDriver) {
+            self.arrowPressDriver = [BrowserSeekButton new];
+            self.arrowPressDriver.acceptsUnfocusedPress = YES;
+            [self.arrowPressDriver addTarget:self action:@selector(arrowShortSeek) forControlEvents:UIControlEventPrimaryActionTriggered];
+            __weak typeof(self) weakSelf = self;
+            self.arrowPressDriver.holdBegan = ^{ [weakSelf.fullscreenMediaControls beginDirectionalSeek:weakSelf.mediaArrowSeekDirection]; };
+            self.arrowPressDriver.holdEnded = ^{ [weakSelf.fullscreenMediaControls stopSeeking]; };
+        }
+    }
+    [self.arrowPressDriver handlePlaybackPressPhase:press.phase];
+    return YES;
+}
 
 - (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
     if ([self fullscreenMediaInputActive]) {

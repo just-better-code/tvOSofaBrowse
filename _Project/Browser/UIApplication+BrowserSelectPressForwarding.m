@@ -1,10 +1,14 @@
 #import "BrowserPreferencesStore.h"
 #import <UIKit/UIKit.h>
+#import "BrowserFullscreenMediaControlsController.h"
 #import <objc/message.h>
 #import <objc/runtime.h>
 
 NSString * const BrowserGlobalSelectPressEndedNotification = @"BrowserGlobalSelectPressEndedNotification";
 NSString * const BrowserGlobalDirectionalPressBeganNotification = @"BrowserGlobalDirectionalPressBeganNotification";
+static __weak BrowserSeekButton *sPlaybackSelectOwner;
+static __weak UIViewController *sPlaybackArrowOwner;
+static UIPressType sPlaybackArrowType;
 static BOOL sBrowserSwallowTabOverviewMenuUntilEnd = NO;
 static BOOL sBrowserSwallowMainMenuPressUntilEnd = NO;
 
@@ -97,6 +101,32 @@ static UIViewController *BrowserFindPresentedViewControllerOfClass(UIApplication
 
     NSSet<UIPress *> *presses = ((id (*)(id, SEL))objc_msgSend)(event, allPressesSelector);
     for (UIPress *press in presses) {
+        if (press.type == UIPressTypeSelect) {
+            if (press.phase == UIPressPhaseBegan) {
+                UIView *focused = press.window.screen.focusedView;
+                if ([focused isKindOfClass:BrowserSeekButton.class]) sPlaybackSelectOwner = (BrowserSeekButton *)focused;
+            }
+            BrowserSeekButton *owner = sPlaybackSelectOwner;
+            if (owner) {
+                [owner handlePlaybackPressPhase:press.phase];
+                if (press.phase == UIPressPhaseEnded || press.phase == UIPressPhaseCancelled) sPlaybackSelectOwner = nil;
+                return;
+            }
+        }
+        if (press.type == UIPressTypeLeftArrow || press.type == UIPressTypeRightArrow) {
+            SEL route = NSSelectorFromString(@"browserHandlePlaybackArrow:");
+            if (press.phase == UIPressPhaseBegan && !sPlaybackArrowOwner) {
+                UIViewController *candidate = BrowserFindPresentedViewControllerOfClass(self, NSClassFromString(@"BrowserVLCPlayerViewController"));
+                if (!candidate) candidate = BrowserFindPresentedViewControllerOfClass(self, NSClassFromString(@"ViewController"));
+                if ([candidate respondsToSelector:route] && ((BOOL (*)(id, SEL, id))objc_msgSend)(candidate, route, press)) {
+                    sPlaybackArrowOwner = candidate; sPlaybackArrowType = press.type; return;
+                }
+            } else if (sPlaybackArrowOwner && press.type == sPlaybackArrowType) {
+                ((BOOL (*)(id, SEL, id))objc_msgSend)(sPlaybackArrowOwner, route, press);
+                if (press.phase == UIPressPhaseEnded || press.phase == UIPressPhaseCancelled) sPlaybackArrowOwner = nil;
+                return;
+            }
+        }
         if (press.phase == UIPressPhaseBegan &&
             (press.type == UIPressTypeUpArrow || press.type == UIPressTypeDownArrow ||
              press.type == UIPressTypeLeftArrow || press.type == UIPressTypeRightArrow)) {

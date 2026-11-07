@@ -9,6 +9,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)showControls;
 - (void)stopSeeking;
 - (void)seekWithDirection:(NSInteger)direction;
+- (void)beginDirectionalSeek:(NSInteger)direction;
 - (void)togglePlayback;
 - (void)closePlayer;
 @end
@@ -16,6 +17,8 @@ NS_ASSUME_NONNULL_END
 
 // Own Select press lifecycle so held seeking does not depend on gesture arbitration.
 @interface BrowserSeekButton : UIButton
+@property (nonatomic) BOOL acceptsUnfocusedPress;
+- (void)handlePlaybackPressPhase:(UIPressPhase)phase;
 @property (nonatomic, copy) void (^holdBegan)(void);
 @property (nonatomic, copy) void (^holdEnded)(void);
 @end

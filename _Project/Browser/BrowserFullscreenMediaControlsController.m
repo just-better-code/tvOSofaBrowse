@@ -15,24 +15,31 @@
     self.selectPending = NO; self.holding = NO; self.highlighted = NO;
     if (hadPress && self.holdEnded) self.holdEnded();
 }
+- (void)handlePlaybackPressPhase:(UIPressPhase)phase {
+    if (phase == UIPressPhaseBegan) {
+        if (!self.enabled || self.selectPending) return;
+        self.selectPending = YES; self.highlighted = YES;
+        __weak typeof(self) weakSelf = self;
+        self.holdThresholdTimer = [NSTimer timerWithTimeInterval:0.6 repeats:NO block:^(NSTimer *timer) {
+            BrowserSeekButton *button = weakSelf;
+            if (!button.selectPending || !button.enabled || (!button.acceptsUnfocusedPress && !button.focused) || UIApplication.sharedApplication.applicationState != UIApplicationStateActive) { [button cancelHeldPress]; return; }
+            button.holding = YES;
+            if (button.holdBegan) button.holdBegan();
+        }];
+        [[NSRunLoop mainRunLoop] addTimer:self.holdThresholdTimer forMode:NSRunLoopCommonModes];
+    } else if (phase == UIPressPhaseEnded) {
+        BOOL activate = self.selectPending && !self.holding && self.enabled && (self.focused || self.acceptsUnfocusedPress);
+        [self cancelHeldPress];
+        if (activate) [self sendActionsForControlEvents:UIControlEventPrimaryActionTriggered];
+    } else if (phase == UIPressPhaseCancelled) [self cancelHeldPress];
+}
 - (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
-    if (presses.anyObject.type != UIPressTypeSelect) { [super pressesBegan:presses withEvent:event]; return; }
-    if (!self.enabled || self.selectPending) return;
-    self.selectPending = YES; self.highlighted = YES;
-    __weak typeof(self) weakSelf = self;
-    self.holdThresholdTimer = [NSTimer timerWithTimeInterval:0.6 repeats:NO block:^(NSTimer *timer) {
-        BrowserSeekButton *button = weakSelf;
-        if (!button.selectPending || !button.enabled || !button.focused || UIApplication.sharedApplication.applicationState != UIApplicationStateActive) { [button cancelHeldPress]; return; }
-        button.holding = YES;
-        if (button.holdBegan) button.holdBegan();
-    }];
-    [[NSRunLoop mainRunLoop] addTimer:self.holdThresholdTimer forMode:NSRunLoopCommonModes];
+    if (presses.anyObject.type == UIPressTypeSelect) [self handlePlaybackPressPhase:UIPressPhaseBegan];
+    else [super pressesBegan:presses withEvent:event];
 }
 - (void)pressesEnded:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
-    if (presses.anyObject.type != UIPressTypeSelect) { [super pressesEnded:presses withEvent:event]; return; }
-    BOOL activate = self.selectPending && !self.holding && self.enabled && self.focused;
-    [self cancelHeldPress];
-    if (activate) [self sendActionsForControlEvents:UIControlEventPrimaryActionTriggered];
+    if (presses.anyObject.type == UIPressTypeSelect) [self handlePlaybackPressPhase:UIPressPhaseEnded];
+    else [super pressesEnded:presses withEvent:event];
 }
 - (void)pressesCancelled:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
     [self cancelHeldPress]; [super pressesCancelled:presses withEvent:event];
@@ -267,6 +274,7 @@ static NSInteger const BrowserMediaIconTag = 891;
     [self scheduleHide];
     [self refreshVisibility];
 }
+- (void)beginDirectionalSeek:(NSInteger)direction { [self beginHeldSeek:direction < 0 ? -1 : 1]; }
 - (void)seekWithDirection:(NSInteger)direction {
     NSString *capability = direction < 0 ? @"canSeekBack" : @"canSeekForward";
     if ([self.mediaState[capability] boolValue]) [self sendSeekKind:direction < 0 ? -1 : 1];

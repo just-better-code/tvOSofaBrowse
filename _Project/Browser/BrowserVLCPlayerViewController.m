@@ -50,6 +50,7 @@
 @property (nonatomic) NSTimer *seekHoldTimer;
 @property (nonatomic) NSInteger seekHoldKind;
 @property (nonatomic) NSInteger arrowSeekDirection;
+@property (nonatomic) BrowserSeekButton *arrowPressDriver;
 @property (nonatomic) NSArray<UIButton *> *percentSeekButtons;
 @property (nonatomic) int64_t seekHoldTargetMs;
 @property (nonatomic) NSTimeInterval seekHoldStartTime;
@@ -256,6 +257,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
 }
 
 - (void)applicationWillResignActive:(NSNotification *)notification {
+    [self.arrowPressDriver handlePlaybackPressPhase:UIPressPhaseCancelled];
     (void)notification;
     self.arrowSeekDirection = 0;
     [self stopHeldSeek];
@@ -419,6 +421,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
+    [self.arrowPressDriver handlePlaybackPressPhase:UIPressPhaseCancelled];
     [super viewWillDisappear:animated];
     self.arrowSeekDirection = 0;
     [self stopHeldSeek];
@@ -908,6 +911,24 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
             state == VLCMediaPlayerStateEnded) [self showControls];
         [self refreshProgress];
     });
+}
+
+- (void)arrowShortSeek { [self seekByMilliseconds:self.arrowSeekDirection * 10000 revealControls:NO]; }
+- (BOOL)browserHandlePlaybackArrow:(UIPress *)press {
+    if (press.phase == UIPressPhaseBegan) {
+        if (!(self.view.window && self.controlsView.hidden && !self.presentedViewController)) return NO;
+        self.arrowSeekDirection = press.type == UIPressTypeLeftArrow ? -1 : 1;
+        if (!self.arrowPressDriver) {
+            self.arrowPressDriver = [BrowserSeekButton new];
+            self.arrowPressDriver.acceptsUnfocusedPress = YES;
+            [self.arrowPressDriver addTarget:self action:@selector(arrowShortSeek) forControlEvents:UIControlEventPrimaryActionTriggered];
+            __weak typeof(self) weakSelf = self;
+            self.arrowPressDriver.holdBegan = ^{ [weakSelf beginHeldSeek:weakSelf.arrowSeekDirection]; };
+            self.arrowPressDriver.holdEnded = ^{ [weakSelf stopHeldSeek]; };
+        }
+    }
+    [self.arrowPressDriver handlePlaybackPressPhase:press.phase];
+    return YES;
 }
 
 - (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
