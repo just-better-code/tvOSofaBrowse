@@ -2,6 +2,12 @@
 
 Published packages are available for [2.21.6](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.6), [2.21.5](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.5), [2.21.4](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.4), [2.21.3](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.3), [2.21.2](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.2), [2.21.1](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.1) and [2.20.4](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.20.4); other entries reconstruct development history and do not represent separately published releases or tags.
 
+## 2.21.9 - 2026-11-07
+
+### Fixed
+
+- Read the active Starlight source from its video engine so the episode-title and Previous adapters can recognize the running player ([Playback controls](docs/USER_GUIDE.md), [Investigation](docs/agent/plans/teleportal-player.md)).
+
 ## 2.21.8 - 2026-11-07
 
 ### Fixed
