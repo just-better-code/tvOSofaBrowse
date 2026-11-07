@@ -195,10 +195,27 @@ function prepareStarlightCatalog() {
         if (location.pathname.replace(/\/[^/]+\/?$/, '') !== path || !data.seasonGallery || !Array.isArray(data.seasonGallery.items)) return;
         // Keep slots in order: an invalid neighbor must not skip another episode.
         var episodes = data.seasonGallery.items.slice(0, 2000).map(function(item) {
-            return {hash:item && typeof item.hash === 'string' && /^[a-f0-9]{64}$/.test(item.hash) ? item.hash : null};
+            var hash = item && typeof item.hash === 'string' && /^[a-f0-9]{64}$/.test(item.hash) ? item.hash : null;
+            var slug = item && item.videoSlug;
+            var pagePath = typeof slug === 'string' && slug.length <= 512 && /^[^/\\?#\s]+$/.test(slug) ? path + '/' + encodeURIComponent(slug) : null;
+            return {hash:hash,pagePath:pagePath};
         });
         starlightCatalog = {scope:path,episodes:episodes};
     }).catch(function() {});
+}
+function synchronizeStarlightPage(state) {
+    if (window !== window.top || location.hostname !== 'teleportal.ua' || !mediaActive || !starlightCatalog ||
+        starlightCatalog.scope !== location.pathname.replace(/\/[^/]+\/?$/, '') ||
+        !state || typeof state.starlightSourceID !== 'string' || !/^[a-f0-9]{64}$/.test(state.starlightSourceID)) return;
+    // Resolve only against host metadata, never against a child-supplied URL.
+    var entry = starlightCatalog.episodes.find(function(item) { return item.hash === state.starlightSourceID; });
+    if (!entry || !entry.pagePath || !entry.pagePath.startsWith(starlightCatalog.scope + '/')) return;
+    var target = new URL(entry.pagePath, location.origin);
+    if (target.origin !== location.origin || target.pathname === location.pathname) return;
+    try {
+        history.replaceState(history.state, '', target.pathname + location.search + location.hash);
+        if (typeof state.adapterTitle === 'string' && state.adapterTitle) document.title = state.adapterTitle.slice(0, 512);
+    } catch (error) {}
 }
 function mediaState() {
     var v = mediaVideo();
@@ -218,6 +235,7 @@ function mediaState() {
         routesNext: !!mediaHandlers.nexttrack || !!playerTrackControl(false),
         routesPrevious: !!mediaHandlers.previoustrack || !!(starlightPlayer() && starlightCatalog) || !!playerTrackControl(true),
         adapterTitle: starlightSourceTitle(),
+        starlightSourceID: starlightPlayer() ? starlightPlayer().source.id : '',
         canRestart: seekable || !!mediaHandlers.seekto,
         canEnd: duration > 0 && (seekable || !!mediaHandlers.seekto)};
 }
@@ -277,6 +295,7 @@ function receiveMediaState(event, data) {
         mediaAcceptedSerial = data.request;
         mediaFrameState = data.state; mediaFrameStateTime = Date.now();
         if (data.state.canVolume && Number.isFinite(data.state.volume)) mediaSavedVolume = data.state.volume;
+        synchronizeStarlightPage(data.state);
         publishNativeMedia(data.state);
     }
 }
