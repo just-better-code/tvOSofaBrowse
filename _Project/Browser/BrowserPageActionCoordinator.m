@@ -24,6 +24,7 @@ static NSString *BrowserEditablePromptTargetJavaScript(NSString *identifier) {
 @interface BrowserQueuedPageSelection : NSObject
 @property (nonatomic, weak) BrowserWebView *webView;
 @property (nonatomic) CGPoint point;
+@property (nonatomic) NSTimeInterval clickTimestamp;
 @property (nonatomic) NSUInteger documentGeneration;
 @property (nonatomic) NSUInteger javaScriptGeneration;
 @property (nonatomic, strong) NSURL *URL;
@@ -157,6 +158,7 @@ static NSString *BrowserEditablePromptTargetJavaScript(NSString *identifier) {
 - (BOOL)handlePageSelectionAtDOMPoint:(CGPoint)point webView:(BrowserWebView *)webView {
     BrowserQueuedPageSelection *press = [BrowserQueuedPageSelection new];
     press.point = point; press.webView = webView;
+    press.clickTimestamp = NSDate.date.timeIntervalSince1970 * 1000;
     press.documentGeneration = webView.documentGeneration;
     press.javaScriptGeneration = webView.javaScriptGeneration;
     press.URL = webView.request.URL;
@@ -223,32 +225,7 @@ static NSString *BrowserEditablePromptTargetJavaScript(NSString *identifier) {
     if (selection != self.selectionGeneration || error || ![self canPerformPageSelection:press]) { completion(); return; }
     [self.domInteractionService evaluateResolvedElementJavaScriptAtPoint:point
                                                                  webView:webView
-                                                                    body:@"if (typeof window.__browserTVFrameAtPoint === 'function' && window.__browserTVFrameAtPoint(x, y) && typeof window.__browserTVFrameClick === 'function') {"
-                                                                             "return window.__browserTVFrameClick(x, y) ? 'true' : 'false';"
-                                                                         "}"
-                                                                         "var target = editableElement || interactiveElement || resolvedElement;"
-                                                                         "if (window.__browserTVOpenControlledVideo && window.__browserTVOpenControlledVideo(target)) { return 'true'; }"
-                                                                         "if (!target) { return 'false'; }"
-                                                                         "try { if (target.focus) { target.focus(); } } catch (error) {}"
-                                                                         "function dispatchPointerLikeEvent(type, constructorName) {"
-                                                                             "try {"
-                                                                                 "var Constructor = window[constructorName];"
-                                                                                 "if (Constructor) {"
-                                                                                     "var event = new Constructor(type, { bubbles: true, cancelable: true, composed: true, view: window, clientX: x, clientY: y, screenX: x, screenY: y, button: 0, buttons: 1, pointerType: 'mouse' });"
-                                                                                     "return target.dispatchEvent(event);"
-                                                                                 "}"
-                                                                             "} catch (error) {}"
-                                                                             "var mouseEvent = document.createEvent('MouseEvents');"
-                                                                             "mouseEvent.initMouseEvent(type, true, true, window, 1, x, y, x, y, false, false, false, false, 0, null);"
-                                                                             "return target.dispatchEvent(mouseEvent);"
-                                                                         "}"
-                                                                         "dispatchPointerLikeEvent('pointerdown', 'PointerEvent');"
-                                                                         "dispatchPointerLikeEvent('mousedown', 'MouseEvent');"
-                                                                         "dispatchPointerLikeEvent('pointerup', 'PointerEvent');"
-                                                                         "dispatchPointerLikeEvent('mouseup', 'MouseEvent');"
-                                                                         "if (typeof target.click === 'function') { target.click(); }"
-                                                                         "else { dispatchPointerLikeEvent('click', 'MouseEvent'); }"
-                                                                         "return 'true';" completion:^(NSString *clickResult, NSError *clickError) {
+                                                                    body:[NSString stringWithFormat:@"return window.__browserTVFrameClick && window.__browserTVFrameClick(x,y,%.3f,editableElement || interactiveElement || resolvedElement) ? 'true' : 'false';", press.clickTimestamp] completion:^(NSString *clickResult, NSError *clickError) {
     if (selection != self.selectionGeneration || clickError || ![self canPerformPageSelection:press]) { completion(); return; }
     NSString *type = fieldType.lowercaseString;
     if ([type isEqualToString:@"date"] ||
