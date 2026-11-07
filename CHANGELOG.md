@@ -4,6 +4,10 @@ Published packages are available for [2.21.6](https://github.com/just-better-cod
 
 ## 2.21.9 - 2026-11-07
 
+### Changed
+
+- Keep the tab address aligned with a catalogued Teleportal episode during Starlight playback so normal reload and tab restoration reopen that episode's page ([Playback controls](docs/USER_GUIDE.md)).
+
 ### Fixed
 
 - Read the active Starlight source from its video engine so the episode-title and Previous adapters can recognize the running player ([Playback controls](docs/USER_GUIDE.md), [Investigation](docs/agent/plans/teleportal-player.md)).
