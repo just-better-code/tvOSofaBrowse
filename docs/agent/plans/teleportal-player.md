@@ -30,3 +30,5 @@ User installed 2.21.5 and confirmed Next, title and double click. Previous and h
 ## 2.21.7 checkpoint
 
 User confirms 2.21.6 Center seek press/hold works, Previous still fails, and physical arrows fail with possible duplicate press/release actions. Source follow-up adds recognized Starlight fetchPrevious source resolution and routes only native playback-owned presses before UIKit. Shared press driver now serves buttons and arrows. Preserve successful Next/Media Session and other-player routes. Pending build and real TV verification; no release is requested for this stage. Check Previous on an initially single-item playlist, subsequent Next, no predecessor, stale fetch on source/fullscreen change, one short action, held arrows and visible-panel focus.
+
+The configured previous-source callback path is now vendor-independent under the shared source/group-playlist contract; Starlight's extension is only an optional resolver. Verify other players through their published capability adapters rather than guessed method names.

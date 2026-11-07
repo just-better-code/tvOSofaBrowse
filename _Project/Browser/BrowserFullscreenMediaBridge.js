@@ -118,9 +118,11 @@ function playerTrackControl(previous) {
 var previousSourceRequest = null;
 function previousSourceFetcher() {
     var p = window.player;
-    if (!window.adt || !adt.player || !p || typeof p.previous !== 'function' || !p.source || !p.source.id || !p.group || !Array.isArray(p.group.playlist)) return null;
+    // Shared source/playlist contract; no vendor or domain gate on configured callbacks.
+    if (!p || typeof p.previous !== 'function' || !p.source || !p.source.id || !p.group || !Array.isArray(p.group.playlist)) return null;
     if (p.config && p.config.ui && typeof p.config.ui.fetch_previous === 'function')
         return function(source) { return p.config.ui.fetch_previous(source); };
+    // Optional adapter when the player has no configured previous-source callback.
     if (window.starlight && typeof starlight.fetchPrevious === 'function' && typeof window.PAGE_REFERER === 'string')
         return function(source) { return starlight.fetchPrevious(source, window.PAGE_REFERER, window.sld_locale || 'ua'); };
     return null;
