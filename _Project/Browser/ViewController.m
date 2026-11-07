@@ -883,7 +883,7 @@ static UIColor *kTextColor(void) {
             NSString *session = owner.fullscreenMediaSession;
             [owner.fullscreenMediaWebView evaluateJavaScript:script completionHandler:^(NSString *result, NSError *error) {
                 if (error || ![owner fullscreenMediaInputActive] || ![session isEqual:owner.fullscreenMediaSession]) return;
-                if (![result isEqualToString:@"true"] && ([command isEqualToString:@"previous"] || [command isEqualToString:@"endNext"]))
+                if ([result isEqualToString:@"false"] && ([command isEqualToString:@"previous"] || [command isEqualToString:@"endNext"]))
                     [owner.fullscreenMediaWebView sendSystemMediaTrackCommand:[command isEqualToString:@"endNext"]];
             }];
         };

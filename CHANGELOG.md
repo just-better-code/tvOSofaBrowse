@@ -2,6 +2,20 @@
 
 Published packages are available for [2.21.3](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.3), [2.21.2](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.2), [2.21.1](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.1) and [2.20.4](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.20.4); other entries reconstruct development history and do not represent separately published releases or tags.
 
+## 2.21.5 - 2026-11-07
+
+### Changed
+
+- Combine endpoint playback controls into Previous/Beginning and End/Next, seeking two seconds before the end before requesting Next and restarting after the first five seconds ([Playback controls](docs/USER_GUIDE.md)).
+
+### Added
+
+- Show the containing page title above fullscreen website playback and use recognized player controls as a domain-independent track-command fallback ([Playback controls](docs/USER_GUIDE.md)).
+
+### Fixed
+
+- Forward double clicks with original press timing through page and nested-iframe playback controls ([Playback controls](docs/USER_GUIDE.md)).
+
 ## 2.21.4 - 2026-11-07
 
 ### Changed
