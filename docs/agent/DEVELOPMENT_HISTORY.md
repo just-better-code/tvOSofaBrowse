@@ -1031,3 +1031,12 @@ The user explicitly requests capability detection beyond Starlight. Remove the v
 ## 2026-11-07 — Build Apple TV Release only in GitHub Actions
 
 At the user's request remove the Simulator Debug matrix entry and simulator archive packaging from the manual/release workflow. Keep a single Apple TV Release job, the established Intel/Xcode toolchain, unsigned IPA verification, artifact names, release attachment, caches and diagnostics. Update public deployment instructions and record the durable CI preference in AGENTS.md. Local Simulator scripts remain available by explicit request. No app-version increment for this CI/documentation change. Source/diff inspection only; no build or tests run. Already published tags retain their own immutable workflow; this edit applies to future runs using the updated source.
+
+
+## 2026-11-07 — Investigate actual Starlight endpoints and active source titles (2.21.8)
+
+User reports Previous still fails and confirms Next works, but its header remains on the initial episode. Earlier changes incorrectly assumed that a present fetchPrevious API implied a working endpoint. Public HTTP investigation now confirms get/prev=404, get/next=200 for episode 93, and get/ser has no seasons. Teleportal's actual host catalog identifies episode 91 and Starlight player-api returns 200 with the matching episode/hash. See plans/teleportal-player.md for bounded evidence and pending observations.
+
+Replace the speculative generic source callback path with an explicit Starlight adapter and a separate Teleportal catalog provider. Carry the catalog through the existing protected frame chain, resolve the preceding same-project/season hash, fetch via Starlight fetchVideo, then use its source setter. Keep the confirmed working Next control and unrelated Media Session/player paths unchanged. Show current source.title as plain text through the native header, falling back to the main page title for other players. HTTP metadata research is not a tvOS playback check. No builds, automated tests, TV operations, Git push or release performed. Version is unreleased 2.21.8.
+
+The user's restart observation is consistent with an unchanged host page URL during internal iframe transitions. No URL/session persistence changes were made in this stage; canonical episode mapping and preservation of website lifecycle require separate work. No app-specific episode selection backup is added.
