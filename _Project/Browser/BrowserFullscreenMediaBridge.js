@@ -108,6 +108,13 @@ try {
         };
     }
 } catch (error) {}
+// Capability-based fallback: use the player's own control, including fetch_next.
+function playerNextControl() {
+    if (!window.adt || !adt.player || !window.player || typeof window.player.next !== 'function') return null;
+    var button = document.querySelector('.adt-kCdJnjy');
+    return button && button.isConnected && !button.hidden && button.getAttribute('aria-disabled') !== 'true' &&
+        getComputedStyle(button).display !== 'none' ? button : null;
+}
 function mediaState() {
     var v = mediaVideo();
     var current = v && Number.isFinite(v.currentTime) ? v.currentTime : 0;
@@ -122,7 +129,9 @@ function mediaState() {
         seekAtStart: seekable ? current <= v.seekable.start(0) : !!v && current <= 0,
         seekAtEnd: seekable ? current >= v.seekable.end(v.seekable.length - 1) : duration > 0 && current >= duration,
         canPrevious: !!mediaHandlers.previoustrack || (current > 5 && (seekable || !!mediaHandlers.seekto)),
-        canNext: !!mediaHandlers.nexttrack,
+        canNext: !!mediaHandlers.nexttrack || !!playerNextControl(),
+        routesNext: !!mediaHandlers.nexttrack || !!playerNextControl(),
+        routesPrevious: !!mediaHandlers.previoustrack,
         canRestart: seekable || !!mediaHandlers.seekto,
         canEnd: duration > 0 && (seekable || !!mediaHandlers.seekto)};
 }
@@ -185,15 +194,25 @@ function receiveMediaState(event, data) {
 }
 function performMediaCommand(command, value, request) {
     if (command === 'status') { requestMediaState(request, value); return true; }
+    if (command === 'endNext') {
+        performMediaCommand('end', 0, request);
+        return performMediaCommand('next', 0, request);
+    }
     // Hardware media actions may belong to the embedding page, not the video frame.
     var trackAction = command === 'previous' ? 'previoustrack' : command === 'next' ? 'nexttrack' : null;
     if (trackAction && mediaHandlers[trackAction]) {
         try { mediaHandlers[trackAction]({action: trackAction}); return true; } catch (error) {}
     }
     var frame = mediaFrame();
+    if (trackAction && window === window.top && frame && (!mediaFrameState ||
+        !mediaFrameState[command === 'next' ? 'routesNext' : 'routesPrevious'])) return false;
     if (frame && frame.isConnected && frame.contentWindow) {
         frame.contentWindow.postMessage({browserTVFullscreenCommand: secret, action: 'media', command: command, value: value, request: request}, '*');
         return true;
+    }
+    if (command === 'next') {
+        var nextControl = playerNextControl();
+        if (nextControl) { nextControl.click(); return true; }
     }
     var v = mediaVideo();
     var state = mediaState();
@@ -225,7 +244,7 @@ function performMediaCommand(command, value, request) {
         action = 'previoustrack';
     } else if (command === 'next') action = 'nexttrack';
     else if (command === 'restart') { action = 'seekto'; details.seekTime = 0; }
-    else if (command === 'end' && state.canEnd) { action = 'seekto'; details.seekTime = Math.max(0, state.duration - 1); }
+    else if (command === 'end' && state.canEnd) { action = 'seekto'; details.seekTime = Math.max(0, state.duration - 2); }
     if (!action) return false;
     details.action = action;
     try {

@@ -875,15 +875,17 @@ static UIColor *kTextColor(void) {
             typeof(self) owner = weakSelf;
             if (![owner fullscreenMediaInputActive]) return;
             owner.mediaSelectIgnoreUntil = NSDate.timeIntervalSinceReferenceDate + 0.4;
-            if ([command isEqualToString:@"previous"] || [command isEqualToString:@"next"]) {
-                if ([owner.fullscreenMediaWebView sendSystemMediaTrackCommand:[command isEqualToString:@"next"]]) return;
-            }
             NSArray *arguments = @[command, @(value), owner.fullscreenMediaSession ?: @""];
             NSData *data = [NSJSONSerialization dataWithJSONObject:arguments options:0 error:nil];
             NSString *json = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
             if (!json) return;
             NSString *script = [NSString stringWithFormat:@"window.__browserTVSendFullscreenMediaCommand ? window.__browserTVSendFullscreenMediaCommand.apply(null,%@) : false", json];
-            [owner.fullscreenMediaWebView evaluateJavaScript:script completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
+            NSString *session = owner.fullscreenMediaSession;
+            [owner.fullscreenMediaWebView evaluateJavaScript:script completionHandler:^(NSString *result, NSError *error) {
+                if (error || ![owner fullscreenMediaInputActive] || ![session isEqual:owner.fullscreenMediaSession]) return;
+                if (![result isEqualToString:@"true"] && ([command isEqualToString:@"previous"] || [command isEqualToString:@"endNext"]))
+                    [owner.fullscreenMediaWebView sendSystemMediaTrackCommand:[command isEqualToString:@"endNext"]];
+            }];
         };
         [self addChildViewController:controls];
         controls.view.frame = self.view.bounds;
