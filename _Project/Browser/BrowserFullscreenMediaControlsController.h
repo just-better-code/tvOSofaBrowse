@@ -12,3 +12,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)closePlayer;
 @end
 NS_ASSUME_NONNULL_END
+
+// Own Select press lifecycle so held seeking does not depend on gesture arbitration.
+@interface BrowserSeekButton : UIButton
+@property (nonatomic, copy) void (^holdBegan)(void);
+@property (nonatomic, copy) void (^holdEnded)(void);
+@end

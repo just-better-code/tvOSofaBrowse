@@ -22,3 +22,7 @@ No build or automated tests are requested. Physical TV work, Git push and releas
 ## Implementation checkpoint
 
 All three source stages are implemented. Playback interaction acceptance is pending. No runtime evidence establishes that automatic episode switching was broken by the browser or fixed by this stage. Next work, when requested: build on a macOS runner, inspect the real nested player using Safari on an authorized Simulator/TV, observe one natural completion and one combined End/Next, and verify no skipped episode. Do not add a second track command after ambiguous delivery.
+
+## TV feedback and next checkpoint
+
+User installed 2.21.5 and confirmed Next, title and double click. Previous and held seeking failed. Follow-up 2.21.6 adds the Previous control fallback and replaces seek gestures with Select press lifecycle handling. Pending: requested build and real remote checks for short press, hold beyond 0.6 s, acceleration, release/cancel, context-menu priority, and restart then Previous within five seconds. Natural EOF and double advancement remain unverified.

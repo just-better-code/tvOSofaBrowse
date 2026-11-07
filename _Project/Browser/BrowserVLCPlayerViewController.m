@@ -6,10 +6,11 @@
 #import "BrowserTVAppearance.h"
 #import "BrowserPlaybackSymbols.h"
 #import "BrowserPlaybackSeek.h"
+#import "BrowserFullscreenMediaControlsController.h"
 
 #import <TVVLCKit/TVVLCKit.h>
 
-@interface BrowserVLCPlayerViewController () <VLCMediaPlayerDelegate>
+@interface BrowserVLCPlayerViewController () <VLCMediaPlayerDelegate, UIGestureRecognizerDelegate>
 @property (nonatomic, copy) NSString *identifier;
 @property (nonatomic) NSInteger fileIndex;
 @property (nonatomic, copy) NSURL *webVideoURL;
@@ -229,18 +230,16 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
 
     UILongPressGestureRecognizer *contextPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self
                                                                                                action:@selector(handleContextPress:)];
+    contextPress.delegate = self;
     contextPress.minimumPressDuration = 0.6;
     contextPress.allowedPressTypes = @[@(UIPressTypeSelect)];
     contextPress.cancelsTouchesInView = YES;
     [self.view addGestureRecognizer:contextPress];
-    for (UIButton *button in @[backPercent, back, forward, forwardPercent]) {
-        UILongPressGestureRecognizer *seekHold = [[UILongPressGestureRecognizer alloc]
-            initWithTarget:self action:@selector(handleSeekHold:)];
-        seekHold.minimumPressDuration = 0.6;
-        seekHold.allowedPressTypes = @[@(UIPressTypeSelect)];
-        seekHold.cancelsTouchesInView = YES;
-        [button addGestureRecognizer:seekHold];
-        [contextPress requireGestureRecognizerToFail:seekHold];
+    for (BrowserSeekButton *button in @[backPercent, back, forward, forwardPercent]) {
+        __weak typeof(self) weakSelf = self;
+        NSInteger kind = button.tag;
+        button.holdBegan = ^{ [weakSelf beginHeldSeek:kind]; };
+        button.holdEnded = ^{ [weakSelf stopHeldSeek]; };
     }
 
     [[NSNotificationCenter defaultCenter] addObserver:self
@@ -283,19 +282,13 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     [self presentViewController:actions animated:YES completion:nil];
 }
 
-- (void)handleSeekHold:(UILongPressGestureRecognizer *)recognizer {
-    if (recognizer.state == UIGestureRecognizerStateBegan) {
-        [self stopHeldSeek];
-        if (!((UIButton *)recognizer.view).enabled) return;
-        self.seekHoldKind = recognizer.view.tag;
-        self.seekHoldTargetMs = self.pendingResumeMs > 0 ? self.pendingResumeMs : self.vlcPlayer.time.value.longLongValue;
-        self.seekHoldStartTime = CACurrentMediaTime();
-        [self repeatHeldSeek];
-    } else if (recognizer.state == UIGestureRecognizerStateEnded ||
-               recognizer.state == UIGestureRecognizerStateCancelled ||
-               recognizer.state == UIGestureRecognizerStateFailed) {
-        [self stopHeldSeek];
-    }
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldReceivePress:(UIPress *)press {
+    return ![self.view.window.screen.focusedView isKindOfClass:BrowserSeekButton.class];
+}
+- (void)beginHeldSeek:(NSInteger)kind {
+    [self stopHeldSeek]; self.seekHoldKind = kind;
+    self.seekHoldTargetMs = self.pendingResumeMs > 0 ? self.pendingResumeMs : self.vlcPlayer.time.value.longLongValue;
+    self.seekHoldStartTime = CACurrentMediaTime(); [self repeatHeldSeek];
 }
 
 - (int64_t)seekDurationMilliseconds {
@@ -448,7 +441,8 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
 }
 
 - (UIButton *)controlButtonWithSymbol:(NSString *)symbol label:(NSString *)label action:(SEL)action {
-    UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+    BOOL seekControl = [symbol isEqualToString:@"backward.fill"] || [symbol isEqualToString:@"forward.fill"] || [symbol hasPrefix:@"arrowtriangle."];
+    UIButton *button = seekControl ? [BrowserSeekButton buttonWithType:UIButtonTypeSystem] : [UIButton buttonWithType:UIButtonTypeSystem];
     button.backgroundColor = UIColor.clearColor;
     CGFloat scale = ([symbol isEqualToString:@"playpause.fill"] || [symbol isEqualToString:@"backward.end.alt.fill"] || [symbol isEqualToString:@"browser.end.fill"]) ? 1.2 : 1;
     button.layer.cornerRadius = 34 * scale;

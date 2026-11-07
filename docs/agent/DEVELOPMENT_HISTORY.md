@@ -993,3 +993,14 @@ Public source inspection and runtime limitations are recorded in plans/teleporta
 At the user's request publish immutable tag v2.21.5 on e398d2d from feature/teleportal-player, without merging master. Release run 42380744810 passed version validation, Simulator Debug, Apple TV Release, package verification and release-asset upload. Publish the unsigned IPA, notices and SHA256SUMS. No automated application tests or interaction verification were run; compilation does not confirm double-click behavior or episode switching.
 
 The user reserved TV installation for themselves. The release was briefly made draft to avoid automated-source availability, then restored publicly as Latest at their explicit request. Cancel duplicate run 42380926939, triggered by republication of the same revision. No local signing, device installation, launch or atvloadly setting changes were performed. The earlier unreleased-development description is superseded by this confirmed publication; runtime acceptance remains pending.
+
+
+## 2026-11-07 — TV feedback and transport follow-up (2.21.6)
+
+After installing 2.21.5, the user confirmed Next, the page title and double click work on TV. Previous only restarted playback, and held seeking did not work. These observations establish the reported session, not all players or natural EOF transitions.
+
+Source inspection found the recognized-player fallback exposed Next only; Previous therefore fell through to the system route. Extend the same capability-based adapter to Starlight's own Previous control (adt-w_4nLvJ), including routesPrevious reporting. The upstream control calls the player's previous-source action. No site-specific URL navigation or fabricated playlist is added; if the site's own previous action has no usable source, that remains a separate compatibility investigation.
+
+Replace seek-button long-press recognizers with a shared UIButton subclass that owns Select began/ended/cancelled, starts the existing accelerating repeat after 0.6 seconds, and activates a short press once on release. Focus loss, removal and deactivation cancel pending/active holds. VLC's context recognizer rejects presses focused on this subclass so it cannot consume held seeking. Retain the same step sizes and repeat interval policy. This changes input delivery; source inspection alone does not establish why UIKit gestures failed in the user's session.
+
+Set Debug/Release to unreleased 2.21.6. Source/diff inspection only; no build, tests, device delivery, release or Git push. Previous and held seeking fixes remain pending real remote verification. Preserve the confirmed 2.21.5 results above.
