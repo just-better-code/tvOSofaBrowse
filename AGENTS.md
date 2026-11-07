@@ -22,6 +22,7 @@
 ## Tools and task-specific references
 
 - Prefer `rg` and `rg --files` for targeted text and file discovery.
+- A local Node.js runtime, when installed, is available at `.data/tools/node/bin/node`; keep its binaries and research fixtures ignored.
 - GitHub Actions builds Apple TV Release only. Simulator delivery remains a local, explicitly requested workflow.
 - Xcode project: `_Project/Browser.xcodeproj`; scheme: `Browser`. Use `xcodebuild` for requested builds and `xcrun devicectl` for device work only with the user’s permission.
 - For simulator builds and screenshots, use the [Apple TV Simulator runbook](docs/agent/SIMULATOR_RUNBOOK.md). Keep simulator setup out of the public README.

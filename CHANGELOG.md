@@ -6,7 +6,7 @@ Published packages are available for [2.21.6](https://github.com/just-better-cod
 
 ### Fixed
 
-- Resolve Starlight Previous from the host's published episode catalog when its previous-source endpoint is unavailable, and show the active Starlight video's title after episode changes ([Playback controls](docs/USER_GUIDE.md), [Investigation](docs/agent/plans/teleportal-player.md)).
+- Resolve Starlight Previous by video identifier and order in the host's season catalog, without parsing episode names or numbers, and show the active Starlight video's title after episode changes ([Playback controls](docs/USER_GUIDE.md), [Investigation](docs/agent/plans/teleportal-player.md)).
 
 ## 2.21.7 - 2026-11-07
 
