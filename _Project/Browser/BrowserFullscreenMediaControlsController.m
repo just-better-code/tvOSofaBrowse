@@ -3,6 +3,54 @@
 #import "BrowserPlaybackSymbols.h"
 #import "BrowserPlaybackSeek.h"
 
+@interface BrowserSeekButton ()
+@property (nonatomic) NSTimer *holdThresholdTimer;
+@property (nonatomic) BOOL selectPending;
+@property (nonatomic) BOOL holding;
+@end
+@implementation BrowserSeekButton
+- (void)cancelHeldPress {
+    [self.holdThresholdTimer invalidate]; self.holdThresholdTimer = nil;
+    BOOL hadPress = self.selectPending;
+    self.selectPending = NO; self.holding = NO; self.highlighted = NO;
+    if (hadPress && self.holdEnded) self.holdEnded();
+}
+- (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
+    if (presses.anyObject.type != UIPressTypeSelect) { [super pressesBegan:presses withEvent:event]; return; }
+    if (!self.enabled || self.selectPending) return;
+    self.selectPending = YES; self.highlighted = YES;
+    __weak typeof(self) weakSelf = self;
+    self.holdThresholdTimer = [NSTimer timerWithTimeInterval:0.6 repeats:NO block:^(NSTimer *timer) {
+        BrowserSeekButton *button = weakSelf;
+        if (!button.selectPending || !button.enabled || !button.focused || UIApplication.sharedApplication.applicationState != UIApplicationStateActive) { [button cancelHeldPress]; return; }
+        button.holding = YES;
+        if (button.holdBegan) button.holdBegan();
+    }];
+    [[NSRunLoop mainRunLoop] addTimer:self.holdThresholdTimer forMode:NSRunLoopCommonModes];
+}
+- (void)pressesEnded:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
+    if (presses.anyObject.type != UIPressTypeSelect) { [super pressesEnded:presses withEvent:event]; return; }
+    BOOL activate = self.selectPending && !self.holding && self.enabled && self.focused;
+    [self cancelHeldPress];
+    if (activate) [self sendActionsForControlEvents:UIControlEventPrimaryActionTriggered];
+}
+- (void)pressesCancelled:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
+    [self cancelHeldPress]; [super pressesCancelled:presses withEvent:event];
+}
+- (void)didUpdateFocusInContext:(UIFocusUpdateContext *)context withAnimationCoordinator:(UIFocusAnimationCoordinator *)coordinator {
+    [super didUpdateFocusInContext:context withAnimationCoordinator:coordinator];
+    if (!self.focused) [self cancelHeldPress];
+}
+- (void)applicationResigned:(NSNotification *)notification { [self cancelHeldPress]; }
+- (void)didMoveToWindow {
+    [super didMoveToWindow];
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+    if (!self.window) [self cancelHeldPress];
+    else [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationResigned:) name:UIApplicationWillResignActiveNotification object:nil];
+}
+- (void)dealloc { [[NSNotificationCenter defaultCenter] removeObserver:self]; [_holdThresholdTimer invalidate]; }
+@end
+
 static NSInteger const BrowserMediaIconTag = 891;
 
 // Leave website hit testing available outside the native panel.
@@ -73,7 +121,8 @@ static NSInteger const BrowserMediaIconTag = 891;
     NSArray *labels = @[@"Previous media", @"Go to beginning", @"Back 10 percent", @"Back 10 seconds", @"Pause", @"Forward 10 seconds", @"Forward 10 percent", @"Next media", @"Go to end", @"Mute", @"Volume down", @"Volume up"];
     NSMutableArray *buttons = [NSMutableArray array];
     for (NSUInteger i = 0; i < symbols.count; i++) {
-        UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+        BOOL seekControl = i == 2 || i == 3 || i == 5 || i == 6;
+        UIButton *button = seekControl ? [BrowserSeekButton buttonWithType:UIButtonTypeSystem] : [UIButton buttonWithType:UIButtonTypeSystem];
         button.tag = i; button.backgroundColor = UIColor.clearColor;
         CGFloat scale = (i == 1 || i == 4 || i == 8) ? 1.2 : 1;
         button.layer.cornerRadius = 34 * scale; button.clipsToBounds = YES;
@@ -91,10 +140,11 @@ static NSInteger const BrowserMediaIconTag = 891;
             [icon.centerXAnchor constraintEqualToAnchor:button.centerXAnchor], [icon.centerYAnchor constraintEqualToAnchor:button.centerYAnchor]
         ]];
         [button addTarget:self action:@selector(buttonPressed:) forControlEvents:UIControlEventPrimaryActionTriggered];
-        if (i == 2 || i == 3 || i == 5 || i == 6) {
-            UILongPressGestureRecognizer *hold = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(seekHeld:)];
-            hold.minimumPressDuration = 0.6; hold.allowedPressTypes = @[@(UIPressTypeSelect)];
-            hold.cancelsTouchesInView = YES; [button addGestureRecognizer:hold];
+        if (seekControl) {
+            __weak typeof(self) weakSelf = self;
+            NSInteger kind = [self seekKind:i];
+            ((BrowserSeekButton *)button).holdBegan = ^{ [weakSelf beginHeldSeek:kind]; };
+            ((BrowserSeekButton *)button).holdEnded = ^{ [weakSelf stopSeeking]; [weakSelf showControls]; };
         }
         [buttons addObject:button];
     }
@@ -235,17 +285,9 @@ static NSInteger const BrowserMediaIconTag = 891;
     else if (button.tag == 10 || button.tag == 11) self.sendCommand(@"volume", button.tag == 10 ? -0.1 : 0.1);
     else [self sendSeekKind:[self seekKind:button.tag]];
 }
-- (void)seekHeld:(UILongPressGestureRecognizer *)recognizer {
-    if (recognizer.state == UIGestureRecognizerStateBegan) {
-        [self stopSeeking];
-        UIButton *button = (UIButton *)recognizer.view;
-        if (!button.enabled) return;
-        self.seekStep = [self seekKind:button.tag];
-        self.seekStarted = CACurrentMediaTime();
-        [self repeatSeek];
-    } else if (recognizer.state == UIGestureRecognizerStateEnded || recognizer.state == UIGestureRecognizerStateCancelled || recognizer.state == UIGestureRecognizerStateFailed) {
-        [self stopSeeking]; [self showControls];
-    }
+- (void)beginHeldSeek:(NSInteger)kind {
+    [self stopSeeking]; self.seekStep = kind;
+    self.seekStarted = CACurrentMediaTime(); [self repeatSeek];
 }
 - (void)repeatSeek {
     if (!self.seekStep) return;

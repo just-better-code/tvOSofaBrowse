@@ -109,9 +109,9 @@ try {
     }
 } catch (error) {}
 // Capability-based fallback: use the player's own control, including fetch_next.
-function playerNextControl() {
-    if (!window.adt || !adt.player || !window.player || typeof window.player.next !== 'function') return null;
-    var button = document.querySelector('.adt-kCdJnjy');
+function playerTrackControl(previous) {
+    if (!window.adt || !adt.player || !window.player || typeof window.player[previous ? 'previous' : 'next'] !== 'function') return null;
+    var button = document.querySelector(previous ? '.adt-w_4nLvJ' : '.adt-kCdJnjy');
     return button && button.isConnected && !button.hidden && button.getAttribute('aria-disabled') !== 'true' &&
         getComputedStyle(button).display !== 'none' ? button : null;
 }
@@ -128,10 +128,10 @@ function mediaState() {
         canSeekForward: seekable || !!mediaHandlers.seekforward,
         seekAtStart: seekable ? current <= v.seekable.start(0) : !!v && current <= 0,
         seekAtEnd: seekable ? current >= v.seekable.end(v.seekable.length - 1) : duration > 0 && current >= duration,
-        canPrevious: !!mediaHandlers.previoustrack || (current > 5 && (seekable || !!mediaHandlers.seekto)),
-        canNext: !!mediaHandlers.nexttrack || !!playerNextControl(),
-        routesNext: !!mediaHandlers.nexttrack || !!playerNextControl(),
-        routesPrevious: !!mediaHandlers.previoustrack,
+        canPrevious: !!mediaHandlers.previoustrack || !!playerTrackControl(true) || (current > 5 && (seekable || !!mediaHandlers.seekto)),
+        canNext: !!mediaHandlers.nexttrack || !!playerTrackControl(false),
+        routesNext: !!mediaHandlers.nexttrack || !!playerTrackControl(false),
+        routesPrevious: !!mediaHandlers.previoustrack || !!playerTrackControl(true),
         canRestart: seekable || !!mediaHandlers.seekto,
         canEnd: duration > 0 && (seekable || !!mediaHandlers.seekto)};
 }
@@ -211,9 +211,9 @@ function performMediaCommand(command, value, request) {
         frame.contentWindow.postMessage({browserTVFullscreenCommand: secret, action: 'media', command: command, value: value, request: request}, '*');
         return true;
     }
-    if (command === 'next') {
-        var nextControl = playerNextControl();
-        if (nextControl) { nextControl.click(); return true; }
+    if (command === 'next' || command === 'previous') {
+        var trackControl = playerTrackControl(command === 'previous');
+        if (trackControl) { trackControl.click(); return true; }
     }
     var v = mediaVideo();
     var state = mediaState();
