@@ -504,3 +504,21 @@ checkpoint. After the requested CI build, update changelog/guide/history with ac
 results; do not claim visual verification without observation. TV delivery remains
 withheld; only GitHub push/build is authorized. Keep the existing IPA until the new
 package succeeds, then place the new package in Downloads for the user's manual use.
+
+
+Release authorization checkpoint: the user opened PR #17 and explicitly authorized
+pushing, merging it and publishing 2.21.2 after the new build. UI source is committed
+as dc574c3 (build 3023), pushed and building in Actions run 42317274608. Complete that
+run before final changelog/guide/history updates. Then push the final documentation,
+merge the exact reviewed PR head into master, tag the resulting merge commit as
+v2.21.2 and manually publish the release with the consolidated changelog groups.
+Wait for the release workflow to attach the verified unsigned IPA/notices/checksums.
+Do not install on TV. Preserve the user's existing local package until the new one
+succeeds. The observed <10 s is page opening, not full-cold preparation equivalence.
+
+
+UI build checkpoint: dc574c3 passed both Device Release and Simulator Debug in run
+42317274608. Downloaded IPA checksum matches; Info.plist is 2.21.2/build 3023 and
+AppleTVOS. Changelog, guide and development history are now updated after that build.
+Next actions are exact-head PR #17 merge, immutable v2.21.2 tag, manual release and
+waiting for its verified assets. Do not claim visual confirmation or TV delivery.

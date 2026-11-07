@@ -853,3 +853,39 @@ and raw logs out of tracked documentation.
 No release, tag, merge to master, app tests, Simulator launch or physical-TV discovery,
 installation or launch occurred. The user intends to install the IPA independently;
 no installation/interaction result or <=30-second filter preparation is established.
+
+
+## 2026-11-07 — Dark preparation feedback, native menu surfaces and 2.21.2 release preparation
+
+The user reports the website opened in under ten seconds after independently
+installing 2.21.2; this establishes their observed page-opening time, not measured
+full-cold readiness. Their private photo shows duplicate rectangular backing under
+unfocused native glass menu buttons, while the focused Home appearance is approved.
+Do not publish the photo. The user requested a spinner, preparation text and a dark
+metallic background instead of a blank/white initial page.
+
+Add a native first-navigation backdrop in the shared blue-gray palette with darker
+graphite/metallic tones, a spinner and preparation/opening labels. Track committed
+website content separately from navigation waiting, retain the backdrop until the
+first website commit, and dismiss it on stop/failure/content-process termination.
+Keep loaded websites visible during background preparation; preserve website CSS,
+protection requirements and document-start script timing. Remove browser-painted
+backing from native system address/history/toolbar buttons when glass is available,
+including focus transitions; retain legacy surfaces on older systems. This adapts
+UIKit's system-owned control surfaces rather than replacing the accepted focus look.
+See Apple's UIKit new-design session and UIButton configuration documentation.
+
+Source commit dc574c3 passed both Device Release and Simulator Debug builds in
+[Actions run 42317274608](https://github.com/just-better-code/tvOSofaBrowse/actions/runs/42317274608).
+The downloaded Device package checksum matches its manifest and Info.plist confirms
+2.21.2/build 3023 for AppleTVOS. Whitespace checks passed. No app tests, Simulator
+interaction, physical-TV work or visual confirmation of these new fixes occurred.
+The earlier <10-second observation belongs to the preceding package, not this UI fix.
+Keep the unreleased marketing version at 2.21.2 and consolidate its changelog entry;
+advance only the technical build from 3022 to 3023 to distinguish installations.
+
+The user explicitly authorized pushing, merging their PR #17 and publishing 2.21.2.
+The branch build passed before final documentation updates. Next, merge the exact
+reviewed head, tag the resulting master commit and manually publish the release;
+wait for verified release assets before reporting an installable package. TV delivery
+remains withheld; the user intends to configure atvloadly updates themselves.

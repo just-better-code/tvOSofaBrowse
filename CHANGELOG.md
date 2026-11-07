@@ -12,6 +12,8 @@ Published packages are available for [2.21.1](https://github.com/just-better-cod
 
 ### Fixed
 
+- Show a dark metallic waiting screen with a native spinner during initial filter preparation and first-page loading ([Ad Block controls](docs/USER_GUIDE.md)).
+- Remove duplicate backgrounds around native glass menu buttons while retaining their system focus appearance ([Interface style](docs/agent/TVOS_STYLE_GUIDE.md)).
 - Reuse unchanged native filter artifacts, overlap conversion with bounded compilation through four WebKit stores, and coalesce conditional filter updates ([Preparation lifecycle](_Project/Vendor/UBlock/README.md)).
 - Read the network engine bundle once per preparation or restoration operation ([Network preparation](_Project/Vendor/UBlock/README.md)).
 - Cancel obsolete extended-rule parsing at input-line boundaries without waiting on the main queue ([Preparation lifecycle](_Project/Vendor/UBlock/README.md)).
