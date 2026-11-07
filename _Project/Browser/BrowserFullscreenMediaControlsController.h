@@ -8,6 +8,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)updateMediaState:(NSDictionary *)state;
 - (void)showControls;
 - (void)stopSeeking;
+- (void)seekWithDirection:(NSInteger)direction;
 - (void)togglePlayback;
 - (void)closePlayer;
 @end

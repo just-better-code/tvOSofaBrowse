@@ -4,6 +4,10 @@ Published packages are available for [2.21.5](https://github.com/just-better-cod
 
 ## 2.21.6 - 2026-11-07
 
+### Changed
+
+- Seek ten seconds with Left/Right while playback controls are hidden, retaining directional focus navigation while controls are visible ([Playback controls](docs/USER_GUIDE.md)).
+
 ### Fixed
 
 - Route Previous through recognized player controls and handle held seek buttons through the Select press lifecycle in both playback panels ([Playback controls](docs/USER_GUIDE.md)).
