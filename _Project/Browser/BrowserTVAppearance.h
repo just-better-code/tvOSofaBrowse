@@ -72,3 +72,16 @@ static inline void BrowserTVLayoutBackground(UIView *view) {
         if ([layer.name hasPrefix:@"BrowserTVBackground"]) layer.frame = view.bounds;
     }
 }
+
+static inline void BrowserTVInstallPreparationBackground(UIView *view) {
+    view.backgroundColor = [UIColor colorWithRed:0.07 green:0.08 blue:0.10 alpha:1];
+    CAGradientLayer *metal = [CAGradientLayer layer];
+    metal.name = @"BrowserTVBackgroundPreparationMetal";
+    metal.colors = @[(id)[UIColor colorWithRed:0.07 green:0.08 blue:0.10 alpha:1].CGColor,
+                     (id)[UIColor colorWithRed:0.19 green:0.21 blue:0.24 alpha:1].CGColor,
+                     (id)[UIColor colorWithRed:0.10 green:0.12 blue:0.14 alpha:1].CGColor];
+    metal.locations = @[@0, @0.46, @1];
+    metal.startPoint = CGPointMake(0.1, 0);
+    metal.endPoint = CGPointMake(0.9, 1);
+    [view.layer insertSublayer:metal atIndex:0];
+}

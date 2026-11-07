@@ -478,3 +478,29 @@ launch, app tests, physical-TV discovery/install/launch, release/tag or master m
 ran. The user will attempt TV installation independently; do not infer results or
 new device authorization. Documentation corrections after this run do not change
 the built app source or establish the filter-preparation performance target.
+
+
+## UI follow-up checkpoint — first-load feedback and native menu surfaces
+
+The user installed the CI IPA independently and reports the requested website opens
+in under ten seconds, but the first preparation shows a blank page. This is a user
+observation of page opening, not a measured full cold bake. The user also supplied a
+private photo showing doubled/rectangular backing around unfocused system buttons,
+while approving the focused Home appearance. Do not commit that photo.
+
+Source work now adds an app-owned dark graphite/metallic first-navigation backdrop,
+a native spinner and preparation/opening labels until the first website commits.
+Track native navigation waiting separately from full filter preparation; keep loaded
+website content visible during background updates. Stop/failure/policy/lifecycle paths
+must dismiss the notice. Reuse BrowserTVAppearance and native controls, without
+changing website CSS, early protection requirements or page script timing.
+
+On systems with native glass effects, remove the browser-painted background from
+system address/history/toolbar buttons, including focus transitions; let UIKit retain
+its capsule and focus animation. Older systems retain the existing fallback surfaces.
+Both marketing versions stay at unreleased 2.21.2; increment the technical build to
+3023 so the replacement package is distinguishable. CI compilation is pending at this
+checkpoint. After the requested CI build, update changelog/guide/history with actual
+results; do not claim visual verification without observation. TV delivery remains
+withheld; only GitHub push/build is authorized. Keep the existing IPA until the new
+package succeeds, then place the new package in Downloads for the user's manual use.

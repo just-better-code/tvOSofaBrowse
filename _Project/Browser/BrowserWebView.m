@@ -942,6 +942,12 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 @property (nonatomic, readwrite) BOOL adBlockEnabled;
 @property (nonatomic, readwrite, copy) NSString *adBlockStatus;
 @property (nonatomic, strong) UILabel *adBlockPreparingBadge;
+@property (nonatomic, strong) UIVisualEffectView *adBlockPreparationNotice;
+@property (nonatomic, strong) UIView *adBlockPreparationBackdrop;
+@property (nonatomic, strong) UILabel *adBlockPreparationTitle;
+@property (nonatomic, strong) UIActivityIndicatorView *adBlockPreparationSpinner;
+@property (nonatomic) BOOL adBlockNavigationWaiting;
+@property (nonatomic) BOOL hasCommittedWebsiteDocument;
 @property (nonatomic) BOOL adBlockRuntimePreparing;
 @property (nonatomic, strong) BrowserUBlockHandler *uBlockHandler;
 @property (nonatomic, strong) BrowserNetworkRequestHandler *networkRequestHandler;
@@ -1151,6 +1157,16 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
     [self updateAdBlockPreparingBadge];
 }
 
+- (void)setAdBlockNavigationWaiting:(BOOL)waiting {
+    _adBlockNavigationWaiting = waiting;
+    [self updateAdBlockPreparingBadge];
+}
+
+- (void)setLoading:(BOOL)loading {
+    _loading = loading;
+    [self updateAdBlockPreparingBadge];
+}
+
 - (void)updateAdBlockPreparingBadge {
     NSURL *URL = self.adBlockPolicyURL ?: self.request.URL;
     BOOL website = [@[@"http", @"https"] containsObject:URL.scheme.lowercaseString];
@@ -1159,6 +1175,63 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
         BrowserAdBlockService.nativePreparationFailed ||
         ![self.adBlockActiveDocumentToken isEqualToString:self.adBlockDocumentToken];
     BOOL visible = website && self.adBlockEnabled && BrowserAdBlockSiteEnabled(URL) && pending;
+    BOOL requestedWebsite = [@[@"http", @"https"] containsObject:self.lastRequest.URL.scheme.lowercaseString];
+    BOOL firstNavigation = !self.hasCommittedWebsiteDocument &&
+        (self.adBlockNavigationWaiting || (self.loading && requestedWebsite));
+    if (firstNavigation && !self.adBlockPreparationNotice) {
+        UIView *backdrop = [[UIView alloc] initWithFrame:self.bounds];
+        backdrop.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        backdrop.userInteractionEnabled = NO;
+        BrowserTVInstallPreparationBackground(backdrop);
+        [self addSubview:backdrop];
+        self.adBlockPreparationBackdrop = backdrop;
+        UIVisualEffectView *notice = [[UIVisualEffectView alloc] initWithEffect:BrowserTVPanelEffect()];
+        notice.translatesAutoresizingMaskIntoConstraints = NO;
+        notice.layer.cornerRadius = 24;
+        notice.layer.masksToBounds = YES;
+        notice.userInteractionEnabled = NO;
+        notice.accessibilityIdentifier = @"AdBlockInitialPreparation";
+        UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
+        spinner.color = UIColor.whiteColor;
+        UILabel *title = [UILabel new];
+        title.text = @"Initial filter preparation…";
+        title.font = [UIFont systemFontOfSize:24 weight:UIFontWeightSemibold];
+        title.textColor = UIColor.whiteColor;
+        title.numberOfLines = 0;
+        UILabel *detail = [UILabel new];
+        detail.text = @"The page will open automatically.";
+        detail.font = [UIFont systemFontOfSize:18 weight:UIFontWeightRegular];
+        detail.textColor = [UIColor colorWithWhite:1 alpha:0.78];
+        detail.numberOfLines = 0;
+        UIStackView *labels = [[UIStackView alloc] initWithArrangedSubviews:@[title, detail]];
+        labels.axis = UILayoutConstraintAxisVertical;
+        labels.spacing = 6;
+        UIStackView *row = [[UIStackView alloc] initWithArrangedSubviews:@[spinner, labels]];
+        row.translatesAutoresizingMaskIntoConstraints = NO;
+        row.axis = UILayoutConstraintAxisHorizontal;
+        row.alignment = UIStackViewAlignmentCenter;
+        row.spacing = 24;
+        [notice.contentView addSubview:row];
+        [backdrop addSubview:notice];
+        [NSLayoutConstraint activateConstraints:@[
+            [notice.centerXAnchor constraintEqualToAnchor:backdrop.centerXAnchor],
+            [notice.centerYAnchor constraintEqualToAnchor:backdrop.centerYAnchor],
+            [notice.widthAnchor constraintEqualToConstant:560],
+            [row.leadingAnchor constraintEqualToAnchor:notice.contentView.leadingAnchor constant:28],
+            [row.trailingAnchor constraintEqualToAnchor:notice.contentView.trailingAnchor constant:-28],
+            [row.topAnchor constraintEqualToAnchor:notice.contentView.topAnchor constant:24],
+            [row.bottomAnchor constraintEqualToAnchor:notice.contentView.bottomAnchor constant:-24],
+        ]];
+        self.adBlockPreparationNotice = notice;
+        self.adBlockPreparationTitle = title;
+        self.adBlockPreparationSpinner = spinner;
+    }
+    self.adBlockPreparationBackdrop.hidden = !firstNavigation;
+    self.adBlockPreparationTitle.text = self.adBlockNavigationWaiting ? @"Initial filter preparation…" : @"Opening page…";
+    if (firstNavigation) {
+        [self.adBlockPreparationSpinner startAnimating];
+        [self bringSubviewToFront:self.adBlockPreparationBackdrop];
+    } else [self.adBlockPreparationSpinner stopAnimating];
     if (visible && !self.adBlockPreparingBadge) {
         UILabel *badge = [[UILabel alloc] init];
         badge.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
@@ -1175,7 +1248,7 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
     BOOL failed = [@[@"update-failed", @"unavailable", @"installation-unavailable"] containsObject:self.adBlockStatus];
     self.adBlockPreparingBadge.text = failed ? @"Ad Block · Not ready" :
         (self.adBlockReloadDeferred && !self.adBlockRuntimePreparing ? @"Ad Block · Reload pending" : @"Ad Block · Preparing");
-    self.adBlockPreparingBadge.hidden = !visible;
+    self.adBlockPreparingBadge.hidden = !visible || firstNavigation;
     [self setNeedsLayout];
 }
 
@@ -1680,9 +1753,11 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
     NSUInteger navigation = self.adBlockNavigationGeneration;
     self.adBlockPolicyURL = URL;
     if (!self.adBlockEnabled || !BrowserAdBlockSiteEnabled(URL)) {
+        self.adBlockNavigationWaiting = NO;
         [self prepareAdBlockForURL:URL completion:completion];
         return;
     }
+    self.adBlockNavigationWaiting = YES;
     self.adBlockRuntimePreparing = YES;
     self.adBlockStatus = @"loading";
     NSString *dynamicPolicy = [BrowserAdBlockPolicy effectivePolicyForHost:BrowserAdBlockHost(URL)
@@ -1728,6 +1803,7 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
         }
         // Full preparation continues independently. Its completion must not
         // reload this document solely because native baseline rules changed.
+        owner.adBlockNavigationWaiting = NO;
         [owner prepareAdBlockForNavigationURL:URL];
         if (!usable) owner.adBlockStatus = @"update-failed";
         if (completion) completion(usable);
@@ -1786,6 +1862,11 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
     [super layoutSubviews];
     ((UIView *)self.runtimeWebView).frame = self.bounds;
     [self applyPageScalingIfNeeded];
+    if (self.adBlockPreparationBackdrop) {
+        self.adBlockPreparationBackdrop.frame = self.bounds;
+        BrowserTVLayoutBackground(self.adBlockPreparationBackdrop);
+        if (!self.adBlockPreparationBackdrop.hidden) [self bringSubviewToFront:self.adBlockPreparationBackdrop];
+    }
     if (self.adBlockPreparingBadge) {
         CGSize size = [self.adBlockPreparingBadge sizeThatFits:CGSizeMake(300, 32)];
         CGFloat width = MIN(size.width + 24, MAX(0, self.bounds.size.width - 40));
@@ -1929,6 +2010,7 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 
 - (void)loadRequest:(NSURLRequest *)request {
     if (!request || !self.runtimeWebView) return;
+    self.adBlockNavigationWaiting = NO;
     self.adBlockReloadDeferred = NO;
     self.adBlockPolicyGeneration += 1;
     self.adBlockRefreshAfterNavigation = NO;
@@ -1950,6 +2032,8 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 }
 
 - (void)loadHTMLString:(NSString *)HTMLString {
+    self.hasCommittedWebsiteDocument = NO;
+    self.adBlockNavigationWaiting = NO;
     self.pageFullscreenActive = NO;
     self.adBlockPolicyGeneration += 1;
     self.adBlockRefreshAfterNavigation = NO;
@@ -1970,6 +2054,7 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 }
 
 - (void)stopLoading {
+    self.adBlockNavigationWaiting = NO;
     self.adBlockRefreshAfterNavigation = NO;
     self.adBlockPolicyGeneration += 1;
     self.documentGeneration += 1;
@@ -1981,6 +2066,7 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 }
 
 - (void)goBack {
+    self.adBlockNavigationWaiting = NO;
     self.adBlockPolicyGeneration += 1;
     self.documentGeneration += 1;
     SEL selector = NSSelectorFromString(@"goBack");
@@ -1990,6 +2076,7 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 }
 
 - (void)goForward {
+    self.adBlockNavigationWaiting = NO;
     self.adBlockPolicyGeneration += 1;
     self.documentGeneration += 1;
     SEL selector = NSSelectorFromString(@"goForward");
@@ -2360,6 +2447,8 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 }
 
 - (void)webView:(id)webView didCommitNavigation:(id)navigation {
+    self.hasCommittedWebsiteDocument = [@[@"http", @"https"] containsObject:self.currentURL.scheme.lowercaseString];
+    self.adBlockNavigationWaiting = NO;
     self.documentGeneration += 1;
     self.adBlockActiveDocumentToken = self.adBlockDocumentToken;
     [self updateAdBlockPreparingBadge];
@@ -2388,6 +2477,7 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 }
 
 - (void)webView:(id)webView didFailNavigation:(id)navigation withError:(NSError *)error {
+    self.adBlockNavigationWaiting = NO;
     self.loading = NO;
     self.adBlockRefreshAfterNavigation = NO;
     if ([self.delegate respondsToSelector:@selector(webView:didFailLoadWithError:)]) {
@@ -2396,6 +2486,7 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 }
 
 - (void)webView:(id)webView didFailProvisionalNavigation:(id)navigation withError:(NSError *)error {
+    self.adBlockNavigationWaiting = NO;
     self.loading = NO;
     self.adBlockRefreshAfterNavigation = NO;
     if ([self.delegate respondsToSelector:@selector(webView:didFailLoadWithError:)]) {
@@ -2404,6 +2495,8 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 }
 
 - (void)webViewWebContentProcessDidTerminate:(id)webView {
+    self.hasCommittedWebsiteDocument = NO;
+    self.adBlockNavigationWaiting = NO;
     self.documentGeneration += 1;
     self.loading = NO;
     if ([self.delegate respondsToSelector:@selector(webViewWebContentProcessDidTerminate:)]) {
