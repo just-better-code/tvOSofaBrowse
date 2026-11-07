@@ -1,6 +1,6 @@
 # Continue on another computer
 
-Snapshot: 2026-11-04. This handoff records task context, not a new authorization to use a physical Apple TV. Check live GitHub state before repeating a release operation.
+Snapshot: 2026-11-07. This handoff records task context, not a new authorization to use a physical Apple TV. Check live GitHub state before repeating a release operation.
 
 ## Open the project
 
@@ -13,16 +13,25 @@ If the repository is already present, inspect `git status` and update the intend
 
 ## Published state
 
-- `master` includes PR #16: release-only CI, sanitized research/development notes, a source index and reusable delivery scripts.
-- Version 2.21.1: Git tag `v2.21.1`, release title `tvOSofaBrowse 2.21.1`, app build 3022. [CI 41897244825](https://github.com/just-better-code/tvOSofaBrowse/actions/runs/41897244825) passed and the release contains the unsigned IPA, license notices and SHA-256 manifest. This remains Latest.
-- Historical base 2.20.4: original tag `2.20.4` points to `c4502da` and is unchanged.
-- New release `v2.20.4` / title `tvOSofaBrowse 2.20.4` points to `082cf197adf615a04883c40e09e3fc7a5b22bbf6` on `release/2.20.4`. It preserves `_Project` byte-for-byte from `c4502da`; only five CI/packaging/license files were added. It is deliberately not Latest.
+- Latest is [tvOSofaBrowse 2.21.2](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.2), build 3023. Immutable tag `v2.21.2` points to master merge `4474b4edd228f65092787b934f30780adfb696a7` from PR #17.
+- [Release CI 42317891377](https://github.com/just-better-code/tvOSofaBrowse/actions/runs/42317891377) passed Simulator Debug, Device Release and release upload. The unsigned IPA (20,575,416 bytes), notices and SHA256SUMS are attached and downloaded checksums passed.
+- The user reports TV full Preparation time 27.0 s, conversion 11.4 s, WebKit 25.7 s, network 21.3 s and page rules/scripts 19.8 s. Page opening under ten seconds is separate. This is one reported run; controlled repeatability, peak memory and broad rule equivalence remain unmeasured.
+- The latest package includes dark first-load preparation feedback and native menu-button background cleanup. Compilation passed; new UI appearance has not yet been confirmed by the user.
+- Earlier releases v2.21.1/build 3022 and v2.20.4 remain published. Preserve historical tag `2.20.4` and the separate release/2.20.4 branch; do not rewrite them.
 
 ## Release work is complete
 
-[CI 41901991988](https://github.com/just-better-code/tvOSofaBrowse/actions/runs/41901991988) passed: version validation, Simulator Debug, Apple TV Release and asset upload all succeeded. The release contains `tvOSofaBrowse-2.20.4-unsigned.ipa` (19,189,997 bytes), license notices and `SHA256SUMS`. The published files were downloaded; both checksums and the arm64 AppleTVOS IPA checks passed. GitHub Latest remains `v2.21.1`. No physical-TV installation, playback or automatic renewal was observed.
+Do not recreate 2.21.2, move its tag or rerun successful builds merely to resume. A
+copy of the release IPA was placed in the user's Downloads location, preserving the
+preceding build separately. No agent physical-TV discovery, install or launch ran;
+the user installs and configures atvloadly updates independently. Automatic updating
+and renewal are not established by CI or a successful manual installation.
 
-There is no unfinished release operation. Do not create duplicate releases, move existing tags or rerun a completed build merely to resume this session. Ask the user for the next task. For reference, the verifier on `release/2.20.4` handles that older app; the master verifier additionally requires uBlock files that 2.20.4 does not contain.
+Read [the detailed preparation plan](plans/brave-preparation-lifecycle.md) for cache,
+rule-preservation and navigation contracts. Per-frame payload specialization and
+host-side on-demand generic retrieval remain open; local class/ID surveying is done.
+Future app fixes advance from published 2.21.2 to the next patch version. Documentation
+changes alone do not bump the app. Ask the user which remaining task to take next.
 
 ## Local setup that Git does not transfer
 
@@ -34,4 +43,4 @@ There is no unfinished release operation. Do not create duplicate releases, move
 
 ## Starter prompt
 
-> Read AGENTS.md and docs/agent/SESSION_HANDOFF.md. We are continuing this project on another computer. Both release tasks are complete; use the repository notes for earlier decisions and ask me for the next task. Do not recreate releases, move existing tags or access a physical Apple TV without a new request.
+> Read AGENTS.md and docs/agent/SESSION_HANDOFF.md. We are continuing this project on another computer. Release 2.21.2 is complete; use the repository notes for earlier decisions and ask me for the next task. Do not recreate releases, move existing tags or access a physical Apple TV without a new request.

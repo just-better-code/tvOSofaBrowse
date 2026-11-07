@@ -889,3 +889,56 @@ The branch build passed before final documentation updates. Next, merge the exac
 reviewed head, tag the resulting master commit and manually publish the release;
 wait for verified release assets before reporting an installable package. TV delivery
 remains withheld; the user intends to configure atvloadly updates themselves.
+
+
+## 2026-11-07 — User-reported TV preparation result: 27 seconds
+
+The user read Coverage and Diagnostics on their TV after installing 2.21.2 and
+reported these values. Record the observations as given, separately from CI build
+and package verification:
+
+| Coverage metric | Reported elapsed time |
+| --- | ---: |
+| Preparation time | 27.0 s |
+| List conversion | 11.4 s |
+| WebKit compilation | 25.7 s |
+| Network engine | 21.3 s |
+| Page rules and scripts | 19.8 s |
+
+The <=30 s complete-preparation target is met for this reported run. The stage
+intervals overlap; adding them is not the end-to-end preparation time. The earlier
+user-reported page opening under ten seconds is a separate observation. Numerically,
+27 s is about 3.4 times faster than the prior 91 s TV observation, but identical
+source digests, OS/cache conditions and controlled repeat runs were not recorded.
+No peak-memory sample or broad rule-equivalence test accompanies this result.
+
+These measurements were reported before delivery of the UI/build-3023 package. The
+agent did not inspect or operate the physical TV. Preserve this first successful
+result; further cold/warm/repeated measurements should be recorded as additional
+runs rather than overwriting it.
+
+
+## 2026-11-07 — Publish verified 2.21.2 packages
+
+Merge PR #17 into master at 4474b4edd228f65092787b934f30780adfb696a7 after the
+branch builds pass; confirm its tree matches reviewed head 56bf763. Create immutable
+tag v2.21.2 on that merge and publish the stable/latest
+[release](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.2).
+[Release CI 42317891377](https://github.com/just-better-code/tvOSofaBrowse/actions/runs/42317891377)
+passes version validation, Simulator Debug, Device Release and verified asset upload.
+The release contains the unsigned IPA (20,575,416 bytes), notices and SHA256SUMS.
+Download both package files and verify their checksums; the IPA reports 2.21.2/build
+3023 and AppleTVOS. Copy it to the user's Downloads location, preserving the preceding
+build-3022 IPA separately. Do not store personal absolute paths or signing values here.
+
+The user initially sees 2.21.1 in atvloadly's source picker while release assets are
+being produced. The v0.8.2 source adapter skips releases with no compatible IPA;
+after upload, verify that the public unauthenticated releases feed lists 2.21.2 with
+its IPA and ask the user to Fetch again. This does not establish the user's source
+tracking or automatic renewal as working. The user configures updates independently.
+
+No physical-TV installation, discovery or launch was performed by the agent. New
+menu/placeholder appearance remains pending user observation. The preceding user TV
+measurement of 27.0 s full preparation is recorded in the separate measurement entry.
+Release work is complete; do not move v2.21.2 or recreate its published packages.
+Future app fixes should advance the patch version rather than changing this release.

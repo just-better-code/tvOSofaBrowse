@@ -105,7 +105,7 @@ To confirm the outcome, open tvOSofaBrowse on the TV, check its version, then ch
 - **TV not discovered:** check that both machines share the local network, reopen the TV pairing screen, check Avahi and multicast/firewall settings. VPNs, VLANs and guest-network isolation can block discovery. See the [upstream troubleshooting guide](https://github.com/bitxeno/atvloadly#faq).
 - **Authentication or renewal fails:** inspect atvloadly's status and logs for 2FA, session or certificate errors. Complete any required account authentication; do not repeatedly revoke certificates.
 - **Installation fails after a tvOS update:** check support in the current atvloadly release and re-pair if required.
-- **Release appears without an IPA:** the manually published release starts the build. Wait for its [Actions run](https://github.com/just-better-code/tvOSofaBrowse/actions) to finish; failed builds do not attach an IPA.
+- **Release appears without an IPA:** the manually published release starts the build. Wait for its [Actions run](https://github.com/just-better-code/tvOSofaBrowse/actions) to finish; failed builds do not attach an IPA. The atvloadly source picker skips releases without a compatible IPA and can show the preceding version until upload completes; click Fetch again afterward.
 - **Backups:** back up the whole `data/` directory while the service is stopped. It contains sensitive account and pairing state. Avoid `docker compose down --volumes` and deleting the data directory during ordinary upgrades.
 - **Update atvloadly:** review upstream release notes, change the image tag in `compose.yaml`, then run `docker compose pull` and `docker compose up -d`.
 

@@ -2,31 +2,30 @@
 
 ## Latest status — 2026-11-07
 
-Source integration is committed as `8d7681c` on `feature/brave-preparation`, app
-version 2.21.2/build 3022. Three subagents completed implementation and static peer
-review; root resolved the remaining runtime-loading path issue, regenerated shipped
-assets and checked project references. The historical checkpoints below describe
-earlier intermediate states; use this section and the final evidence entry first.
+Released **2.21.2/build 3023** as immutable tag `v2.21.2`, master merge
+`4474b4edd228f65092787b934f30780adfb696a7` from PR #17. Both branch run
+`42317274608` and release run `42317891377` passed Simulator Debug and Device Release;
+the release upload and downloaded IPA/notices integrity checks passed. The stable
+GitHub release has all three assets. Final documentation commits may follow the tag.
 
 Implemented: early navigation protection, coherent compatible last-good restoration,
 independent native/source caches, four bounded native stores, conversion/compilation
-overlap, conditional/coalesced updates, cancellation, lossless native splitting,
-integrity-checked network records and reusable complete v4 scripts. No filtering
-engine replacement, slim full-list substitution or website-state migration occurred.
+overlap, conditional updates, input-line cancellation without main-queue waits,
+lossless native splitting, integrity-checked network records, reusable complete v4
+scripts, conservative local class/ID surveying and indexed exceptions. UI follow-up
+adds a dark metallic initial waiting screen and native menu-button surface cleanup.
+No filtering-engine replacement, slim-list substitution or website-state migration
+occurred. Host/frame payload specialization and native on-demand retrieval remain open.
 
-Passed: final JavaScript syntax parsing for five maintained/generated adapters,
-Python probe AST parsing without execution, exact adapter inclusion in the generated
-network bundle, Xcode source-reference checks, matching Debug/Release marketing
-versions and whitespace checks. These are static checks, not Apple compilation or
-rule-equivalence/runtime tests. No app build, Simulator/TV action or remote push ran.
+The user reports TV **Preparation time 27.0 s**, conversion 11.4 s, WebKit 25.7 s,
+network 21.3 s and page rules/scripts 19.8 s. This meets <=30 s for the reported run.
+Page opening under ten seconds was reported separately. Do not sum overlapping stages.
+Exact source digests, reset conditions, repeated cold runs, peak memory and broad rule
+equivalence were not collected; those remain acceptance work when requested. New UI
+appearance has compiled but is not yet visually verified. No agent TV action ran.
 
-CI compilation has now passed for Simulator Debug and Apple TV Release at source
-commit `254b13b`, run `42312524985`. Remaining platform work is requested
-rule/lifecycle verification and, on an explicitly authorized tvOS 27 target, full
-cold-readiness and memory measurements. The <=30 s outcome is unverified.
-The follow-up source stage adds local generic class/ID surveying, indexed exceptions
-and one network-bundle read per preparation/restoration. Full per-frame payload
-specialization and host-side on-demand retrieval remain deferred.
+The remaining sections preserve intermediate checkpoints and detailed invariants;
+earlier static-only/no-build statements describe those earlier points in time.
 
 ### Follow-up checkpoint — generic cosmetics and remaining cold-path work
 
@@ -522,3 +521,35 @@ UI build checkpoint: dc574c3 passed both Device Release and Simulator Debug in r
 AppleTVOS. Changelog, guide and development history are now updated after that build.
 Next actions are exact-head PR #17 merge, immutable v2.21.2 tag, manual release and
 waiting for its verified assets. Do not claim visual confirmation or TV delivery.
+
+
+Publication checkpoint: PR #17 is merged into master at
+4474b4edd228f65092787b934f30780adfb696a7, with a tree identical to reviewed feature
+head 56bf763. Immutable tag v2.21.2 points to that merge. The stable/latest release
+is published at https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.2.
+Release Actions run 42317891377 is in progress; no assets existed at publication.
+Do not report the package available until its release-upload job succeeds. Then
+retrieve IPA/notices/SHA256SUMS, confirm integrity and build 3023, preserve the prior
+Downloads IPA as a build-3022 backup and copy the new release IPA to Downloads.
+Record the actual outcome in development history, commit this documentation on master
+and push. No further app code or TV work is needed for this release task.
+
+
+User-reported TV preparation measurement while release CI is running: Preparation
+time 27.0 s; list conversion 11.4 s; WebKit compilation 25.7 s; network engine 21.3 s;
+page rules/scripts 19.8 s. The user previously reported page opening under 10 s. This
+meets the <=30 s full-preparation target for this reported run; stage durations overlap
+and must not be summed. Compared numerically with the earlier 91 s observation it is
+about 3.4x faster, without establishing controlled identical-input benchmarking.
+The user-installed package predates the UI/build-3023 delivery; exact device OS,
+source digests, cache/reset conditions and peak memory were not collected. Do not
+call this five reproducible cold runs or broad rule-equivalence verification. Preserve
+these numbers in development history after release CI completes.
+
+
+Final release checkpoint: release CI 42317891377 succeeded and attached IPA/notices/
+SHA256SUMS. Downloaded assets match the manifest; IPA is 2.21.2/build 3023 (20,575,416
+bytes). The new IPA is in Downloads and the previous build is retained separately.
+GitHub's public feed confirms v2.21.2 with its asset. Measurement history and the
+cross-computer handoff are updated. Release task is complete; remaining requests are
+runtime/visual checks, repeatability/memory measurement and deferred host specialization.
