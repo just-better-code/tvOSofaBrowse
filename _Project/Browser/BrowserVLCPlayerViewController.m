@@ -49,6 +49,7 @@
 @property (nonatomic) NSTimeInterval lastPositionSaveTime;
 @property (nonatomic) NSTimer *seekHoldTimer;
 @property (nonatomic) NSInteger seekHoldKind;
+@property (nonatomic) NSInteger arrowSeekDirection;
 @property (nonatomic) NSArray<UIButton *> *percentSeekButtons;
 @property (nonatomic) int64_t seekHoldTargetMs;
 @property (nonatomic) NSTimeInterval seekHoldStartTime;
@@ -256,6 +257,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
 
 - (void)applicationWillResignActive:(NSNotification *)notification {
     (void)notification;
+    self.arrowSeekDirection = 0;
     [self stopHeldSeek];
     if (!self.vlcPlayer.isPlaying) return;
     [self savePlaybackPosition];
@@ -418,6 +420,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
 
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
+    self.arrowSeekDirection = 0;
     [self stopHeldSeek];
     [self savePlaybackPosition];
     if (self.webVideoURL && self.webVideoDidClose) {
@@ -866,10 +869,11 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     }
 }
 
-- (void)seekByMilliseconds:(int64_t)delta {
+- (void)seekByMilliseconds:(int64_t)delta { [self seekByMilliseconds:delta revealControls:YES]; }
+- (void)seekByMilliseconds:(int64_t)delta revealControls:(BOOL)reveal {
     int64_t position = self.pendingResumeMs > 0 ? self.pendingResumeMs : self.vlcPlayer.time.value.longLongValue;
     [self seekToMilliseconds:position + delta];
-    [self showControls];
+    if (reveal) [self showControls];
     [self refreshProgress];
 }
 
@@ -906,13 +910,25 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     });
 }
 
+- (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
+    UIPressType type = presses.anyObject.type;
+    if (self.controlsView.hidden && (type == UIPressTypeLeftArrow || type == UIPressTypeRightArrow)) {
+        self.arrowSeekDirection = type == UIPressTypeLeftArrow ? -1 : 1; return;
+    }
+    [super pressesBegan:presses withEvent:event];
+}
 - (void)pressesCancelled:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
+    self.arrowSeekDirection = 0;
     [self stopHeldSeek];
     [super pressesCancelled:presses withEvent:event];
 }
 
 - (void)pressesEnded:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
     UIPressType type = presses.anyObject.type;
+    if (self.arrowSeekDirection && (type == UIPressTypeLeftArrow || type == UIPressTypeRightArrow)) {
+        NSInteger direction = self.arrowSeekDirection; self.arrowSeekDirection = 0;
+        [self seekByMilliseconds:direction * 10000 revealControls:NO]; return;
+    }
     if (type == UIPressTypeMenu) {
         [self closePressed];
         return;

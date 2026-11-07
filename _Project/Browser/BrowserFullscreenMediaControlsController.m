@@ -267,6 +267,10 @@ static NSInteger const BrowserMediaIconTag = 891;
     [self scheduleHide];
     [self refreshVisibility];
 }
+- (void)seekWithDirection:(NSInteger)direction {
+    NSString *capability = direction < 0 ? @"canSeekBack" : @"canSeekForward";
+    if ([self.mediaState[capability] boolValue]) [self sendSeekKind:direction < 0 ? -1 : 1];
+}
 - (void)togglePlayback { [self showControls]; if ([self.mediaState[@"available"] boolValue]) self.sendCommand(@"toggle", 0); }
 - (void)closePlayer { [self stopSeeking]; self.sendCommand(@"exit", 0); }
 - (NSInteger)seekKind:(NSInteger)tag { return [@[@0, @0, @(-2), @(-1), @0, @1, @2, @0][tag] integerValue]; }

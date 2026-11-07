@@ -81,6 +81,7 @@ static UIColor *kTextColor(void) {
 @interface ViewController () <BrowserMenuCoordinatorHost, BrowserPageActionCoordinatorHost, BrowserRemoteInputControllerHost, BrowserTabCoordinatorHost, BrowserTabOverviewControllerHost>
 
 @property (nonatomic) BrowserFullscreenMediaControlsController *fullscreenMediaControls;
+@property (nonatomic) NSInteger mediaArrowSeekDirection;
 @property (nonatomic, weak) BrowserWebView *fullscreenMediaWebView;
 @property (nonatomic, copy) NSString *fullscreenMediaSession;
 @property (nonatomic) NSUInteger fullscreenMediaGeneration;
@@ -827,6 +828,7 @@ static UIColor *kTextColor(void) {
 #pragma mark - Fullscreen iframe media controls
 
 - (void)removeFullscreenMediaControls {
+    self.mediaArrowSeekDirection = 0;
     if (!self.fullscreenMediaControls) return;
     [self.fullscreenMediaControls stopSeeking];
     [self.fullscreenMediaControls willMoveToParentViewController:nil];
@@ -1177,6 +1179,10 @@ static UIColor *kTextColor(void) {
     if ([self fullscreenMediaInputActive]) {
         UIPress *press = presses.anyObject;
         if (press.type == UIPressTypeMenu || press.type == UIPressTypePlayPause) return;
+        if (!self.fullscreenMediaControls.controlsVisible && (press.type == UIPressTypeLeftArrow || press.type == UIPressTypeRightArrow)) {
+            self.mediaArrowSeekDirection = press.type == UIPressTypeLeftArrow ? -1 : 1;
+            return;
+        }
         if (!self.fullscreenMediaControls.controlsVisible && self.remoteInputController.cursorView.hidden &&
             (press.type == UIPressTypeSelect || press.type == UIPressTypeUpArrow || press.type == UIPressTypeDownArrow ||
              press.type == UIPressTypeLeftArrow || press.type == UIPressTypeRightArrow)) {
@@ -1192,6 +1198,10 @@ static UIColor *kTextColor(void) {
 - (void)pressesEnded:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
     if ([self fullscreenMediaInputActive]) {
         UIPress *press = presses.anyObject;
+        if (self.mediaArrowSeekDirection && (press.type == UIPressTypeLeftArrow || press.type == UIPressTypeRightArrow)) {
+            NSInteger direction = self.mediaArrowSeekDirection; self.mediaArrowSeekDirection = 0;
+            [self.fullscreenMediaControls seekWithDirection:direction]; return;
+        }
         if (press.type == UIPressTypeMenu) { [self.fullscreenMediaControls closePlayer]; return; }
         if (press.type == UIPressTypePlayPause) { [self.fullscreenMediaControls togglePlayback]; return; }
         if (self.mediaRevealPress) { self.mediaRevealPress = NO; return; }
@@ -1204,7 +1214,7 @@ static UIColor *kTextColor(void) {
 }
 
 - (void)pressesCancelled:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
-    self.mediaRevealPress = NO;
+    self.mediaRevealPress = NO; self.mediaArrowSeekDirection = 0;
     [self.fullscreenMediaControls stopSeeking];
     [self.remoteInputController handlePressesCancelled:presses];
     [super pressesCancelled:presses withEvent:event];

@@ -1004,3 +1004,7 @@ Source inspection found the recognized-player fallback exposed Next only; Previo
 Replace seek-button long-press recognizers with a shared UIButton subclass that owns Select began/ended/cancelled, starts the existing accelerating repeat after 0.6 seconds, and activates a short press once on release. Focus loss, removal and deactivation cancel pending/active holds. VLC's context recognizer rejects presses focused on this subclass so it cannot consume held seeking. Retain the same step sizes and repeat interval policy. This changes input delivery; source inspection alone does not establish why UIKit gestures failed in the user's session.
 
 Set Debug/Release to unreleased 2.21.6. Source/diff inspection only; no build, tests, device delivery, release or Git push. Previous and held seeking fixes remain pending real remote verification. Preserve the confirmed 2.21.5 results above.
+
+### 2.21.6 — Directional short-seek shortcuts
+
+At the user's request, map completed Left/Right presses to the short ±10-second seek while native controls are hidden, in both iframe controls and VLC. Capture the direction at press begin, cancel on press cancellation, and keep controls hidden for repeated shortcut use. Visible controls retain directional focus navigation. Reuse the existing web seek dispatch and VLC seek/recovery path; arrow holding is not the Center-hold acceleration action. Consolidate into unreleased 2.21.6. Source inspection only; no tests, build, device work, release or remote push performed.
