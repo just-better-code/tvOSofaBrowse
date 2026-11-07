@@ -1,6 +1,7 @@
 #import "BrowserFullscreenMediaControlsController.h"
 #import "BrowserTVAppearance.h"
 #import "BrowserPlaybackSymbols.h"
+#import "BrowserPlaybackSeek.h"
 
 static NSInteger const BrowserMediaIconTag = 891;
 
@@ -46,7 +47,7 @@ static NSInteger const BrowserMediaIconTag = 891;
     self.timeLabel.font = [UIFont monospacedDigitSystemFontOfSize:20 weight:UIFontWeightMedium];
     [panel addSubview:self.timeLabel];
     NSArray *symbols = @[@"backward.end.fill", @"backward.end.alt.fill", @"backward.fill", @"arrowtriangle.left.fill", @"playpause.fill", @"arrowtriangle.right.fill", @"forward.fill", @"forward.end.fill", @"browser.end.fill", @"speaker.wave.2.fill", @"speaker.minus.fill", @"speaker.plus.fill"];
-    NSArray *labels = @[@"Previous media", @"Go to beginning", @"Back 10 seconds", @"Back 5 seconds", @"Pause", @"Forward 5 seconds", @"Forward 10 seconds", @"Next media", @"Go to end", @"Mute", @"Volume down", @"Volume up"];
+    NSArray *labels = @[@"Previous media", @"Go to beginning", @"Back 10 percent", @"Back 10 seconds", @"Pause", @"Forward 10 seconds", @"Forward 10 percent", @"Next media", @"Go to end", @"Mute", @"Volume down", @"Volume up"];
     NSMutableArray *buttons = [NSMutableArray array];
     for (NSUInteger i = 0; i < symbols.count; i++) {
         UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -139,6 +140,11 @@ static NSInteger const BrowserMediaIconTag = 891;
         self.buttons[i].enabled = [state[keys[i]] boolValue];
         self.buttons[i].alpha = self.buttons[i].enabled ? 1 : 0.35;
     }
+    for (NSNumber *index in @[@2, @6]) {
+        UIButton *button = self.buttons[index.unsignedIntegerValue];
+        button.enabled = button.enabled && duration > 0 && isfinite(duration);
+        button.alpha = button.enabled ? 1 : 0.35;
+    }
     BOOL paused = [state[@"paused"] boolValue];
     ((UIImageView *)[self.buttons[4] viewWithTag:BrowserMediaIconTag]).image = [self image:@"playpause.fill"];
     self.buttons[4].accessibilityLabel = paused ? @"Play" : @"Pause";
@@ -149,6 +155,8 @@ static NSInteger const BrowserMediaIconTag = 891;
     if (!playing) { [self.hideTimer invalidate]; self.hideTimer = nil; }
     else if (!wasPlaying && self.controlsVisible) [self scheduleHide];
     if (self.seekTimer && ![state[self.seekStep < 0 ? @"canSeekBack" : @"canSeekForward"] boolValue]) [self stopSeeking];
+    if (self.seekTimer && ((labs(self.seekStep) == 2 && duration <= 0) ||
+        ([state[@"seekAtEnd"] boolValue] && self.seekStep > 0) || ([state[@"seekAtStart"] boolValue] && self.seekStep < 0))) [self stopSeeking];
     [self refreshVisibility];
 }
 - (void)setCursorVisible:(BOOL)cursorVisible {
@@ -181,7 +189,11 @@ static NSInteger const BrowserMediaIconTag = 891;
 }
 - (void)togglePlayback { [self showControls]; if ([self.mediaState[@"available"] boolValue]) self.sendCommand(@"toggle", 0); }
 - (void)closePlayer { [self stopSeeking]; self.sendCommand(@"exit", 0); }
-- (NSInteger)seekSeconds:(NSInteger)tag { return [@[@0, @0, @(-10), @(-5), @0, @5, @10, @0][tag] integerValue]; }
+- (NSInteger)seekKind:(NSInteger)tag { return [@[@0, @0, @(-2), @(-1), @0, @1, @2, @0][tag] integerValue]; }
+- (void)sendSeekKind:(NSInteger)kind {
+    if (labs(kind) == 2) self.sendCommand(@"seekPercent", kind < 0 ? -0.1 : 0.1);
+    else self.sendCommand(@"seek", BrowserPlaybackSeekSeconds(kind, 0));
+}
 - (void)buttonPressed:(UIButton *)button {
     [self showControls];
     if (button.tag == 0) self.sendCommand(@"previous", 0);
@@ -191,27 +203,27 @@ static NSInteger const BrowserMediaIconTag = 891;
     else if (button.tag == 8) { [self stopSeeking]; self.sendCommand(@"end", 0); }
     else if (button.tag == 9) self.sendCommand(@"mute", 0);
     else if (button.tag == 10 || button.tag == 11) self.sendCommand(@"volume", button.tag == 10 ? -0.1 : 0.1);
-    else self.sendCommand(@"seek", [self seekSeconds:button.tag]);
+    else [self sendSeekKind:[self seekKind:button.tag]];
 }
 - (void)seekHeld:(UILongPressGestureRecognizer *)recognizer {
     if (recognizer.state == UIGestureRecognizerStateBegan) {
         [self stopSeeking];
         UIButton *button = (UIButton *)recognizer.view;
         if (!button.enabled) return;
-        self.seekStep = [self seekSeconds:button.tag] * 2;
-        self.seekStarted = NSDate.timeIntervalSinceReferenceDate - recognizer.minimumPressDuration;
+        self.seekStep = [self seekKind:button.tag];
+        self.seekStarted = CACurrentMediaTime();
         [self repeatSeek];
-        __weak typeof(self) weakSelf = self;
-        self.seekTimer = [NSTimer timerWithTimeInterval:0.8 repeats:YES block:^(NSTimer *timer) { [weakSelf repeatSeek]; }];
-        [[NSRunLoop mainRunLoop] addTimer:self.seekTimer forMode:NSRunLoopCommonModes];
     } else if (recognizer.state == UIGestureRecognizerStateEnded || recognizer.state == UIGestureRecognizerStateCancelled || recognizer.state == UIGestureRecognizerStateFailed) {
         [self stopSeeking]; [self showControls];
     }
 }
 - (void)repeatSeek {
-    [self showControls]; NSInteger step = self.seekStep;
-    if (labs(step) == 20 && NSDate.timeIntervalSinceReferenceDate - self.seekStarted >= 10) step *= 2;
-    self.sendCommand(@"seek", step);
+    if (!self.seekStep) return;
+    [self showControls];
+    [self sendSeekKind:self.seekStep];
+    __weak typeof(self) weakSelf = self;
+    self.seekTimer = [NSTimer timerWithTimeInterval:BrowserPlaybackSeekInterval(self.seekStarted) repeats:NO block:^(NSTimer *timer) { [weakSelf repeatSeek]; }];
+    [[NSRunLoop mainRunLoop] addTimer:self.seekTimer forMode:NSRunLoopCommonModes];
 }
 - (void)stopSeeking { [self.seekTimer invalidate]; self.seekTimer = nil; self.seekStep = 0; }
 - (void)viewWillDisappear:(BOOL)animated {
@@ -224,6 +236,7 @@ static NSInteger const BrowserMediaIconTag = 891;
 }
 - (void)didUpdateFocusInContext:(UIFocusUpdateContext *)context withAnimationCoordinator:(UIFocusAnimationCoordinator *)coordinator {
     [super didUpdateFocusInContext:context withAnimationCoordinator:coordinator];
+    if (context.previouslyFocusedView != context.nextFocusedView) [self stopSeeking];
     for (UIView *view in @[context.previouslyFocusedView ?: [UIView new], context.nextFocusedView ?: [UIView new]]) {
         if (![self.buttons containsObject:view]) continue;
         BOOL focused = view == context.nextFocusedView;
