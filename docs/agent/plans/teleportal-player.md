@@ -68,3 +68,7 @@ Existing native URL KVO invokes BrowserTabCoordinator.webViewDidChangeNavigation
 Extend the three-frame integration harness with a known episode 91: the production bridge replaces the host URL, preserves history length/state and the existing video node; a newly opened DOM at that saved URL has the episode-91 path. Episode 93 absent from the captured catalog leaves the URL at 92 rather than guessing a path. Title/fallback checks and all 225 order/provider assertions pass after this change. Actual app restart/reload, URL-KVO/native session persistence and uninterrupted tvOS playback remain pending device observation. Repro: regenerate bridge using `.data/starlight-header-check/prepare.py`, then run `.data/tools/node/bin/node .data/starlight-header-check/check-session.cjs`.
 
 No build, Git push, release or TV installation performed. Consolidate into the unreleased 2.21.9 entry. Supported restoration means the episode's website page, not its timestamp, mute, fullscreen or an unpublished source lacking a canonical catalog page.
+
+## Completion and handoff
+
+The final 2.21.9 Apple TV Release build succeeded (run 42387463543), published packages are present, and the user confirmed the reported workflow works well on TV. Complete the requested implementation stage on that scoped user evidence. No separately enumerated all-site, EOF or restart test matrix is implied. User requests merging feature/teleportal-player into master; preserve immutable release tag f1843dc. Further compatibility work needs a concrete new report.
