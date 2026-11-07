@@ -88,7 +88,7 @@ If Xcode reports a missing libtorrent or TVVLCKit binary, rerun both bootstrap s
 
 The [build workflow](.github/workflows/build.yml) runs **only when a GitHub Release is manually published**. Pushes, tags alone and pull requests do not start builds. Create the release in GitHub's Releases page or with `gh release create`; see [maintainer instructions](docs/DEPLOYMENT.md#maintainers-publish-a-release-manually).
 
-Compilation runs on GitHub-hosted macOS 15 Intel with Xcode 26.2. The workflow builds **Simulator Debug** and **Apple TV Release** without an Apple Account or signing secrets, verifies the IPA, and attaches the unsigned IPA, dependency notices and SHA-256 checksums to the published release after both builds pass. While the build is running, the release does not yet have an installable package.
+Compilation runs on GitHub-hosted macOS 15 Intel with Xcode 26.2. The workflow builds **Apple TV Release** without an Apple Account or signing secrets, verifies the IPA, and attaches the unsigned IPA, dependency notices and SHA-256 checksums to the published release after the device build and package checks pass. While the build is running, the release does not yet have an installable package.
 
 The Simulator package is available in the run's Actions artifacts. App artifacts are retained for 14 days and diagnostics for 7 days; release assets persist. A successful run confirms compilation and package checks, not playback, TV installation or automatic renewal.
 
