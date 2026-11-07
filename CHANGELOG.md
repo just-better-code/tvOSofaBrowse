@@ -2,6 +2,23 @@
 
 Published packages are available for [2.21.1](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.1) and [2.20.4](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.20.4); other entries reconstruct development history and do not represent separately published releases or tags.
 
+## 2.21.2 - 2026-11-07
+
+### Changed
+
+- Allow manual branch builds in GitHub Actions with downloadable unsigned packages before release publication ([Linux build workflow](docs/DEPLOYMENT.md)).
+- Prepare early Ad Block protection before website navigation and reuse compatible ready-state caches and immutable page scripts across launches and navigation ([Ad Block controls](docs/USER_GUIDE.md), [Preparation lifecycle](_Project/Vendor/UBlock/README.md)).
+- Install simple generic cosmetic selectors when their class or ID appears, retain all other selector paths, and index applicable exceptions once per document ([Cosmetic filtering](_Project/Vendor/UBlock/README.md)).
+
+### Fixed
+
+- Show a dark metallic waiting screen with a native spinner during initial filter preparation and first-page loading ([Ad Block controls](docs/USER_GUIDE.md)).
+- Remove duplicate backgrounds around native glass menu buttons while retaining their system focus appearance ([Interface style](docs/agent/TVOS_STYLE_GUIDE.md)).
+- Reuse unchanged native filter artifacts, overlap conversion with bounded compilation through four WebKit stores, and coalesce conditional filter updates ([Preparation lifecycle](_Project/Vendor/UBlock/README.md)).
+- Read the network engine bundle once per preparation or restoration operation ([Network preparation](_Project/Vendor/UBlock/README.md)).
+- Cancel obsolete extended-rule parsing at input-line boundaries without waiting on the main queue ([Preparation lifecycle](_Project/Vendor/UBlock/README.md)).
+- Preserve oversized native rule sets and their ordered exceptions instead of truncating compatible rules, and reject corrupt or obsolete replacement caches ([Native converter](_Project/Vendor/AdGuardConverter/README.md), [Implementation evidence](docs/agent/DEVELOPMENT_HISTORY.md)).
+
 ## 2.21.1 - 2026-10-16
 
 ### Changed

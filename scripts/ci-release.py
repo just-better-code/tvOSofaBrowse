@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate release tags and unsigned Apple TV packages without Apple tools."""
+"""Validate app versions, release tags and unsigned Apple TV packages without Apple tools."""
 
 import argparse
 import pathlib
@@ -13,12 +13,14 @@ import zipfile
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
-def version(tag):
+def version(tag=None):
     project = (ROOT / "_Project/Browser.xcodeproj/project.pbxproj").read_text()
     versions = re.findall(r"MARKETING_VERSION = ([^;]+);", project)
     if len(versions) != 2 or len(set(versions)) != 1:
         raise ValueError("Debug and Release must have the same MARKETING_VERSION")
-    if not re.fullmatch(r"v\d+\.\d+\.\d+", tag) or tag != "v" + versions[0]:
+    if not re.fullmatch(r"\d+\.\d+\.\d+", versions[0]):
+        raise ValueError("MARKETING_VERSION must use major.minor.patch")
+    if tag is not None and (not re.fullmatch(r"v\d+\.\d+\.\d+", tag) or tag != "v" + versions[0]):
         raise ValueError(f"Release tag must be v{versions[0]}")
     print(versions[0])
 
@@ -75,7 +77,7 @@ def verify(path, expected):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("version").add_argument("tag")
+    commands.add_parser("version").add_argument("tag", nargs="?")
     package = commands.add_parser("verify")
     package.add_argument("ipa", type=pathlib.Path)
     package.add_argument("version")

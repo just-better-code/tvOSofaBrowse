@@ -5257,6 +5257,10 @@ globalThis.browserPreprocessUBlock = function(text) {
     return out;
 };
 globalThis.browserCompileUBlockBatches = function*(lists, library) {
+    const checkCancelled = () => {
+        if (globalThis.browserExtendedPreparationCancelled?.() === true)
+            throw new Error('Preparation superseded');
+    };
     const resources = new Map(), aliases = new Map();
     for (const entry of library) {
         resources.set(entry.name, entry);
@@ -5265,10 +5269,12 @@ globalThis.browserCompileUBlockBatches = function*(lists, library) {
     const parser = new AstFilterParser({ nativeCssHas: false, canFilterResponseBody: true });
     const records = [], stats = {}, rejected = {};
     for (const list of lists) {
+        checkCancelled();
         const counts = { cosmetic:0, scriptlet:0, unsupported:0, network:0 };
         stats[list.id] = counts;
-        let lineNumber = 0;
+        let lineNumber = 0, inputLineIndex = 0;
         for (const raw of browserPreprocessUBlock(list.text).split(/\r?\n/)) {
+            if ((inputLineIndex++ & 255) === 0) checkCancelled();
             lineNumber++;
             if (raw.trim() === '' || /^[!\[]/.test(raw)) continue;
             // Preprocessor/include directives must not leak inactive branches.
@@ -5308,7 +5314,9 @@ globalThis.browserCompileUBlockBatches = function*(lists, library) {
             records.push(record);
             if (records.length === 512) yield records.splice(0);
         }
+        checkCancelled();
     }
+    checkCancelled();
     if (records.length !== 0) yield records.splice(0);
     parser.finish();
     return {stats, rejected};

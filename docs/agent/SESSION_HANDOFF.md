@@ -27,7 +27,7 @@ There is no unfinished release operation. Do not create duplicate releases, move
 ## Local setup that Git does not transfer
 
 - Install/authenticate GitHub CLI if managing releases. Publishing these workflows may require the `workflow` scope; use `gh auth login -s workflow` or refresh an existing account's scope interactively.
-- For code and GitHub builds, a Linux computer is sufficient. The build itself runs on GitHub-hosted macOS and is triggered only by manual release publication; push, tags alone and PRs do not build.
+- For code and GitHub builds, a Linux computer is sufficient. The build itself runs on GitHub-hosted macOS. Manual workflow dispatch builds branch artifacts; manual release publication also uploads release assets. Push, tags alone and PRs do not build.
 - For local Xcode/device work on a Mac, transfer private `scripts/Deployment.local.env` and `_Project/Browser/Config/Signing.local.xcconfig` separately and securely only if needed. The former contains the configured device UUID and expected bundle identity. Never commit them. Preserve their effective settings and obtain authorization before physical-TV access.
 - Download media dependencies with the two bootstrap scripts when needed. The source index replaces local `.references/` checkouts; `.data/`, generated graphs, copied containers and raw diagnostics are intentionally not transferred through Git.
 - For the home-Linux signing host, follow [DEPLOYMENT.md](../DEPLOYMENT.md). atvloadly's private persistent data is separate from the source repository.

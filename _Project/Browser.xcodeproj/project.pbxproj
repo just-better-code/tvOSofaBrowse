@@ -27,6 +27,8 @@
 		A1B49A5D2D69F100001D58A1 /* WebCoreNSURLSessionTaskTransactionMetrics+AddPrivacyStance.m in Sources */ = {isa = PBXBuildFile; fileRef = A1B49A5C2D69F100001D58A1 /* WebCoreNSURLSessionTaskTransactionMetrics+AddPrivacyStance.m */; };
 		A1B49A632D6A3800001D58A1 /* BrowserWebView.m in Sources */ = {isa = PBXBuildFile; fileRef = A1B49A622D6A3800001D58A1 /* BrowserWebView.m */; };
 		ADBB00000000000000000003 /* BrowserAdBlockConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADBB00000000000000000004 /* BrowserAdBlockConverter.swift */; };
+		ADB600000000000000000001 /* BrowserNetworkFilterEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADB600000000000000000002 /* BrowserNetworkFilterEngine.swift */; };
+		ADB600000000000000000003 /* BrowserNativeRuleConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADB600000000000000000004 /* BrowserNativeRuleConverter.swift */; };
 		ADBB00000000000000000005 /* ContentBlockerConverter in Frameworks */ = {isa = PBXBuildFile; productRef = ADBB00000000000000000006 /* ContentBlockerConverter */; };
 		A1B49A682D6AD500001D58A1 /* UIApplication+BrowserSelectPressForwarding.m in Sources */ = {isa = PBXBuildFile; fileRef = A1B49A672D6AD500001D58A1 /* UIApplication+BrowserSelectPressForwarding.m */; };
 		A1B49A842D6D2000001D58A1 /* BrowserDOMInteractionService.m in Sources */ = {isa = PBXBuildFile; fileRef = A1B49A832D6D2000001D58A1 /* BrowserDOMInteractionService.m */; };
@@ -113,6 +115,8 @@
 		A1B49A5C2D69F100001D58A1 /* WebCoreNSURLSessionTaskTransactionMetrics+AddPrivacyStance.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "WebCoreNSURLSessionTaskTransactionMetrics+AddPrivacyStance.m"; sourceTree = "<group>"; };
 		A1B49A622D6A3800001D58A1 /* BrowserWebView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BrowserWebView.m; sourceTree = "<group>"; };
 		ADBB00000000000000000004 /* BrowserAdBlockConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserAdBlockConverter.swift; sourceTree = "<group>"; };
+		ADB600000000000000000002 /* BrowserNetworkFilterEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserNetworkFilterEngine.swift; sourceTree = "<group>"; };
+		ADB600000000000000000004 /* BrowserNativeRuleConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserNativeRuleConverter.swift; sourceTree = "<group>"; };
 		A1B49A642D6A3900001D58A1 /* BrowserWebView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BrowserWebView.h; sourceTree = "<group>"; };
 		A1B49A672D6AD500001D58A1 /* UIApplication+BrowserSelectPressForwarding.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "UIApplication+BrowserSelectPressForwarding.m"; sourceTree = "<group>"; };
 		A1B49A822D6D2000001D58A1 /* BrowserDOMInteractionService.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BrowserDOMInteractionService.h; sourceTree = "<group>"; };
@@ -345,6 +349,8 @@
 				ADBC00000000000000000001 /* UBlockScriptlets.json */,
 				ADBC00000000000000000000 /* UBlockParser.js */,
 				ADBB00000000000000000004 /* BrowserAdBlockConverter.swift */,
+				ADB600000000000000000002 /* BrowserNetworkFilterEngine.swift */,
+				ADB600000000000000000004 /* BrowserNativeRuleConverter.swift */,
 				A1B49A642D6A3900001D58A1 /* BrowserWebView.h */,
 				A1B49A622D6A3800001D58A1 /* BrowserWebView.m */,
 			);
@@ -546,6 +552,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				ADBB00000000000000000003 /* BrowserAdBlockConverter.swift in Sources */,
+				ADB600000000000000000001 /* BrowserNetworkFilterEngine.swift in Sources */,
+				ADB600000000000000000003 /* BrowserNativeRuleConverter.swift in Sources */,
 				A1B49A482D67F2B3001D58A1 /* BrowserTabViewModel.m in Sources */,
 				A1B49A552D68143D001D58A1 /* BrowserMenuCoordinator.m in Sources */,
 				A1B49A922D700030001D58A1 /* BrowserPageActionCoordinator.m in Sources */,
@@ -710,7 +718,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
 				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = LaunchImage;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 3022;
+				CURRENT_PROJECT_VERSION = 3023;
 				EMBED_ASSET_PACKS_IN_PRODUCT_BUNDLE = YES;
 				ENABLE_ON_DEMAND_RESOURCES = NO;
 				FRAMEWORK_SEARCH_PATHS = "";
@@ -724,7 +732,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.21.1;
+				MARKETING_VERSION = 2.21.2;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 			PRODUCT_NAME = "$(TARGET_NAME)";
@@ -743,7 +751,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
 				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = LaunchImage;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 3022;
+				CURRENT_PROJECT_VERSION = 3023;
 				EMBED_ASSET_PACKS_IN_PRODUCT_BUNDLE = YES;
 				ENABLE_ON_DEMAND_RESOURCES = NO;
 				FRAMEWORK_SEARCH_PATHS = "";
@@ -757,7 +765,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.21.1;
+				MARKETING_VERSION = 2.21.2;
 			PRODUCT_NAME = "$(TARGET_NAME)";
 			SCAN_ALL_SOURCE_FILES_FOR_INCLUDES = NO;
 			SWIFT_VERSION = 5.0;

@@ -14,7 +14,10 @@ void BrowserLoadUBlockRuntime(void (^completion)(NSDictionary *));
 void BrowserCheckForAdBlockUpdateIfNeeded(void);
 
 @interface BrowserAdBlockService : NSObject
++ (void)prepareForLaunch;
++ (void)prepareEarlyProtectionForPolicy:(NSString *)policy completion:(void (^)(NSArray *, NSDictionary *, NSError *))completion;
 @property (class, nonatomic, readonly) NSUInteger generation;
+@property (class, nonatomic, readonly) BOOL runtimeCurrent;
 @property (class, nonatomic, readonly) NSDictionary *runtime;
 @property (class, nonatomic, readonly) NSString *runtimeIdentifier;
 @property (class, nonatomic, readonly) NSDictionary *statistics;

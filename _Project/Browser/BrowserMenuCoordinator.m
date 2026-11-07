@@ -288,7 +288,9 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
 
     UIButton *addressButton = [UIButton buttonWithType:UIButtonTypeSystem];
     addressButton.translatesAutoresizingMaskIntoConstraints = NO;
-    addressButton.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.12];
+    // Modern system buttons draw their own rounded glass surface. Painting
+    // another backing on the button leaves rectangular corners behind it.
+    addressButton.backgroundColor = self.usingNativeGlassEffect ? UIColor.clearColor : [UIColor colorWithWhite:1.0 alpha:0.12];
     addressButton.layer.cornerRadius = 16.0;
     addressButton.accessibilityLabel = @"Edit Address";
     addressButton.accessibilityValue = self.addressText;
@@ -327,7 +329,7 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
         UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
         button.tag = 11000 + (NSInteger)index;
         button.enabled = historyEnabledStates[index].boolValue;
-        button.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.12];
+        button.backgroundColor = self.usingNativeGlassEffect ? UIColor.clearColor : [UIColor colorWithWhite:1.0 alpha:0.12];
         button.layer.cornerRadius = 12.0;
         button.accessibilityLabel = historyLabels[index];
         UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:30.0
@@ -367,9 +369,9 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
         UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
         button.tag = 10000 + (NSInteger)index;
         button.enabled = item.enabled;
-        button.backgroundColor = item.toggleStateProvider != nil && item.toggleStateProvider()
+        button.backgroundColor = self.usingNativeGlassEffect ? UIColor.clearColor : (item.toggleStateProvider != nil && item.toggleStateProvider()
             ? [UIColor colorWithRed:0.20 green:0.54 blue:0.90 alpha:0.72]
-            : [UIColor colorWithWhite:1.0 alpha:0.12];
+            : [UIColor colorWithWhite:1.0 alpha:0.12]);
         button.layer.cornerRadius = 12.0;
         UIImageSymbolConfiguration *symbolConfiguration = [UIImageSymbolConfiguration configurationWithPointSize:34.0
                                                                                                            weight:UIImageSymbolWeightMedium];
@@ -658,8 +660,8 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
         item.handler();
         if (item.toggleStateProvider != nil) {
             BOOL isOn = item.toggleStateProvider();
-            button.backgroundColor = isOn ? [UIColor colorWithRed:0.20 green:0.54 blue:0.90 alpha:0.72]
-                                          : [UIColor colorWithWhite:1.0 alpha:0.12];
+            button.backgroundColor = self.usingNativeGlassEffect ? UIColor.clearColor : (isOn ? [UIColor colorWithRed:0.20 green:0.54 blue:0.90 alpha:0.72]
+                                          : [UIColor colorWithWhite:1.0 alpha:0.12]);
             button.accessibilityValue = isOn ? @"On" : @"Off";
         }
     } else {
@@ -708,14 +710,14 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
     }
     if (previousView == self.addressButton) {
         previousView.layer.zPosition = 0.0;
-        previousView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.12];
+        previousView.backgroundColor = self.usingNativeGlassEffect ? UIColor.clearColor : [UIColor colorWithWhite:1.0 alpha:0.12];
         ((UILabel *)[self.addressButton viewWithTag:9898]).textColor = UIColor.whiteColor;
         [self setToolbarIconColor:UIColor.whiteColor forButton:self.addressButton];
     }
     if (nextView == self.addressButton) {
         [nextView.superview bringSubviewToFront:nextView];
         nextView.layer.zPosition = 2.0;
-        nextView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.96];
+        nextView.backgroundColor = self.usingNativeGlassEffect ? UIColor.clearColor : [UIColor colorWithWhite:1.0 alpha:0.96];
         ((UILabel *)[self.addressButton viewWithTag:9898]).textColor = UIColor.blackColor;
         [self setToolbarIconColor:UIColor.blackColor forButton:self.addressButton];
     }
@@ -728,13 +730,13 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
     }
     if ([self.historyButtons containsObject:(UIButton *)previousView]) {
         previousView.layer.zPosition = 0.0;
-        previousView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.12];
+        previousView.backgroundColor = self.usingNativeGlassEffect ? UIColor.clearColor : [UIColor colorWithWhite:1.0 alpha:0.12];
         [self setToolbarIconColor:UIColor.whiteColor forButton:(UIButton *)previousView];
     }
     if ([self.historyButtons containsObject:(UIButton *)nextView]) {
         [nextView.superview bringSubviewToFront:nextView];
         nextView.layer.zPosition = 3.0;
-        nextView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.96];
+        nextView.backgroundColor = self.usingNativeGlassEffect ? UIColor.clearColor : [UIColor colorWithWhite:1.0 alpha:0.96];
         [self setToolbarIconColor:UIColor.blackColor forButton:(UIButton *)nextView];
     }
     [coordinator addCoordinatedAnimations:^{

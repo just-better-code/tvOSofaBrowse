@@ -655,3 +655,237 @@ The user requested a tag and release for application version 2.20.4. Existing ta
 Release title: tvOSofaBrowse 2.20.4. [CI 41901991988](https://github.com/just-better-code/tvOSofaBrowse/actions/runs/41901991988) passed version validation, Simulator Debug, Apple TV Release and asset upload. The published 19,189,997-byte unsigned IPA and notices archive were downloaded; SHA-256 checks passed, as did ZIP, version, arm64 AppleTVOS executable, permissions, framework and license-presence validation. The packaging verifier intentionally checks the dependencies of 2.20.4 rather than requiring the later uBlock assets. Latest remains v2.21.1. Publication on 2026-11-04 does not change the recorded feature implementation date of 2026-10-11. No physical-TV installation, playback or automatic signing renewal was observed.
 
 A sanitized SESSION_HANDOFF.md on master supports continuing on another computer. It records both completed releases, private configuration boundaries and a starter prompt. No conversation transcript, private device identity or signing settings are committed.
+
+
+## 2026-11-07 — Brave preparation lifecycle around uBO: implementation checkpoint
+
+The user requested a deep Brave comparison, then authorized fast parallel implementation
+with subagents. The final direction explicitly retains the existing uBO engines and
+all supported rules; Rust replacement, slim-list substitution and softer first-party
+policy are excluded. Full cold readiness remains a separate target of at most 30 s
+on tvOS 27 with source lists already downloaded. Early protection or cache restoration
+must not be reported as meeting that target.
+
+Read Brave Core at `3281ce16a8846681c7b059be5d49debd97a806e2`, verify key local
+reference files against that revision, and inspect LaunchHelper, navigation policy,
+engine/content-blocker managers, PageData, ScriptFactory and resource downloaders.
+The confirmed adaptation candidates are pre-navigation early readiness, ready-state
+restoration, independent native artifacts, coalesced conditional updates and reusable
+page-script preparation. Keep the original source/trust and website-state safeguards.
+
+Implementation started on `feature/brave-preparation` from clean master
+`248b9dcec59d49a2ccbda11cf2df51e1a2b7c7c7`. Extract the network runtime into its own
+Swift source so subagents can work independently. Add an optional non-truncating
+AdGuard conversion path and a host splitter that preserves later native exceptions.
+Early-navigation and extended-v4/WKUserScript-cache changes are on disk; native
+store dispatch, lazy inputs, source caches and last-good/update integration are still
+in progress. This checkpoint does not establish a compiling or runnable app.
+
+The user explicitly requested durable development checkpoints in case work is
+interrupted. Current ownership, pending integration checks and resume instructions
+are in [the execution plan](plans/brave-preparation-lifecycle.md). Preliminary adapter
+syntax parsing and whitespace checks succeeded for the versions read; final checks
+remain pending. No app build, app tests, Simulator/device action, release, Git remote
+push or measured performance result has occurred. Linux has no local Xcode/tvOS SDK.
+Application version and changelog have not yet been advanced at this checkpoint.
+
+The initial resumable checkpoint was committed as `e312bb1`. Git had no author
+configuration, so use the established public noreply identity from preceding commits
+per command rather than changing global configuration. The user then explicitly asked
+for detailed upcoming implementation instructions sufficient for another agent at
+medium reasoning effort to continue without reconstructing the conversation. Expand
+the execution plan with ownership, selectors, cache schemas, rule-preservation
+invariants, known race/corruption defects, exact integration order, validation limits
+and explicitly deferred work. Add this checkpoint detail requirement to AGENTS.md.
+
+Later integration work regenerates the shipping network bundle through the standard
+asset builder. Static peer review identifies malformed compiled-block reader risks,
+source-cache integrity/provenance gaps, A-to-B-to-A publication races, last-good binding
+and first-success early restoration ordering. These findings must be resolved before
+the source integration is declared complete; no app/runtime verification is implied.
+
+### Source integration completed — 2.21.2, commit 8d7681c
+
+Integrate three subagents' work into `8d7681c` on `feature/brave-preparation`. Add shared
+launch prewarm and a generation-checked early navigation/redirect barrier before the
+ordinary bounded network/strict-document decision. Early readiness may use compatible
+last-successful protection or the complete bundled uBO native artifact with an
+available core/extended runtime. Full readiness separately requires exact current
+identities and no stale network state. Native-only completion does not reload the
+document; explicit rebuild and existing script-upgrade/player safeguards remain.
+
+Cache converted sources and native chunks independently, retain unchanged identifiers,
+and compile through four separate WebKit stores with one active request per shard.
+Enqueue prepared chunks while subsequent source conversion continues and join shared
+in-flight work for final collection. Use canonical case-sensitive HTTP(S) DNS host
+patterns with the existing subdomain and third-party conditions. Add replacement
+native lists before removing superseded identifiers. Extend the local AdGuard API
+with optional non-truncating output and split oversized sources while retaining every
+applicable following exception; unsupported capacity fails instead of dropping rules.
+
+Move network preparation to its own Swift source. Read source text only when the
+relevant ready cache misses, reuse per-source compiled blocks with separate upstream
+readers and a single final freeze, and preserve source-spanning exceptions/badfilter.
+Add canonical JSON integrity, source/engine provenance, balanced-block validation,
+atomic caches, coherent last-good binding, conditional ETag downloads, short update
+coalescing and safe-boundary cancellation. Fix the review-discovered A-to-B-to-A
+publication race, corrupt/empty compiled-block paths, available-file read failures,
+first-success early restoration ordering and current/stale readiness confusion.
+
+Extended v4 separates fresh configuration from complete immutable MAIN/ISOLATED
+sources. Consume a configurable own data property before running scriptlets and reuse
+WKUserScript objects under a 64 MiB UTF-8-source/eight-entry budget. Memory warnings
+clear recoverable script/resource/library caches, leaving active rules installed.
+Retain complete universal delivery; per-frame specialization and generic-selector
+retrieval were not delivered by this integration. Preserve BFcache behavior rather
+than inventing a new document-token protocol. Root also aligned service startup's
+WebKit loader with the host's public/private/staged fallback paths.
+
+Set Debug and Release MARKETING_VERSION to 2.21.2, retain technical build 3022 and
+local signing, and update the single changelog, user guide and component notes. Run
+the standard asset generator through the available Node runtime after the final
+adapter fixes: parser four modules, 174 scriptlet/helper entries, network 20 modules.
+Final static checks accepted JavaScript syntax for runtime/adapter/network/parser/
+domain assets, Python probe AST, exact maintained-adapter inclusion in the shipping
+network bundle, both new Swift Xcode references, matching marketing versions and
+`git diff --check`. The updated macOS probe was maintained but not executed.
+
+Source integration and commit completed within the user's final 15-minute window.
+No Apple SDK compilation, app tests, Simulator interaction, physical-TV action,
+release/tag, merge or remote Git push occurred. The <=30 s full-cold goal, rule-level
+runtime equivalence, real playback behavior and memory/jetsam effects remain
+unverified. The detailed execution plan records exact next validation steps and the
+deferred mechanisms so another agent can resume without reconstructing the chat.
+
+### Follow-up implementation — generic cosmetics and network bundle loading
+
+The user requested commits and clarified that fast subagents should take the next
+implementation steps, then supplied an additional ten-minute window. Adapt Brave's
+class/ID queue and uBO's generic DOM survey/Set-based exception mechanisms around the
+existing engine. In standards-mode documents, defer only simple ASCII generic
+`.class`/`#id` declarations until their exact token is observed. Retain domain-specific,
+escaped, compound and procedural paths, all applicable exceptions, the complete
+universal payload and native CSS. Use cooperative 8 ms batches and retain pending
+work; do not copy upstream survey shutdown/node limits that could omit later rules.
+Quirks documents retain eager CSS to preserve case-insensitive matching.
+
+Peer review resolved duplicate/shared survey timers, missing BFcache resurvey,
+mutation-flood starvation and CSSOM loss after document-root replacement. Changed
+class/ID attributes inspect their element directly; added subtrees use a retained
+walker. Index applicable exception keys by kind once per document, preserving exact
+and wildcard behavior. A separate fast worker removed the second engine-bundle read
+inside each network prepare/restore, passing one immutable resource value into the
+new JS context while retaining the exact previous engine/PSL fingerprint formula.
+
+Read the local Brave `cosmetic_filtering.ts` and uBO `contentscript.js`/
+`cosmetic-filtering.js` implementations before adapting this stage. This implements
+local installation selection, not native on-demand retrieval or smaller per-frame
+injected sources. Keep version 2.21.2 as the same unreleased change set and consolidate
+its changelog entry. Document the remaining shared-source and policy-variant work,
+including memory/generation/order safeguards, in the execution plan.
+
+Static JavaScript syntax and whitespace checks passed; focused peer review found no
+remaining blocking defect in the final changed adapters. No app tests, Apple SDK
+compilation, Simulator/device action or remote push ran. Performance and browser
+equivalence, including the full-cold <=30 s target, remain unverified on tvOS.
+
+The follow-up above is committed as `88d2933`; its final assembled ISOLATED runtime
+also passed syntax parsing without execution. A final bounded stage adds a scoped
+extended-parser cancellation hook, checked every 256 input lines and at source
+boundaries, so network/DNS-only input cannot postpone cancellation until an accepted
+extended-record batch. Exceptions reject partial output. Peer review caught the
+cost of synchronous main-queue generation polling; replace that checker with an
+atomic tag published at all three main-owned generation increment sites. Regenerate
+the parser using the standard asset builder and confirm syntax plus exact maintained
+adapter inclusion. No app tests or Apple build/device work ran.
+
+At the user's request, inspect the original uBlock/third-party branch provenance.
+The remote has master and release/2.20.4 heads; fetch the retained PR #15 head into a
+local tracking ref. Head `451ca21` has zero code differences under `_Project/Browser`
+and `_Project/Vendor` against the current base `248b9dc`; squash `fb46ce4` is already
+an ancestor. Therefore the third-party implementation is in the actual base used
+here. The historical removal entry is retained as history but does not match this
+checkout's code. No feature merge or remote push occurred. The user then requested
+finalization; no further feature scope was started.
+
+
+## 2026-11-07 — Manual branch CI and Linux GitHub CLI
+
+The user requested manual CI builds before release and installation of GitHub CLI
+on Linux. Add workflow_dispatch to the existing build workflow, derive and validate
+the shared semantic marketing version without a tag for manual runs, and retain
+strict release-tag validation for release publication. Build both Simulator Debug
+and Apple TV Release with the existing unsigned packaging and artifact retention.
+Gate the release-upload job to the release event so manual runs only save artifacts.
+Document branch selection, CLI dispatch/download and the default-branch workflow
+registration prerequisite. Keep app version 2.21.2; this changes delivery tooling.
+
+Install the official Linux amd64 gh release after SHA-256 verification. Passwordless
+sudo was unavailable; the user explicitly preferred a graphical password dialog.
+System authorization through pkexec succeeded and the verified binary was installed
+system-wide. Record that reusable preference in AGENTS.md. gh reports version 2.103.3;
+GitHub authentication is not configured. No credentials were requested in chat.
+
+Python AST parsing, workflow YAML parsing, manual-dispatch/release-upload guard
+inspection and whitespace checks passed. No workflow, Apple build, app tests, release,
+Git remote push or physical device action ran. Publishing the workflow to the default
+branch and GitHub authentication remain prerequisites for remote manual dispatch.
+
+
+## 2026-11-07 — First CI build of Brave-inspired preparation
+
+After GitHub authentication, the user authorized remote push/build and explicitly
+withheld installation on TV. Push feature/brave-preparation and manually dispatch
+run [42312524985](https://github.com/just-better-code/tvOSofaBrowse/actions/runs/42312524985)
+at 254b13b. Existing workflow registration allowed dispatch from the feature branch
+without changing master; correct the previously overstated default-branch prerequisite.
+
+Device Release built successfully and the unsigned 2.21.2 IPA passed arm64 AppleTVOS,
+version and packaged-notice checks. Simulator Debug initially failed before source
+compilation when the runner could not resolve github.com for Swift package downloads.
+Rerun only failed jobs on fresh runners; Simulator compilation and packaging then
+succeeded, producing an overall successful run. No app code changed between attempts.
+Release upload was skipped as intended for workflow_dispatch. Download artifacts to
+ignored .data/ci-brave. At the user's request, copy the unsigned IPA to their Downloads
+folder and verify its SHA256 against the CI manifest. Keep personal absolute paths
+and raw logs out of tracked documentation.
+
+No release, tag, merge to master, app tests, Simulator launch or physical-TV discovery,
+installation or launch occurred. The user intends to install the IPA independently;
+no installation/interaction result or <=30-second filter preparation is established.
+
+
+## 2026-11-07 — Dark preparation feedback, native menu surfaces and 2.21.2 release preparation
+
+The user reports the website opened in under ten seconds after independently
+installing 2.21.2; this establishes their observed page-opening time, not measured
+full-cold readiness. Their private photo shows duplicate rectangular backing under
+unfocused native glass menu buttons, while the focused Home appearance is approved.
+Do not publish the photo. The user requested a spinner, preparation text and a dark
+metallic background instead of a blank/white initial page.
+
+Add a native first-navigation backdrop in the shared blue-gray palette with darker
+graphite/metallic tones, a spinner and preparation/opening labels. Track committed
+website content separately from navigation waiting, retain the backdrop until the
+first website commit, and dismiss it on stop/failure/content-process termination.
+Keep loaded websites visible during background preparation; preserve website CSS,
+protection requirements and document-start script timing. Remove browser-painted
+backing from native system address/history/toolbar buttons when glass is available,
+including focus transitions; retain legacy surfaces on older systems. This adapts
+UIKit's system-owned control surfaces rather than replacing the accepted focus look.
+See Apple's UIKit new-design session and UIButton configuration documentation.
+
+Source commit dc574c3 passed both Device Release and Simulator Debug builds in
+[Actions run 42317274608](https://github.com/just-better-code/tvOSofaBrowse/actions/runs/42317274608).
+The downloaded Device package checksum matches its manifest and Info.plist confirms
+2.21.2/build 3023 for AppleTVOS. Whitespace checks passed. No app tests, Simulator
+interaction, physical-TV work or visual confirmation of these new fixes occurred.
+The earlier <10-second observation belongs to the preceding package, not this UI fix.
+Keep the unreleased marketing version at 2.21.2 and consolidate its changelog entry;
+advance only the technical build from 3022 to 3023 to distinguish installations.
+
+The user explicitly authorized pushing, merging their PR #17 and publishing 2.21.2.
+The branch build passed before final documentation updates. Next, merge the exact
+reviewed head, tag the resulting master commit and manually publish the release;
+wait for verified release assets before reporting an installable package. TV delivery
+remains withheld; the user intends to configure atvloadly updates themselves.

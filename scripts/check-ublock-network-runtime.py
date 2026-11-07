@@ -70,25 +70,25 @@ for name in ('UBlockNetwork.js', 'PublicSuffixList.dat', 'UBlockFilters.txt'):
     'CFBundleExecutable':'Probe', 'CFBundleIdentifier':'org.tvosofabrowse.network-runtime-verification',
     'CFBundlePackageType':'APPL',
 }))
-source = (ROOT / '_Project/Browser/BrowserAdBlockConverter.swift').read_text()
+source = (ROOT / '_Project/Browser/BrowserNetworkFilterEngine.swift').read_text()
 source = source[source.index('private final class BrowserNetworkRuntime'):]
 # Only redirect the cache location; the production queue/VM/swap code is unchanged.
 source = source.replace('FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!',
                         'URL(fileURLWithPath: CommandLine.arguments[1])')
-(ARTIFACT / 'main.swift').write_text('import Foundation\nimport JavaScriptCore\n' + source + HARNESS)
+(ARTIFACT / 'main.swift').write_text('import Foundation\nimport JavaScriptCore\nimport CryptoKit\n' + source + HARNESS)
 run('swiftc', '-swift-version', '5', '-O', '-module-cache-path', '/tmp/browser-swift-cache',
     str(ARTIFACT / 'main.swift'), '-o', str(BUNDLE / 'MacOS/Probe'))
 CACHE.mkdir(parents=True, exist_ok=True)
 for name in ('a', 'b', 'c'):
-    (CACHE / f'network-v3-{name}.json').unlink(missing_ok=True)
+    (CACHE / f'network-v4-{name}.json').unlink(missing_ok=True)
 run(str(BUNDLE / 'MacOS/Probe'), str(ARTIFACT / 'cache'), 'cold')
-cache_file = CACHE / 'network-v3-a.json'
+cache_file = CACHE / 'network-v4-a.json'
 cache = json.loads(cache_file.read_text())
 assert cache['snapshot'] and cache['engineFingerprint']
-(CACHE / 'network-v3-b.json').unlink(missing_ok=True)
+(CACHE / 'network-v4-b.json').unlink(missing_ok=True)
 run(str(BUNDLE / 'MacOS/Probe'), str(ARTIFACT / 'cache'), 'snapshot')
 cache['snapshot'] = '{broken'
 cache_file.write_text(json.dumps(cache))
-(CACHE / 'network-v3-b.json').unlink(missing_ok=True)
+(CACHE / 'network-v4-b.json').unlink(missing_ok=True)
 run(str(BUNDLE / 'MacOS/Probe'), str(ARTIFACT / 'cache'), 'compiled')
 print('Cold, ready-snapshot, corrupt-snapshot/compiled fallback and lifecycle checks passed.')
