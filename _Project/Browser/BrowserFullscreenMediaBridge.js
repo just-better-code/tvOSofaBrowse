@@ -124,9 +124,13 @@ var starlightCatalogRequest = null;
 var starlightCatalogPath = null;
 var starlightPreviousRequest = null;
 function starlightPlayer() {
-    var p = window.player;
-    return window.adt && adt.player && window.starlight && typeof starlight.fetchVideo === 'function' &&
-        p && p.source && p.source.id && p.group && Array.isArray(p.group.playlist) ? p : null;
+    if (!window.adt || typeof adt.player !== 'function') return null;
+    var video = mediaVideo();
+    // adt.player() returns a public API projection, not the internal core.
+    // Starlight attaches that core to its HTML video in the constructor.
+    var engine = video && video.engine;
+    return engine && engine.video === video && engine.source && engine.source.id &&
+        engine.group && Array.isArray(engine.group.playlist) ? engine : null;
 }
 function starlightSourceTitle() {
     var p = starlightPlayer();
@@ -157,13 +161,15 @@ function requestStarlightPrevious() {
     if (!p || !previous) return false;
     if (starlightPreviousRequest) return true;
     var source = p.source, group = p.group, scope = fullscreenTarget, request = {};
+    var loaded = group.playlist.find(function(item) { return item.id === previous.hash; });
+    if (!loaded && (!window.starlight || typeof starlight.fetchVideo !== 'function')) return false;
     starlightPreviousRequest = request;
     // fetchPrevious/get/prev is 404 on the observed server. Resolve the actual
     // preceding hash from the host's published season index and use fetchVideo.
     Promise.resolve().then(function() {
-        return starlight.fetchVideo(previous.hash, window.PAGE_REFERER, window.sld_locale || 'ua');
+        return loaded || starlight.fetchVideo(previous.hash, window.PAGE_REFERER, window.sld_locale || 'ua');
     }).then(function(resolved) {
-        if (starlightPreviousRequest !== request || window.player !== p || p.source !== source || p.group !== group ||
+        if (starlightPreviousRequest !== request || starlightPlayer() !== p || p.source !== source || p.group !== group ||
             (scope && fullscreenTarget !== scope) || !resolved || resolved.id !== previous.hash) return;
         var existing = group.playlist.find(function(item) { return item.id === resolved.id; });
         var index = group.playlist.indexOf(source);
