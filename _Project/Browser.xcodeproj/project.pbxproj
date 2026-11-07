@@ -169,6 +169,7 @@
 		F51920261011000000000001 /* BrowserFullscreenMediaControlsController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BrowserFullscreenMediaControlsController.h; sourceTree = "<group>"; };
 		F51920261011000000000002 /* BrowserFullscreenMediaControlsController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BrowserFullscreenMediaControlsController.m; sourceTree = "<group>"; };
 		F51920261011000000000003 /* BrowserFullscreenMediaBridge.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = BrowserFullscreenMediaBridge.js; sourceTree = "<group>"; };
+		F51920261011000000000007 /* BrowserPlaybackSeek.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BrowserPlaybackSeek.h; sourceTree = "<group>"; };
 		F51920261011000000000006 /* BrowserPlaybackSymbols.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BrowserPlaybackSymbols.h; sourceTree = "<group>"; };
 		ADBC00000000000000000000 /* UBlockParser.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "UBlockParser.js"; path = "../Vendor/UBlock/UBlockParser.js"; sourceTree = "<group>"; };
 		ADBC00000000000000000001 /* UBlockScriptlets.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = "UBlockScriptlets.json"; path = "../Vendor/UBlock/UBlockScriptlets.json"; sourceTree = "<group>"; };
@@ -281,6 +282,7 @@
 				D0A202600000000000000002 /* BrowserNativeStartPageView.h */,
 				D0A202600000000000000003 /* BrowserNativeStartPageView.m */,
 				D0A202600000000000000004 /* BrowserTVAppearance.h */,
+				F51920261011000000000007 /* BrowserPlaybackSeek.h */,
 				F51920261011000000000006 /* BrowserPlaybackSymbols.h */,
 				F51920261011000000000001 /* BrowserFullscreenMediaControlsController.h */,
 				F51920261011000000000002 /* BrowserFullscreenMediaControlsController.m */,
@@ -732,7 +734,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.21.3;
+				MARKETING_VERSION = 2.21.4;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 			PRODUCT_NAME = "$(TARGET_NAME)";
@@ -765,7 +767,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.21.3;
+				MARKETING_VERSION = 2.21.4;
 			PRODUCT_NAME = "$(TARGET_NAME)";
 			SCAN_ALL_SOURCE_FILES_FOR_INCLUDES = NO;
 			SWIFT_VERSION = 5.0;

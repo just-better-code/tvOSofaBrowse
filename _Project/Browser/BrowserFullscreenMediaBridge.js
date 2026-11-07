@@ -119,6 +119,8 @@ function mediaState() {
         volume: v && Number.isFinite(v.volume) ? v.volume : 0, canVolume: !!v,
         canSeekBack: seekable || !!mediaHandlers.seekbackward,
         canSeekForward: seekable || !!mediaHandlers.seekforward,
+        seekAtStart: seekable ? current <= v.seekable.start(0) : !!v && current <= 0,
+        seekAtEnd: seekable ? current >= v.seekable.end(v.seekable.length - 1) : duration > 0 && current >= duration,
         canPrevious: !!mediaHandlers.previoustrack || (current > 5 && (seekable || !!mediaHandlers.seekto)),
         canNext: !!mediaHandlers.nexttrack,
         canRestart: seekable || !!mediaHandlers.seekto,
@@ -210,8 +212,14 @@ function performMediaCommand(command, value, request) {
         v.muted = !v.muted;
         return true;
     }
+    // Resolve percentages in the actual video frame, independently of native polling.
+    var percentSeek = command === 'seekPercent';
+    if (percentSeek) {
+        if (!Number.isFinite(value) || Math.abs(value) !== 0.1 || !(state.duration > 0)) return false;
+        value *= state.duration;
+    }
     if (command === 'toggle') action = state.paused ? 'play' : 'pause';
-    else if (command === 'seek' && Number.isFinite(value) && Math.abs(value) <= 120) {
+    else if ((command === 'seek' || percentSeek) && Number.isFinite(value) && (percentSeek || Math.abs(value) <= 120)) {
         action = value < 0 ? 'seekbackward' : 'seekforward'; details.seekOffset = Math.abs(value);
     } else if (command === 'previous') {
         action = 'previoustrack';

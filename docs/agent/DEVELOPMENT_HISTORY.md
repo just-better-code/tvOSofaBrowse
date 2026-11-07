@@ -968,3 +968,12 @@ running browser prevents replacement. Record reboot-then-update success as their
 observation; a running-app dependency remains a hypothesis pending targeted checks.
 Investigate atvloadly v0.8.2 settings and plumesign help without operating the TV.
 No device reboot, force quit, install or launch is performed by the agent.
+
+
+## 2026-11-07 — Unified seek steps and accelerating repeats (2.21.4)
+
+Implement the agreed seek-control plan on `feature/seek-controls`: single triangles use ±10 seconds, double triangles use ±10% of full duration in VLC and iframe controls. Keep the 0.6-second hold threshold; after recognition perform the first jump and reduce the repeat interval linearly from 0.8 to 0.3 seconds over five seconds using a shared monotonic-time policy. Step sizes remain constant. Release/cancellation, focus loss, media changes and deactivation cancel repetition. Preserve native gesture cancellation and VLC seek-hold priority over its context menu.
+
+Add an internal `seekPercent` command (±0.1), resolved in the actual video frame before the existing Media Session/HTML-video dispatch. This avoids the 120-second limit on ordinary second-based commands. Preserve session/frame validation and website-owned iframe playback. Report seekable boundary flags through the existing sanitized state so native repeats can stop at live-window edges. Unknown duration disables percentage controls. VLC retains accumulated held targets, pending seek targets during buffering and EOF reopening, with shared duration clamping.
+
+Set Debug and Release marketing versions to 2.21.4; retain the technical build number. Update the guide and replace outdated torrent seek documentation. This is an unreleased development change; no tag or release is created. Validation is limited to source/diff inspection. No tests, build, Simulator delivery, physical-TV work or interaction verification were requested or performed. The original reason held seeking did not work in the user's session is not established by source inspection; real remote interaction remains unverified.
