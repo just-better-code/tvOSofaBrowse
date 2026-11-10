@@ -6,6 +6,7 @@
 #import "BrowserTVAppearance.h"
 #import "BrowserPlaybackSymbols.h"
 #import "BrowserPlaybackSeek.h"
+#import "BrowserVLCCompressor.h"
 #import "BrowserFullscreenMediaControlsController.h"
 
 #import <TVVLCKit/TVVLCKit.h>
@@ -392,7 +393,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
         }
         BrowserDebugLog(@"[TorrentVLC] webContext cookies=%lu referrer=%d", (unsigned long)stored, referrer.length > 0);
     }
-    self.vlcPlayer = [[VLCMediaPlayer alloc] initWithOptions:@[]];
+    self.vlcPlayer = BrowserVLCCreatePlayer();
     self.vlcPlayer.delegate = self;
     self.vlcPlayer.drawable = self.videoView;
     self.vlcPlayer.media = media;
@@ -835,7 +836,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     previous.delegate = nil;
     [previous stop];
     previous.drawable = nil;
-    VLCMediaPlayer *player = [[VLCMediaPlayer alloc] initWithOptions:@[]];
+    VLCMediaPlayer *player = BrowserVLCCreatePlayer();
     self.vlcPlayer = player;
     self.playbackEnded = NO;
     self.lastReportedState = -1;

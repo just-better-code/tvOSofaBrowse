@@ -1066,3 +1066,43 @@ The extended production three-frame DOM harness passes known-episode 91 URL sync
 ### 2.21.9 release and user confirmation
 
 Publish immutable v2.21.9 on f1843dc from feature/teleportal-player. GitHub run 42387463543 completed successfully with Apple TV Release only; confirm the unsigned IPA, notices and SHA256SUMS are attached to the public release. The user subsequently reported “все чудово працює”. Record this as successful user confirmation of the reported playback workflow on TV; no agent-controlled device interaction, exhaustive other-player checks or separately enumerated restart/EOF cases were observed. This supersedes the earlier unreleased status and pending user confirmation for the reported workflow. The user then requested merging the branch into master. Keep the published tag unchanged.
+
+
+## 2026-11-10 — Isolated Debug VLC compressor prototype
+
+Implement the agreed prototype on a separate branch based on master `70f74eb`.
+The user subsequently clarified that automatic iframe-stream discovery and
+working website episode transitions are the primary goal, with compression an
+optional follow-on. Rename the branch to `research/automatic-web-video-vlc`;
+the selected scope remains the isolated compressor prototype plus a detailed
+website integration investigation, not re-enabling iframe takeover now.
+
+Create a common `BrowserVLCCreatePlayer` factory for initial playback and EOF
+reopening. Without an explicit Debug launch argument, including all Release
+builds, it returns the original shared-library player. Explicit Debug ON/OFF runs
+use a private library, PCM and an allowlisted numeric logger. The enabled path
+checks the core build identity and dynamically resolves checked variable access
+and retained child enumeration. Match the unique existing audio output before
+assigning media, set/read back the seven compressor parameters and append the
+filter while preserving other filters on both player and output. Discard the
+unplayed experimental player on setup failure; do not keep partial settings in
+the normal fallback. No offsets into private player structures are used.
+
+The existing local binary has a provenance discrepancy: the bootstrap URL names
+VLC `79128878`, while every local slice contains VLC `3.0.23` and build changeset
+`3.0.23-2-47-g738f288a1c`. Bootstrap skips existing binaries, so do not assert
+that these local files came from that archive or that this describes released
+packages. Fetch exact VLC/VLCKit Git revisions into ignored `.references/` with
+user authorization. Relevant headers, player/object code, audio output/filter
+management and compressor source are unchanged between `79128878` and the public
+3.0.23 tag (`578d28f6`). The local build commit did not resolve through GitHub's
+public commit API (HTTP 422); its patches are not established. Guard the
+experiment to the reviewed archive changeset family or the exact local build.
+Retain upstream attribution for the small namespaced ABI header.
+
+Source/diff inspection only; no app tests, build, Simulator/TV work, listening
+comparison, Git remote push or release. This Linux host has no Xcode. Neither
+runtime filter activation nor audible effect is established. Keep version
+2.21.9 because this disabled Debug research stage delivers no public feature or
+logical bug fix. Exact launch arguments, reason codes and the pending runtime
+matrix are recorded in [the prototype plan](plans/vlc-compressor.md).
