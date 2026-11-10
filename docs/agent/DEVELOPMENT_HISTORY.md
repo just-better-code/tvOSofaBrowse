@@ -1106,3 +1106,86 @@ runtime filter activation nor audible effect is established. Keep version
 2.21.9 because this disabled Debug research stage delivers no public feature or
 logical bug fix. Exact launch arguments, reason codes and the pending runtime
 matrix are recorded in [the prototype plan](plans/vlc-compressor.md).
+
+
+### Automatic stream discovery is the primary feature; inspect the other sites
+
+The user emphasized that the accidental automatic stream capture, rather than
+compression, is the main feature to investigate. Clarify that the prior
+"old PlayerJS" wording meant the previously investigated example, not an
+assessment that PlayerJS itself is obsolete. Starlight recognition/title/Next
+are not Teleportal-only, but its catalog-backed Previous and canonical episode
+URL provider are Teleportal-specific; prior user confirmation does not establish
+other hosts or VLC episode switching.
+
+Read the retained failed iframe experiment and the current all-frame/native
+paths. Preserve the distinction between discovering a direct element URL,
+successfully playing it in VLC and keeping the website's episode lifecycle.
+The old frame watcher, generic Media Session commands and the end-seek/play
+hypothesis did not establish working transitions. The new design separates
+discovery from renderer ownership and the website's episode owner, retains a
+session across child-document replacement, and latches each transition to avoid
+duplicate Next/EOF actions. Do not reactivate the reverted path in this stage.
+
+Inspect the other saved examples and download their public host/player code
+without cookies into ignored `.references/web-video-interception/`. A embeds
+single-source PlayerJS but its outer host supplies its own Next/Previous,
+progress tracker, `end` consumer and cancellable autonext countdown. C's outer
+host instead consumes `finish`/`next` and navigates its iframe through its own
+playlist. D's public `player-control` component uses an open shadow root,
+`nextEpisode(true)`, an `ended` consumer respecting autoswitch, and correlated
+`tortuga:getInfo` queries for progress. Its actual leaf source/protocol still
+needs inspection before implementing takeover there. B's current public host
+still embeds the saved path, but that embed returns a short nginx 404 HTML body;
+stop this retrieval path without claiming player incompatibility.
+
+Record source hashes, concrete JS/native/session interfaces, per-owner routes,
+progress and completion responsibilities, website fallback and six staged
+acceptance gates in [the integration plan](plans/automatic-web-video-vlc.md).
+Automatic candidates require a known main-content contract; unknown owners or
+Blob/MSE/DRM stay in the website until a compatible route is established. A's
+website countdown must remain accessible rather than hidden behind VLC.
+Compression remains a follow-on after successful stream handoff and transitions.
+
+No website bridge behavior, iframe routing or adapter implementation is changed
+by this research. No app tests, builds, live WebKit/VLC playback, Simulator/TV
+interaction, listening, release or remote push. Check staged diffs for formatting
+and review source only. Retain app version 2.21.9. Save the user's reusable
+instruction to clone research repositories into ignored `.references/` for local
+searches instead of repeatedly downloading individual upstream source files.
+
+
+### Use and refine the user-provided Linux WebKit stand
+
+The user supplied the local `webkit-testbench` skill and explicitly authorized
+fixing an inconvenient or broken stand during this work. Read that skill and
+its scenario instructions; use ephemeral browser profiles and the current
+production bridge extractor. Sandboxed browser launch failed with a closed
+context; the approved unsandboxed launch succeeded. No TV or Simulator access
+was involved. Also apply the skill-creator workflow for the focused local skill
+update, without changing invocation policy or installing other dependencies.
+
+Collect passive live DOM inventories of A/C/D. C exposes `PlayerNextCustom` and
+an iframe video with no source; D instantiates its component, data and open
+shadow roots. With the production bridge, helper functions exist in their
+observed child documents. A's snapshot did not acquire a ready page/player.
+The C interaction scenario acquired no visible video box and no active episode
+LI; it delivered no Play click. One direct Next submission produced no selected
+episode change and the page logged a null playerfr access. This is insufficient
+readiness evidence, not proof of an injection regression or working transport.
+Stop that path instead of repeating the action blindly.
+
+Add frame-existing/attached/navigated/detached logging to the ignored local
+skill runtime, with stable per-run frame IDs, cached parent IDs and increasing
+document generations, also on native stub messages. Update its documentation to
+wait for the actual asynchronously populated playlist before invoking transport,
+and to arm child-navigation observation before the action. The instrumented D
+run recorded one existing frame, four attachments, five navigations and one
+detachment, but no media source or transition. Node syntax inspection of the
+runtime and the skill structure validator passed. No separate app tests or
+native mocks/acceptance replies were added. Exact environment, source fingerprint,
+private scripts/runs and limitations are in the integration plan.
+
+No VLC playback, stream handoff, natural EOF, audible effect, tvOS interaction
+or successfully switched episode is established. The primary deliverable remains
+the staged integration plan plus the already isolated Debug compressor prototype.

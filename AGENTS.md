@@ -48,6 +48,8 @@
 - Console input and results can arrive late. Confirm output before repeating a command; an absent initial screenshot is not proof that nothing executed. Do not retry an ineffective Simulator Remote or keyboard-delivery path without changed conditions or a new request. Delivery alone is not proof of app interaction.
 - Read `docs/USER_GUIDE.md` for existing user-facing controls, `docs/agent/ROADMAP.md` for planned and rejected directions, and `docs/agent/DEVELOPMENT_HISTORY.md` when past decisions or verification matter. Read only what the task needs.
 - Use the [research source index](docs/agent/RESEARCH_SOURCES.md) for Firefox, Brave, uBlock and torrent reference provenance. Local `.references/` snapshots remain available for targeted reading; they may be incomplete or unpinned. Firefox TV is an Android/Fire TV reference, not a tvOS engine. Preserve upstream source integrity and the local saved libtorrent API reference.
+- For upstream research, download the needed Git repositories into ignored `.references/` and use local searches instead of repeatedly downloading individual source files. Pin the relevant revision and preserve the upstream files unchanged.
+- For Linux WebKit investigations, use the local `webkit-testbench` skill when installed. Its Playwright WebKit and native stubs do not verify tvOS, UIKit or VLC; keep profiles, raw logs and scenarios ignored under `.data/`.
 - Repository skills live under `.codex/skills/`. Load a skill's `SKILL.md` when its workflow applies; keep reusable workflow details and supporting scripts with the skill.
 - `.codex/hooks.json` configures a `PreToolUse` hook for `Bash` running `graphify hook-check`; a hook notice does not require a graph query or rebuild, or establish that the graph is current.
 
