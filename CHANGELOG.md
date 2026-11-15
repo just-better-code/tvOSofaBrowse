@@ -2,6 +2,25 @@
 
 Published packages are available for [2.21.9](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.9), [2.21.8](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.8), [2.21.6](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.6), [2.21.5](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.5), [2.21.4](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.4), [2.21.3](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.3), [2.21.2](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.2), [2.21.1](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.1) and [2.20.4](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.20.4); other entries reconstruct development history and do not represent separately published releases or tags.
 
+## 2.22.0 - 2026-11-15
+
+### Changed
+
+- Show the installed build number and available CI revision beside the application version so test updates can be identified in the menu ([Main menu](docs/USER_GUIDE.md#main-menu)).
+- Distinguish develop installations with a purple compass icon and a BETA badge ([Develop setup](docs/DEPLOYMENT.md#automatic-test-app-alongside-stable)).
+
+- Identify native playback with VLC and website playback with Website in their headers ([Playback controls](docs/USER_GUIDE.md)).
+
+### Added
+
+- Try direct HTTP(S) iframe video in shared VLC through an opt-in experiment in Debug and develop builds, with bounded startup and return to the website; keep episode selection on the site ([Playback controls](docs/USER_GUIDE.md), [Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
+
+### Fixed
+
+- Route experimental iframe capture through the main document and await the original video’s pause acknowledgement before enabling VLC audio ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
+- Restore Center capture of controlled iframe video when the VLC experiment is enabled, propagating the setting to current and newly loaded frames ([Playback controls](docs/USER_GUIDE.md)).
+- Prioritize Back dismissal of visible VLC over the underlying iframe fullscreen, restore the page layout without waiting for a child reply, and require video output before accepting experimental capture ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
+
 ## 2.21.9 - 2026-11-07
 
 ### Changed

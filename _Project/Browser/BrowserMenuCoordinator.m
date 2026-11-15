@@ -2054,10 +2054,30 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
         @{ @"id": @"2", @"title": @"Background Probe" },
         @{ @"id": @"3", @"title": @"Inspect WebKit Media Prefs" },
     ];
+    if (BrowserPreferencesStore.iframeVLCExperimentAvailable)
+        settings.rows = [settings.rows arrayByAddingObject:@{@"id":@"4", @"title":@"Iframe Video in VLC (Experimental)"}];
+    [self.host browserPresentViewController:settings];
+}
+
+- (void)presentIframeVLCExperiment {
+    __weak typeof(self) weakSelf = self;
+    BrowserOptionsViewController *settings = [[BrowserOptionsViewController alloc]
+        initWithEnabledProvider:^BOOL { return BrowserPreferencesStore.iframeVLCExperimentEnabled; }
+        toggleEnabled:^{
+            [NSUserDefaults.standardUserDefaults setBool:!BrowserPreferencesStore.iframeVLCExperimentEnabled
+                forKey:@"BrowserIframeVLCExperiment"];
+            NSString *script = [NSString stringWithFormat:@"window.__browserTVSetIframeVLCExperiment && window.__browserTVSetIframeVLCExperiment(%@)",
+                BrowserPreferencesStore.iframeVLCExperimentEnabled ? @"true" : @"false"];
+            [weakSelf.host.browserWebView evaluateJavaScript:script
+                completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
+        } activateRow:nil];
+    settings.toggleTitle = @"Iframe Video in VLC (Experimental)";
+    settings.rows = @[];
     [self.host browserPresentViewController:settings];
 }
 
 - (void)presentDebugReport:(NSUInteger)index {
+    if (index == 4) { [self presentIframeVLCExperiment]; return; }
     switch (index) {
     case 0: {
         NSArray<NSString *> *recent = BrowserDebugRecentLogs();
@@ -2204,12 +2224,20 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
 - (NSString *)advancedMenuFooterText {
     NSDictionary *infoDictionary = NSBundle.mainBundle.infoDictionary;
     NSString *version = infoDictionary[@"CFBundleShortVersionString"];
-    BOOL hasVersion = [self stringHasVisibleContent:version];
-
-    if (hasVersion) {
-        return [NSString stringWithFormat:@"Version %@", version];
-    }
-    return @"";
+    if (![self stringHasVisibleContent:version]) return @"";
+    BOOL beta = [infoDictionary[@"CFBundleDisplayName"] isEqual:@"tvOSofaBrowse Test"];
+    NSMutableArray<NSString *> *parts = [NSMutableArray arrayWithObject:
+        [NSString stringWithFormat:@"%@ %@", beta ? @"Beta" : @"Version", version]];
+    NSString *build = infoDictionary[@"CFBundleVersion"];
+    if ([self stringHasVisibleContent:build])
+        [parts addObject:[NSString stringWithFormat:@"Build %@", build]];
+    NSURL *revisionURL = [NSBundle.mainBundle URLForResource:@"BuildRevision" withExtension:@"txt"];
+    NSString *revision = revisionURL ? [[NSString stringWithContentsOfURL:revisionURL encoding:NSUTF8StringEncoding error:nil]
+        stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] : nil;
+    NSCharacterSet *nonHex = [[NSCharacterSet characterSetWithCharactersInString:@"0123456789abcdefABCDEF"] invertedSet];
+    if (revision.length == 40 && [revision rangeOfCharacterFromSet:nonHex].location == NSNotFound)
+        [parts addObject:[revision substringToIndex:7]];
+    return [parts componentsJoinedByString:@" · "];
 }
 
 @end
