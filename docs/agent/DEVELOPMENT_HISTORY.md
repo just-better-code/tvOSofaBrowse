@@ -1269,3 +1269,28 @@ No app tests, Xcode/CI build, Simulator/TV interaction, installation, Git remote
 push or playback observation ran. Native frame API support, stream authentication,
 startup/audio and restoration are unverified until a built trial is observed.
 The updated plan checkpoint records implementation interfaces and next checks.
+
+
+## 2026-11-15 — Separate develop icon
+
+The user requested a slightly different beta icon. Add the sibling asset catalog
+`_Project/Browser/Assets.xcassets/Beta App Icon & Top Shelf Image.brandassets`,
+retaining the original white compass layers and supplying a violet background
+with an amber BETA badge. Provide Small (400x240) and Large (1280x768) stacks.
+Use the built-in image_gen editor for the background, then standard asset sizing
+and a flattened preview for visual inspection. Original stable assets and Xcode
+configuration remain unchanged. The develop workflow selects the beta brand with
+one ASSETCATALOG_COMPILER_APPICON_NAME override; that CI change also needs to enter
+default before workflow-changing targets can pass the existing release preflight.
+Keep this change isolated so it can be cherry-picked without the VLC prototype.
+Consolidate with unreleased 2.22.0; no separate version/release is introduced.
+
+Image prompt (built-in image_gen; original blue background was the edit target):
+"Make a modest beta variant: change the blue gradient to a rich saturated violet
+gradient (#5635BB upper left to #8054DA lower right). Keep a flat edge-to-edge 5:3
+rectangle without rounded outer corners, margins, shadows or central objects.
+Add a compact amber badge near the upper right with bold deep-purple uppercase
+BETA. A white compass is composited separately. No other text or extra borders."
+Final project assets are in the beta brand catalog above; private preview stays
+under `.data/icon-preview/`. Visual preview and JSON/Bash/diff syntax inspection
+only; no app tests, Xcode build, device action or Git remote push performed.

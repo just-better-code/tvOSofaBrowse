@@ -4,6 +4,10 @@ Published packages are available for [2.21.9](https://github.com/just-better-cod
 
 ## 2.22.0 - 2026-11-15
 
+### Changed
+
+- Distinguish develop installations with a purple compass icon and a BETA badge ([Develop setup](docs/DEPLOYMENT.md#automatic-test-app-alongside-stable)).
+
 ### Added
 
 - Try direct HTTP(S) iframe video in shared VLC through an opt-in experiment in Debug and develop builds, with bounded startup and return to the website; keep episode selection on the site ([Playback controls](docs/USER_GUIDE.md), [Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
