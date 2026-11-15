@@ -10,11 +10,11 @@
       "localizedDescription": "Automatic PR test builds, installed separately from stable.",
       "versions": [
         {
-          "version": "2.21.9",
-          "buildVersion": "2.1",
-          "date": "2026-11-15T10:33:03Z",
-          "downloadURL": "https://github.com/just-better-code/tvOSofaBrowse/releases/download/test-pr-20-43704149003-1/tvOSofaBrowse-test-2.21.9-2.1-unsigned.ipa",
-          "size": 20586242
+          "version": "2.22.0",
+          "buildVersion": "3.1",
+          "date": "2026-11-15T10:54:09Z",
+          "downloadURL": "https://github.com/just-better-code/tvOSofaBrowse/releases/download/test-pr-20-43705866678-1/tvOSofaBrowse-test-2.22.0-3.1-unsigned.ipa",
+          "size": 20591363
         }
       ]
     }
@@ -22,9 +22,9 @@
   "_tvOSofaBrowse": {
     "channel": "develop",
     "pullRequest": 20,
-    "commit": "6a9571ce1a9fa0ab570b9c9db7e254c5fdf8b720",
-    "headCommit": "a95e98734fa6a428fc41aa74e4a58f20c0abf264",
-    "runNumber": 2,
+    "commit": "33702c99dfe294cca5471ce6f8fe45be7e63fde1",
+    "headCommit": "6dd2e7c899d90af9ab69554ae4ff2d54128ecac5",
+    "runNumber": 3,
     "runAttempt": 1,
     "publicationAttempt": 1
   }
