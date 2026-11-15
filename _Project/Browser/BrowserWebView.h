@@ -56,6 +56,9 @@ FOUNDATION_EXPORT NSString * const BrowserAdBlockSourceStatusDidChangeNotificati
 @property (nonatomic, readonly) BOOL pageFullscreenActive;
 - (void)evaluateJavaScript:(NSString *)script
         completionHandler:(void (^ _Nullable)(NSString * _Nullable result, NSError * _Nullable error))completion;
+// Evaluate only in the WKFrameInfo that supplied the video offer; never fall back to top.
+- (void)evaluateVideoJavaScript:(NSString *)script frame:(nullable id)frame
+    completionHandler:(void (^)(NSString * _Nullable result, NSError * _Nullable error))completion;
 - (NSString * _Nonnull)runtimeMediaPreferenceReport;
 - (void)setUserAgent:(NSString * _Nullable)userAgent;
 - (void)pauseAllMediaPlayback;
