@@ -1,0 +1,31 @@
+{
+  "name": "tvOSofaBrowse Develop (Apple TV)",
+  "identifier": "org.example.tvosofabrowse.test.source",
+  "apps": [
+    {
+      "name": "tvOSofaBrowse Test",
+      "bundleIdentifier": "org.example.tvosofabrowse.test",
+      "developerName": "just-better-code",
+      "subtitle": "tvOS / Apple TV develop, PR #20",
+      "localizedDescription": "Automatic PR test builds, installed separately from stable.",
+      "versions": [
+        {
+          "version": "2.21.9",
+          "buildVersion": "2.1",
+          "date": "2026-11-15T10:33:03Z",
+          "downloadURL": "https://github.com/just-better-code/tvOSofaBrowse/releases/download/test-pr-20-43704149003-1/tvOSofaBrowse-test-2.21.9-2.1-unsigned.ipa",
+          "size": 20586242
+        }
+      ]
+    }
+  ],
+  "_tvOSofaBrowse": {
+    "channel": "develop",
+    "pullRequest": 20,
+    "commit": "6a9571ce1a9fa0ab570b9c9db7e254c5fdf8b720",
+    "headCommit": "a95e98734fa6a428fc41aa74e4a58f20c0abf264",
+    "runNumber": 2,
+    "runAttempt": 1,
+    "publicationAttempt": 1
+  }
+}
