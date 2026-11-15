@@ -1560,3 +1560,40 @@ IPA as 2.22.0 Build 14.1 before these documentation updates. Keep the unreleased
 2.22.0 entry consolidated. No local native build, Simulator or physical TV work was
 performed. Linux checks plus CI do not verify UIKit child-to-modal rendering,
 first-frame latency or consecutive Next on TV; those observations remain pending.
+
+## 2026-11-15 — Reusable libVLC stand and capture lifecycle corrections
+
+The user reports that UAKino pauses after about a second without visible VLC,
+UASerials loses native capture after Next, and Teleportal Next stops without advancing.
+They did not wait for the 15-second UAKino preparation deadline, so a permanent
+native hang is not established. Fullscreen-retention/per-site preference work is
+explicitly deferred. Move the experiment directly to the main Settings VLC tile,
+replacing Magnifier in Debug/develop while retaining its remote shortcut; remove
+the Debug submenu entry. Ordinary stable builds retain their existing Magnifier tile.
+
+At the user's explicit delegation request, create the tracked reusable stand and
+expand the existing local skill. It uses production source, default app adblock,
+actual Linux libVLC and explicit host state instead of manual optimistic replies.
+See [the runbook](WEBKIT_TESTBENCH.md) and [parity evidence](plans/webkit-testbench-parity.md).
+An early close callback while the modeled modal remains occupied reproduces lost
+recapture; completion delivery permits the next real source to decode. The app now
+uses dismissal completion for explicit close/Next. Preserve an accepted offer serial
+across temporary application inactivity. Separately, a cancelled prepared source
+consumed its automatic attempt forever; clear only that attempt so a later real Play
+can retry. Existing accepted Back/failure suppression remains intact.
+
+Nested decoded-media lifecycle, inactive/active, Play/Pause, completion Next, deliberate
+early-callback failure, cancelled warm-up retry, Back without loops, changed source
+and rollback checks passed. An actual stalled HTTP decoder timed out at 15115 ms,
+then resumed HTML once. Actual Teleportal with adblock decoded episode 92 and then
+93; UASerials with adblock passed initial capture, a ten-second hold and Next with
+a new actual ready decoder. UAKino without adblock passed the same capture/Next path;
+with adblock, its video stayed at readyState 0 before any offer. Attribution remains
+unproven: do not label this a stand defect or a confirmed TV capture failure. Per the
+user's working assumption, investigate our blocker behavior/rules first. The user
+will compare Ad Block ON/OFF on TV. No persistent exceptions were added.
+
+Stand commit d756a57 and app commit 42d9f2e were pushed to beta PR #20. Actions run
+43743814825 successfully compiled and packaged native Release 2.22.0 Build 16.1
+before this documentation update. Keep 2.22.0 consolidated. No device or Simulator
+work was performed; UIKit presentation remains unverified by the Linux evidence.

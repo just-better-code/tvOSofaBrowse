@@ -6,6 +6,7 @@ Published packages are available for [2.21.9](https://github.com/just-better-cod
 
 ### Changed
 
+- Move the experimental web VLC toggle directly into the main Settings tile formerly used by Magnifier, retaining the magnifier remote shortcut ([Main menu](docs/USER_GUIDE.md#main-menu)).
 - Replace VLC track labels with contextual Audio and Subtitles icons and add an icon toggle for automatic iframe fullscreen exit after Next or completion ([Playback controls](docs/USER_GUIDE.md)).
 - Show the containing page's title beside the original monochrome cone icon in the shared VLC player header, retaining file names for torrents ([Playback controls](docs/USER_GUIDE.md)).
 - Show the installed build number and available CI revision beside the application version so test updates can be identified in the menu ([Main menu](docs/USER_GUIDE.md#main-menu)).
@@ -18,7 +19,7 @@ Published packages are available for [2.21.9](https://github.com/just-better-cod
 ### Fixed
 
 - Reject advertisements outside the active HLS video bindings and prevent an unsupported fullscreen source from turning into a late HTTP advertisement capture ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
-- Run experimental Next after VLC dismissal, recapture the next eligible playing source automatically, and open native fullscreen only after muted preparation produces fresh video frames ([Playback controls](docs/USER_GUIDE.md), [Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
+- Run experimental Next after VLC dismissal completes, retain accepted sessions through temporary system interruptions, retry cancelled preparation on new Play, recapture the next eligible playing source automatically, and open native fullscreen only after muted preparation produces fresh video frames ([Playback controls](docs/USER_GUIDE.md), [Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
 - Route experimental iframe capture through the main document and await the original video’s pause acknowledgement before enabling VLC audio ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
 - Capture eligible playing video automatically in the visible active tab, retain explicit Center/fullscreen retries, and stop hidden website playback during native VLC ([Playback controls](docs/USER_GUIDE.md)).
 - Prioritize Back dismissal of visible VLC over the underlying iframe fullscreen, restore the page layout without waiting for a child reply, and require video output before accepting experimental capture ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
