@@ -6,7 +6,7 @@ Published packages are available for [2.21.9](https://github.com/just-better-cod
 
 ### Changed
 
-- Mark the shared VLC player header with the original monochrome cone icon beside the video title ([Playback controls](docs/USER_GUIDE.md)).
+- Show the containing page's title beside the original monochrome cone icon in the shared VLC player header, retaining file names for torrents ([Playback controls](docs/USER_GUIDE.md)).
 - Show the installed build number and available CI revision beside the application version so test updates can be identified in the menu ([Main menu](docs/USER_GUIDE.md#main-menu)).
 - Distinguish develop installations with a purple compass icon and a BETA badge ([Develop setup](docs/DEPLOYMENT.md#automatic-test-app-alongside-stable)).
 

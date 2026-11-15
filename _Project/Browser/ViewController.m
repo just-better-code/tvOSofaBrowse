@@ -977,8 +977,10 @@ static UIColor *kTextColor(void) {
             BOOL anonymous = [info[@"crossOrigin"] isEqualToString:@"anonymous"] && !BrowserMediaSameOrigin(documentURL, URL);
             NSArray *mediaCookies = anonymous ? @[] : BrowserMediaCookies(cookies, URL);
             NSNumber *savedVolume = [owner.preferencesStore playerVolumeForURL:view.request.URL];
+            NSString *pageTitle = view.title;
+            if (!pageTitle.length) pageTitle = view.request.URL.host ?: @"Video";
             BrowserVLCPlayerViewController *player = [[BrowserVLCPlayerViewController alloc]
-                initWithWebVideoURL:URL pageURL:view.request.URL title:info[@"title"]
+                initWithWebVideoURL:URL pageURL:view.request.URL title:pageTitle
                 currentTime:[info[@"currentTime"] doubleValue]
                 volume:[savedVolume ?: info[@"volume"] doubleValue] muted:[info[@"muted"] boolValue]
                 requestHeaders:headers cookies:mediaCookies];

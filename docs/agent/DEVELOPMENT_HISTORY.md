@@ -1449,3 +1449,11 @@ cached template-glyph renderer, and place a 30-point cone before the title with 
 their plain titles. No raster generation, new playback behavior, native build or
 UI verification was performed for this small visual change. Keep it local until
 an explicit push request; Build 11.1 already in CI contains f46c163 and excludes it.
+
+## 2026-11-15 — Use the browser page title in VLC
+
+The user requested the page title from the browser's top bar beside the VLC cone.
+Read the originating BrowserWebView.title when opening shared web playback,
+falling back to its page host, instead of the iframe-supplied document title.
+Torrent file titles remain unchanged. This small local UI change was not built
+or tested; no push was performed under the current hold. Keep version 2.22.0.
