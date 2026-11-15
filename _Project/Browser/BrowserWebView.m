@@ -451,7 +451,7 @@ static NSString *BrowserFrameClickBridgeScript(NSString *secret, NSString *nativ
                     "element.style.cssText += ';position:fixed!important;left:0!important;top:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;z-index:2147483647!important;background:#000!important';"
                     "sendFullscreenToParent('enter');"
                     "notifyFullscreenChange();"
-                    "requestVLCFullscreen(element);"
+                    "mediaVLCRequests = Object.create(null); mediaVLCAttempted = false; requestVLCFullscreen(element);"
                 "}"
                 "function exitFullscreen() {"
                     "if (!fullscreenTarget) { return false; }"
@@ -609,12 +609,16 @@ static NSString *BrowserFrameClickBridgeScript(NSString *secret, NSString *nativ
                 "window.addEventListener('pagehide',window.__browserTVResetClickSequence);"
                 "window.__browserTVFrameAtPoint = function(x, y) { return !!frameAtPoint(x, y); };"
                 "window.__browserTVExitFullscreen = function() {"
-                    "if (exitFullscreen()) { return true; }"
-                    "if (fullscreenFrame && fullscreenFrame.contentWindow) {"
-                        "fullscreenFrame.contentWindow.postMessage({browserTVFullscreenCommand: secret, action: 'exit'}, '*');"
-                        "return true;"
+                    "var exited = exitFullscreen();"
+                    "if (fullscreenFrame) {"
+                        "var frame = fullscreenFrame;"
+                        "if (frame.contentWindow) frame.contentWindow.postMessage({browserTVFullscreenCommand: secret, action: 'exit'}, '*');"
+                        "frame.style.cssText = fullscreenFrameStyle;"
+                        "endTheater(); fullscreenFrame = null; fullscreenFrameStyle = '';"
+                        "sendFullscreenToParent('exit'); notifyFullscreenChange();"
+                        "exited = true;"
                     "}"
-                    "return false;"
+                    "return exited;"
                 "};"
                 "window.__browserTVToggleVideo = toggleVideo;"
                 "window.__browserTVHandleMediaHorizontalPress = handleMediaHorizontalPress;"
@@ -800,41 +804,59 @@ static id BrowserPersistentWebsiteDataStore(void) {
 - (void)userContentController:(id)controller didReceiveScriptMessage:(id)message {
     BrowserWebView *owner = self.owner;
     if (!owner) return;
+    id frame = [message valueForKey:@"frameInfo"];
+    BOOL mainFrame = [[frame valueForKey:@"isMainFrame"] boolValue];
+    NSURLRequest *request = [frame valueForKey:@"request"];
+    id body = [message valueForKey:@"body"];
+    if (![body isKindOfClass:NSDictionary.class] || ![body[@"token"] isEqual:self.token]) return;
+    if (![body[@"session"] isKindOfClass:NSString.class] || [body[@"session"] length] > 128) return;
+    // Configuration only returns a boolean; it may arrive during redirect/commit.
+    // Playback and media-state messages retain exact document URL validation.
+    if (mainFrame && ![body[@"vlcConfigRequest"] boolValue] && ![request.URL isEqual:owner.request.URL]) return;
+    if (mainFrame && [body[@"vlcConfigRequest"] boolValue]) {
+        NSString *script = [NSString stringWithFormat:@"window.__browserTVSetIframeVLCExperiment && window.__browserTVSetIframeVLCExperiment(%@)",
+            BrowserPreferencesStore.iframeVLCExperimentEnabled ? @"true" : @"false"];
+        [owner evaluateJavaScript:script completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
+        return;
+    }
     if (!owner.window) {
         [owner setFullscreenMediaControlsSuspended:YES];
         return;
     }
-    id frame = [message valueForKey:@"frameInfo"];
-    if (![[frame valueForKey:@"isMainFrame"] boolValue]) return;
-    NSURLRequest *request = [frame valueForKey:@"request"];
-    if (![request.URL isEqual:owner.request.URL]) return;
-    id body = [message valueForKey:@"body"];
-    if (![body isKindOfClass:NSDictionary.class] || ![body[@"token"] isEqual:self.token]) return;
-    if (![body[@"session"] isKindOfClass:NSString.class] || [body[@"session"] length] > 128) return;
+    if ([body[@"vlcRequest"] boolValue])
+        BrowserDebugLog(@"[WebVLC] offer=1 child=%d enabled=%d", !mainFrame, BrowserPreferencesStore.iframeVLCExperimentEnabled);
+    BOOL iframeExperiment = mainFrame && [body[@"iframeRelay"] boolValue] && [body[@"vlcRequest"] boolValue];
+    if (!mainFrame || (iframeExperiment && !BrowserPreferencesStore.iframeVLCExperimentEnabled)) return;
     if ([body[@"fullscreenState"] isKindOfClass:NSNumber.class]) {
         [owner updatePageFullscreenActive:[body[@"fullscreenState"] boolValue]];
         return;
     }
     if (owner.loading) return;
     if ([body[@"vlcRequest"] boolValue]) {
-        // Only a direct video from the main document uses VLC. Iframes keep
-        // the website player and its existing episode lifecycle.
+        // Direct offers retain exact WebKit document binding. Experimental relay
+        // context is checked against MessageEvent.origin by the first parent;
+        // subsequent hops are restricted to the selected fullscreen frame.
         NSString *documentString = [body[@"documentURL"] isKindOfClass:NSString.class] ? body[@"documentURL"] : nil;
         NSURL *documentURL = documentString.length > 0 && documentString.length <= 8192 ? [NSURL URLWithString:documentString] : nil;
-        if (![documentURL isEqual:request.URL]) return;
+        if ((!iframeExperiment && ![documentURL isEqual:request.URL]) ||
+            !documentURL.host.length || documentURL.user.length || documentURL.password.length ||
+            ![@[@"http", @"https"] containsObject:documentURL.scheme.lowercaseString]) {
+            BrowserDebugLog(@"[WebVLC] documentMismatch=1 child=%d", !mainFrame); return;
+        }
         NSString *URLString = [body[@"url"] isKindOfClass:NSString.class] ? body[@"url"] : nil;
         NSURL *URL = URLString.length > 0 && URLString.length <= 8192 ? [NSURL URLWithString:URLString] : nil;
-        if (!URL.host.length || ![@[@"http", @"https"] containsObject:URL.scheme.lowercaseString]) return;
+        if (!URL.host.length || URL.user.length || URL.password.length || ![@[@"http", @"https"] containsObject:URL.scheme.lowercaseString]) return;
         double time = [body[@"currentTime"] isKindOfClass:NSNumber.class] ? [body[@"currentTime"] doubleValue] : 0;
         double volume = [body[@"volume"] isKindOfClass:NSNumber.class] ? [body[@"volume"] doubleValue] : 1;
-        NSDictionary *info = @{@"session": body[@"session"], @"url": URLString,
+        NSMutableDictionary *info = [@{@"session": body[@"session"], @"url": URLString,
             @"title": [body[@"title"] isKindOfClass:NSString.class] && [body[@"title"] length] <= 512 ? body[@"title"] : @"Video",
             @"currentTime": @(isfinite(time) && time >= 0 && time < 1e9 ? time : 0),
             @"volume": @(isfinite(volume) ? MIN(1, MAX(0, volume)) : 1),
             @"muted": @([body[@"muted"] isKindOfClass:NSNumber.class] && [body[@"muted"] boolValue]),
             @"documentURL": [body[@"documentURL"] isKindOfClass:NSString.class] && [body[@"documentURL"] length] <= 8192 ? body[@"documentURL"] : @"",
             @"referrerPolicy": [body[@"referrerPolicy"] isKindOfClass:NSString.class] && [body[@"referrerPolicy"] length] <= 64 ? body[@"referrerPolicy"] : @"",
-            @"crossOrigin": [body[@"crossOrigin"] isKindOfClass:NSString.class] && [body[@"crossOrigin"] length] <= 32 ? body[@"crossOrigin"] : @""};
+            @"crossOrigin": [body[@"crossOrigin"] isKindOfClass:NSString.class] && [body[@"crossOrigin"] length] <= 32 ? body[@"crossOrigin"] : @""} mutableCopy];
+        if (iframeExperiment) info[@"iframeExperiment"] = @YES;
         if ([owner.delegate respondsToSelector:@selector(webView:didRequestVLCPlayback:)]) {
             [owner.delegate webView:owner didRequestVLCPlayback:info];
         }
@@ -2058,6 +2080,35 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
     // Bound the reply without pumping a nested run loop or blocking the caller.
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
+        finish(nil, [NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorTimedOut userInfo:nil]);
+    });
+}
+
+- (void)evaluateVideoJavaScript:(NSString *)script frame:(id)frame
+    completionHandler:(void (^)(NSString *, NSError *))completion {
+    if (!frame) { [self evaluateJavaScript:script completionHandler:completion]; return; }
+    id runtime = self.runtimeWebView;
+    SEL selector = NSSelectorFromString(@"evaluateJavaScript:inFrame:inContentWorld:completionHandler:");
+    Class worldClass = NSClassFromString(@"WKContentWorld");
+    id world = [worldClass respondsToSelector:NSSelectorFromString(@"pageWorld")]
+        ? ((id (*)(id, SEL))objc_msgSend)(worldClass, NSSelectorFromString(@"pageWorld")) : nil;
+    if (!world || ![runtime respondsToSelector:selector]) {
+        completion(nil, [NSError errorWithDomain:@"BrowserVideoFrame" code:1 userInfo:nil]); return;
+    }
+    NSUInteger generation = self.documentGeneration;
+    __weak typeof(self) weakSelf = self;
+    __block BOOL finished = NO;
+    void (^finish)(id, NSError *) = ^(id result, NSError *error) {
+        if (finished) return;
+        finished = YES;
+        BrowserWebView *view = weakSelf;
+        if (!view || view.runtimeWebView != runtime || view.documentGeneration != generation)
+            error = [NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorCancelled userInfo:nil];
+        completion(error ? nil : BrowserStringFromJavaScriptResult(result), error);
+    };
+    ((void (*)(id, SEL, id, id, id, id))objc_msgSend)(runtime, selector, script, frame, world,
+        ^(id result, NSError *error) { dispatch_async(dispatch_get_main_queue(), ^{ finish(result, error); }); });
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
         finish(nil, [NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorTimedOut userInfo:nil]);
     });
 }
