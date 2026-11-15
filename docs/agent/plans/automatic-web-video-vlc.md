@@ -565,3 +565,14 @@ attempt also timed out. Stop that path; these are not evidence of a working site
 transition. Production changes use no such API. Generic decoded media is confirmed;
 actual native timing, alpha-zero drawable behavior and site episode advancement
 remain TV observations. No physical device work or local tvOS compilation occurred.
+
+
+Delivery checkpoint: f46c163 was pushed before the user's subsequent hold and
+started develop Build 11.1 (run 43723097805). Further pushes are withheld until
+explicitly requested. The separately requested original VLC cone header is a
+local-only follow-up and is not included in Build 11.1. Its original vector comes
+from BrowserVLCButtonIcon in 7416ee4's parent and uses the shared glyph renderer.
+
+Build 11.1 completed successfully, including native Release compilation, packaging
+and develop source publication. This does not verify native transition timing or
+episode advancement; the local cone follow-up remains unbuilt and unpushed.

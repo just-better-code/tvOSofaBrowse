@@ -1437,3 +1437,15 @@ to substitute media inside real PlayerJS failed to establish a site transition o
 Linux and were stopped; no PlayerJS-specific code entered the implementation.
 Native transition duration and UAKino episode advancement require user observations.
 See [the checkpoint](plans/automatic-web-video-vlc.md).
+
+
+## 2026-11-15 — Restore the original VLC cone in the shared player header
+
+The user withheld further pushes after f46c163 and requested the earlier torrent
+VLC icon in the shared player's header. Recover the original monochrome vector
+cone geometry from BrowserVLCButtonIcon in 7416ee4's parent, reuse the existing
+cached template-glyph renderer, and place a 30-point cone before the title with a
+12-point gap. This applies to both web and torrent playback; website panels keep
+their plain titles. No raster generation, new playback behavior, native build or
+UI verification was performed for this small visual change. Keep it local until
+an explicit push request; Build 11.1 already in CI contains f46c163 and excludes it.

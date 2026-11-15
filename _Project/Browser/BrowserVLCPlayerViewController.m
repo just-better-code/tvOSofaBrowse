@@ -111,6 +111,12 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     self.headerView = header;
     UIVisualEffectView *headerBackdrop = [self glassBackdrop];
     [header addSubview:headerBackdrop];
+    UIImageView *playerIcon = [[UIImageView alloc] initWithImage:BrowserPlaybackControlImage(@"browser.vlc")];
+    playerIcon.translatesAutoresizingMaskIntoConstraints = NO;
+    playerIcon.tintColor = UIColor.whiteColor;
+    playerIcon.contentMode = UIViewContentModeScaleAspectFit;
+    playerIcon.isAccessibilityElement = NO;
+    [header addSubview:playerIcon];
     UILabel *title = [UILabel new];
     title.translatesAutoresizingMaskIntoConstraints = NO;
     title.text = self.mediaTitle ?: @"";
@@ -134,7 +140,11 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
         [headerBackdrop.trailingAnchor constraintEqualToAnchor:header.trailingAnchor],
         [headerBackdrop.topAnchor constraintEqualToAnchor:header.topAnchor],
         [headerBackdrop.bottomAnchor constraintEqualToAnchor:header.bottomAnchor],
-        [title.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:80],
+        [playerIcon.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:80],
+        [playerIcon.centerYAnchor constraintEqualToAnchor:title.centerYAnchor],
+        [playerIcon.widthAnchor constraintEqualToConstant:30],
+        [playerIcon.heightAnchor constraintEqualToConstant:30],
+        [title.leadingAnchor constraintEqualToAnchor:playerIcon.trailingAnchor constant:12],
         [title.topAnchor constraintEqualToAnchor:header.topAnchor constant:55],
         [title.trailingAnchor constraintLessThanOrEqualToAnchor:header.trailingAnchor constant:-80],
         [status.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
