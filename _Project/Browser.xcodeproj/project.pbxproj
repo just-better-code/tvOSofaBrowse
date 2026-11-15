@@ -542,16 +542,18 @@
 /* Begin PBXShellScriptBuildPhase section */
 		9693F8451BF5A99E00077BAB /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 8;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
 			files = (
 			);
 			inputPaths = (
 			);
 			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/BuildRevision.txt",
 			);
-			runOnlyForDeploymentPostprocessing = 1;
+			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "echo \"Versioning is controlled by MARKETING_VERSION/CURRENT_PROJECT_VERSION.\"\n";
+			shellScript = "set -eu\n# CI supplies the actual checkout revision. Local builds omit it rather than invent one.\nrevision=\"${GITHUB_SHA:-}\"\ncase \"$revision\" in\n  ''|*[!0-9a-fA-F]*) revision='' ;;\nesac\nif [ \"${#revision}\" -ne 40 ]; then revision=''; fi\nmkdir -p \"$(dirname \"$SCRIPT_OUTPUT_FILE_0\")\"\nprintf '%s\\n' \"$revision\" > \"$SCRIPT_OUTPUT_FILE_0\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

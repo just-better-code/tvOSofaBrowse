@@ -6,6 +6,7 @@ Published packages are available for [2.21.9](https://github.com/just-better-cod
 
 ### Changed
 
+- Show the installed build number and available CI revision beside the application version so test updates can be identified in the menu ([Main menu](docs/USER_GUIDE.md#main-menu)).
 - Distinguish develop installations with a purple compass icon and a BETA badge ([Develop setup](docs/DEPLOYMENT.md#automatic-test-app-alongside-stable)).
 
 - Identify native playback with VLC and website playback with Website in their headers ([Playback controls](docs/USER_GUIDE.md)).

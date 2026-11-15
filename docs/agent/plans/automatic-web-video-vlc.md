@@ -388,3 +388,14 @@ review only. No app tests, native build or live-site/TV reproduction. Next user
 trial: enable the experiment, press Center on the already playing controlled video
 inside the iframe, then separately try its fullscreen button; report whether the
 VLC header ever appears. If not, inspect the numeric offer/URL-validation stage.
+
+
+### Installed-build identification, 2026-11-15
+
+User reports the controlled-click attempt also did not capture, but the installed
+build is not established. Add a visible menu footer with version, unique develop
+run.attempt and the actual CI merge checkout SHA. Obtain that identity in the
+next user observation before attributing a failure to a specific fix. The Xcode
+metadata output uses existing GITHUB_SHA environment data; no workflow changes.
+Capture remains unverified and unresolved. Do not call the historical entry
+repair a successful site fix without observed URL/native/video evidence.

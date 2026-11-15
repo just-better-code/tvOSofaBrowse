@@ -1335,3 +1335,29 @@ diff/source checks passed. No app tests, native build or real-site/TV reproducti
 The historical code difference is established; success on the user's site remains
 unverified. Push this completed stage to the working PR under standing permission.
 The integration plan records exact commits, differences and next observations.
+
+
+## 2026-11-15 — Make the installed trial build identifiable
+
+The user reports another unsuccessful capture attempt, then asks to see whether
+the installed app is fresh. The precise installed trial build was not identified
+in that report. Keep capture failure unresolved rather than claiming success from
+CI or source changes. Show marketing version, CFBundleVersion and the available
+short CI checkout SHA in the native menu footer; mark the separately named test
+IPA as Beta. The develop workflow already supplies a unique run.attempt build
+number, so no workflow change or master synchronization is necessary.
+
+Replace the retired archive-only no-op version phase with an always-running
+metadata phase declaring BuildRevision.txt as its sole bundle output, compatible
+with the existing script sandbox. Record only a validated hexadecimal GITHUB_SHA;
+local builds without it write an empty stamp and omit the SHA in UI. This is the
+actual PR merge revision built by Actions, not an invented PR-head identifier.
+No source checkout access, signing change, online updater or credentials are used.
+Consolidate menu identification into unreleased 2.22.0; retain the technical source
+build number and the existing CI override.
+
+Validation: decoded build-script sh syntax and diff/source inspection. No app
+tests, local Xcode build or on-device footer observation. Push the completed
+stage to the working PR; CI must establish the build before the user's next
+atvloadly update. The earlier failed site-capture observation remains pending
+exact-page and renderer/native-stage evidence.

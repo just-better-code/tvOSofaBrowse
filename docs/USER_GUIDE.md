@@ -48,6 +48,8 @@ Use Back/Forward below the address to navigate browser history. Left/Right on a 
 
 The domain button is focused when the menu opens, so Center immediately opens address editing.
 
+The bottom of the menu identifies the installed app, for example **Beta 2.22.0 · Build 9.1 · a1b2c3d**. Develop builds use **Beta** and an Actions run/attempt number; CI packages also show the first seven characters of the actual checkout revision (the PR merge revision). Compare the build number with atvloadly's source version or the Actions run summary. Local builds without CI metadata omit the revision. This identifies the installed package; it does not perform an online update check.
+
 The address spans the top of the menu. Below it, the six-button row contains **Back**, **Forward**, **Home**, **Reload Page**, **New Tab** and **Tabs**. Back/Forward use the active tab's history.
 
 | Section | Actions |
