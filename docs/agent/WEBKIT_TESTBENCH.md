@@ -21,6 +21,11 @@ video and acknowledges its frozen position. The host then presents/starts VLC
 immediately. Buffering is visible in VLC; decoded-frame readiness never gates
 presentation. There is no hidden preparation or `prepare` round trip.
 
+An input that ends without decoding any audio/video is a failed start, not a
+finished episode. It stays in the player for Back/retry and does not advance the
+website. Web inputs use their per-media start-time once; the worker does not add
+a second startup seek.
+
 VLC starts at the acknowledged website position. Closing mid-video seeks the same
 website video to VLC's position and leaves it **paused**. A later manual Play
 rearms capture of that same source. Closing within two seconds of the end returns
@@ -75,6 +80,42 @@ Defaults are a 1920×1080 CSS viewport and zoom 1, not an emulated TV display. U
 `--profile investigation` instead of `--ephemeral` to preserve website storage.
 Profiles are private; do not delete or reuse a personal profile for clean-state tests.
 
+## Slow connections with standard Linux tools
+
+Use Linux `tc/netem`, not a custom media proxy or delayed `route.fulfill` response.
+The wrapper creates a private user/mount/network namespace and uses
+[slirp4netns](https://github.com/rootless-containers/slirp4netns) for internet access.
+It runs as the current UID, shapes ingress through IFB, and splits the requested
+extra round-trip delay across ingress and egress. WebKit and all child VLC traffic,
+including HTTPS and adaptive segments, share this connection. The host's network,
+browser sessions, TLS, media URLs and HTTP headers are unchanged.
+
+```sh
+python3 scripts/webkit-testbench/slow-network.py --download-kbps 2000 --latency-ms 150 -- \
+  scripts/webkit-testbench/webkit-lab.sh --app --desktop-vlc --ephemeral https://example.org
+```
+
+Requirements: Linux user namespaces, `unshare`, `mount`, `ip`, `tc` with netem/IFB,
+and `slirp4netns`. The latter may be installed on PATH or extracted from the
+distribution package under ignored `.data/tools/slirp4netns/` without a system
+installation. Dependencies remain outside Git. A restricted execution sandbox may
+need an approved invocation for namespace/network syscalls; never apply fallback
+qdiscs to the host network. No system password or root network setup is required.
+Exit the stand normally to remove its private namespace/helper. A new launch
+without this wrapper restores normal networking for that stand.
+
+The settings and final `tc -s qdisc` counters remain under ignored
+`.data/webkit-testbench/network/`. Each browser run also records the settings in
+`environment.json`. Local controlled fixtures use a loopback qdisc with the same
+rate on combined local traffic; this differs from the ingress-only internet cap.
+The repeatable byte-transfer and actual media check is:
+
+```sh
+python3 scripts/webkit-testbench/slow-network.py --download-kbps 512 --latency-ms 150 -- \
+  scripts/webkit-testbench/webkit-lab.sh --bridge --native-vlc --headless --ephemeral \
+  --script scripts/webkit-testbench/scenarios/network.mjs
+```
+
 ## Actual components and modeled boundaries
 
 | Component | What runs | Remaining difference |
@@ -127,6 +168,14 @@ emitting `playing`. The production watch therefore arms from `play` as well. Tes
 button actions should fire `video.play().catch(...)` without awaiting that promise;
 its completion can be delayed until EOF on this backend. Still require real clock
 advance and decoded main-video identity; never substitute synthetic media events.
+
+`scenarios/home.mjs` exercises foreground cycles before capture, an interruption
+after the accepted source acknowledgement and one deliberately lost native reply.
+It requires manual Play of the same URL to recover to actual decoder output.
+`scenarios/denied-start.mjs` denies the media request after acceptance and checks
+that a zero-output VLC Ended is treated as a failed start, preserving a paused
+website for Back/retry rather than forcing its completion. These injected faults
+are controlled evidence, not proof that either caused a user's physical TV issue.
 
 ## Actual-site workflow and controls
 

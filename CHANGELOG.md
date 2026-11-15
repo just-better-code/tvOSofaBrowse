@@ -19,6 +19,9 @@ Published packages are available for [2.21.9](https://github.com/just-better-cod
 
 ### Fixed
 
+- Retry unanswered automatic VLC offers after returning from Home so a new Play of the same video can capture again ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
+- Start web playback at the website position once, avoiding a second seek based on VLC's initially unset time ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
+- Keep failed VLC starts visible for Back/retry instead of treating zero decoded output as episode completion ([Playback controls](docs/USER_GUIDE.md)).
 - Pause the bound website source before opening VLC, return mid-video closes to its position paused, and allow a new Play to capture that same source again ([Playback controls](docs/USER_GUIDE.md)).
 - Route Next through VLC's actual EOF by seeking to its final 0.1 seconds, then resume the website at its own final 0.1 seconds for natural episode completion ([Playback controls](docs/USER_GUIDE.md)).
 - Restrict automatic capture to foreground visible video with real playback progress, preserve iframe source acknowledgements and HTTP context, and reject unrelated or unsupported sources ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).

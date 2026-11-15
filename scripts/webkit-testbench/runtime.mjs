@@ -142,6 +142,7 @@ export async function launchLab(options = {}) {
         context.pages().forEach(attach);
         await writeFile(path.join(runDirectory, 'environment.json'), JSON.stringify({
             playwright: playwrightVersion,
+            networkConditioner:process.env.WEBKIT_LAB_NETWORK?JSON.parse(process.env.WEBKIT_LAB_NETWORK):null,
             browserVersion: context.browser()?.version(), platform: process.platform,
             viewport: launchOptions.viewport, ephemeral: !!options.ephemeral,
             bridge: !!bridge, bridgeSourceSHA256: bridge?.sha256,

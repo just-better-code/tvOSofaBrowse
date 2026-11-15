@@ -985,3 +985,21 @@ Investigation findings and edits (not yet native verification):
   per-media start-time and explicit user/torrent pending seeks. Closing before a
   reported time falls back to the initial website time, or an explicit queued seek.
   This removes a duplicate decoder seek; it does not establish the TV stall cause.
+
+Delivery: app/source contract ae35c6e compiled and published successfully through
+Actions run 43758023991 as 2.22.0 Build 20.1. The user confirms the earlier simplified
+baseline on TV; these follow-up fixes have no new physical-device verification.
+
+Slow-network follow-up uses standard Linux tc/netem and rootless slirp4netns in a
+private network namespace, not a custom HTTP proxy. The rejected custom-proxy
+prototype was removed. Standard controlled run 20-24-46.419Z-a4e6373f transfers
+128 KiB in2458ms at512kbit/s plus150ms RTT, then passes the canonical actual-media
+round trip. Real UASerials at2000kbit/s plus150ms passes modeled Home/close/replay
+in20-26-27.606Z-b0174c2b. A12s startup observation in20-27-54.992Z-d38b443b advances
+8313ms over11519ms, with two backward clock updates and stalls in displayed-picture
+counts. No pending initial seek exists. The paused browser still requests four TS
+segments between native playback start and this observation; contention is a
+candidate, not established causation. Compare an unshaped same-page control before
+changing source-loader behavior or introducing a visible initial prebuffer gate.
+If contention is established, evaluate stopping/restarting only the already bound
+HLS loader, preserving source identity, frozen position and real website EOF.

@@ -1642,3 +1642,43 @@ successfully compiled Apple TV Release, packaged/verified the unsigned IPA and p
 2.22.0 Build 18.1 before this documentation update. Both marketing versions remain 2.22.0,
 consolidated as the unreleased minor feature. No device or Simulator work was performed.
 Native fullscreen/focus and website episode behavior now require the user's TV check.
+
+## 2026-11-15 — Interrupted VLC retries and standard slow-network stand
+
+The user confirms the simplified TV baseline, then reports an early playback hiccup
+and intermittent UASerials startup, especially after Home: a click produces less
+than a second of activity and then nothing. They cannot distinguish whether VLC
+briefly appears. These observations supersede the earlier pending-TV baseline.
+
+Production JS has a reproducible orphan-offer defect: deliberately dropping one
+native reply, then inactive/active and manual Play of the same source, emits no new
+offer until the source changes. Clear automatic unaccepted requests/attempts when
+capture becomes inactive or invisible; retain accepted ownership and in-flight
+pause acknowledgements. The before/after controls and healthy/accepted-ACK Home
+checks use actual WebKit/libVLC, with UIKit/application lifecycle explicitly modeled.
+Actual UASerials also passes those modeled Home/close/replay cases. See the
+[parity evidence](plans/webkit-testbench-parity.md).
+
+Remove initial web pendingResumeMs and rely on per-media start-time. VLCKit's time
+getter returns a cache initially set to null; a Playing event can otherwise cause
+our fallback to flush the decoder a second time. Retain queued explicit/torrent
+seeks and use the frozen site position until a real cached time is available.
+Separately, actual libVLC reports Ended with zero decoded audio/video for403, empty
+HLS and denied segments. Keep that failed start visible instead of sending website
+EOF. The denied-start regression verifies Back/Play recovery without false completion.
+None of these injected failures establishes what occurred on the user's TV.
+
+Commit ae35c6e was pushed under standing PR20 authorization. Actions43758023991
+successfully compiled, packaged, verified and published 2.22.0 Build20.1 before this
+documentation update. Keep both marketing versions at the consolidated2.22.0.
+No physical TV or Simulator work was performed.
+
+At the user's request, add standard Linux tc/netem with rootless slirp4netns in a
+private network namespace for WebKit and its VLC children. Remove the custom-proxy
+prototype after the user asks about standard tooling. No host qdisc changes or TLS
+interception are needed. The controlled512kbit/s,+150ms check transfers128KiB in2458ms
+and passes the actual media roundtrip. UASerials at2000kbit/s,+150ms captures/replays,
+but a12s observation exposes early clock/output stalls and continued paused-browser
+TS downloads. This is useful stand evidence; attribution and the user's TV hiccup
+remain unresolved. The wrapper, dependency boundary and commands are recorded in
+[the stand runbook](WEBKIT_TESTBENCH.md); raw evidence remains ignored.
