@@ -1067,6 +1067,129 @@ The extended production three-frame DOM harness passes known-episode 91 URL sync
 
 Publish immutable v2.21.9 on f1843dc from feature/teleportal-player. GitHub run 42387463543 completed successfully with Apple TV Release only; confirm the unsigned IPA, notices and SHA256SUMS are attached to the public release. The user subsequently reported “все чудово працює”. Record this as successful user confirmation of the reported playback workflow on TV; no agent-controlled device interaction, exhaustive other-player checks or separately enumerated restart/EOF cases were observed. This supersedes the earlier unreleased status and pending user confirmation for the reported workflow. The user then requested merging the branch into master. Keep the published tag unchanged.
 
+
+## 2026-11-10 — Isolated Debug VLC compressor prototype
+
+Implement the agreed prototype on a separate branch based on master `70f74eb`.
+The user subsequently clarified that automatic iframe-stream discovery and
+working website episode transitions are the primary goal, with compression an
+optional follow-on. Rename the branch to `research/automatic-web-video-vlc`;
+the selected scope remains the isolated compressor prototype plus a detailed
+website integration investigation, not re-enabling iframe takeover now.
+
+Create a common `BrowserVLCCreatePlayer` factory for initial playback and EOF
+reopening. Without an explicit Debug launch argument, including all Release
+builds, it returns the original shared-library player. Explicit Debug ON/OFF runs
+use a private library, PCM and an allowlisted numeric logger. The enabled path
+checks the core build identity and dynamically resolves checked variable access
+and retained child enumeration. Match the unique existing audio output before
+assigning media, set/read back the seven compressor parameters and append the
+filter while preserving other filters on both player and output. Discard the
+unplayed experimental player on setup failure; do not keep partial settings in
+the normal fallback. No offsets into private player structures are used.
+
+The existing local binary has a provenance discrepancy: the bootstrap URL names
+VLC `79128878`, while every local slice contains VLC `3.0.23` and build changeset
+`3.0.23-2-47-g738f288a1c`. Bootstrap skips existing binaries, so do not assert
+that these local files came from that archive or that this describes released
+packages. Fetch exact VLC/VLCKit Git revisions into ignored `.references/` with
+user authorization. Relevant headers, player/object code, audio output/filter
+management and compressor source are unchanged between `79128878` and the public
+3.0.23 tag (`578d28f6`). The local build commit did not resolve through GitHub's
+public commit API (HTTP 422); its patches are not established. Guard the
+experiment to the reviewed archive changeset family or the exact local build.
+Retain upstream attribution for the small namespaced ABI header.
+
+Source/diff inspection only; no app tests, build, Simulator/TV work, listening
+comparison, Git remote push or release. This Linux host has no Xcode. Neither
+runtime filter activation nor audible effect is established. Keep version
+2.21.9 because this disabled Debug research stage delivers no public feature or
+logical bug fix. Exact launch arguments, reason codes and the pending runtime
+matrix are recorded in [the prototype plan](plans/vlc-compressor.md).
+
+
+### Automatic stream discovery is the primary feature; inspect the other sites
+
+The user emphasized that the accidental automatic stream capture, rather than
+compression, is the main feature to investigate. Clarify that the prior
+"old PlayerJS" wording meant the previously investigated example, not an
+assessment that PlayerJS itself is obsolete. Starlight recognition/title/Next
+are not Teleportal-only, but its catalog-backed Previous and canonical episode
+URL provider are Teleportal-specific; prior user confirmation does not establish
+other hosts or VLC episode switching.
+
+Read the retained failed iframe experiment and the current all-frame/native
+paths. Preserve the distinction between discovering a direct element URL,
+successfully playing it in VLC and keeping the website's episode lifecycle.
+The old frame watcher, generic Media Session commands and the end-seek/play
+hypothesis did not establish working transitions. The new design separates
+discovery from renderer ownership and the website's episode owner, retains a
+session across child-document replacement, and latches each transition to avoid
+duplicate Next/EOF actions. Do not reactivate the reverted path in this stage.
+
+Inspect the other saved examples and download their public host/player code
+without cookies into ignored `.references/web-video-interception/`. A embeds
+single-source PlayerJS but its outer host supplies its own Next/Previous,
+progress tracker, `end` consumer and cancellable autonext countdown. C's outer
+host instead consumes `finish`/`next` and navigates its iframe through its own
+playlist. D's public `player-control` component uses an open shadow root,
+`nextEpisode(true)`, an `ended` consumer respecting autoswitch, and correlated
+`tortuga:getInfo` queries for progress. Its actual leaf source/protocol still
+needs inspection before implementing takeover there. B's current public host
+still embeds the saved path, but that embed returns a short nginx 404 HTML body;
+stop this retrieval path without claiming player incompatibility.
+
+Record source hashes, concrete JS/native/session interfaces, per-owner routes,
+progress and completion responsibilities, website fallback and six staged
+acceptance gates in [the integration plan](plans/automatic-web-video-vlc.md).
+Automatic candidates require a known main-content contract; unknown owners or
+Blob/MSE/DRM stay in the website until a compatible route is established. A's
+website countdown must remain accessible rather than hidden behind VLC.
+Compression remains a follow-on after successful stream handoff and transitions.
+
+No website bridge behavior, iframe routing or adapter implementation is changed
+by this research. No app tests, builds, live WebKit/VLC playback, Simulator/TV
+interaction, listening, release or remote push. Check staged diffs for formatting
+and review source only. Retain app version 2.21.9. Save the user's reusable
+instruction to clone research repositories into ignored `.references/` for local
+searches instead of repeatedly downloading individual upstream source files.
+
+
+### Use and refine the user-provided Linux WebKit stand
+
+The user supplied the local `webkit-testbench` skill and explicitly authorized
+fixing an inconvenient or broken stand during this work. Read that skill and
+its scenario instructions; use ephemeral browser profiles and the current
+production bridge extractor. Sandboxed browser launch failed with a closed
+context; the approved unsandboxed launch succeeded. No TV or Simulator access
+was involved. Also apply the skill-creator workflow for the focused local skill
+update, without changing invocation policy or installing other dependencies.
+
+Collect passive live DOM inventories of A/C/D. C exposes `PlayerNextCustom` and
+an iframe video with no source; D instantiates its component, data and open
+shadow roots. With the production bridge, helper functions exist in their
+observed child documents. A's snapshot did not acquire a ready page/player.
+The C interaction scenario acquired no visible video box and no active episode
+LI; it delivered no Play click. One direct Next submission produced no selected
+episode change and the page logged a null playerfr access. This is insufficient
+readiness evidence, not proof of an injection regression or working transport.
+Stop that path instead of repeating the action blindly.
+
+Add frame-existing/attached/navigated/detached logging to the ignored local
+skill runtime, with stable per-run frame IDs, cached parent IDs and increasing
+document generations, also on native stub messages. Update its documentation to
+wait for the actual asynchronously populated playlist before invoking transport,
+and to arm child-navigation observation before the action. The instrumented D
+run recorded one existing frame, four attachments, five navigations and one
+detachment, but no media source or transition. Node syntax inspection of the
+runtime and the skill structure validator passed. No separate app tests or
+native mocks/acceptance replies were added. Exact environment, source fingerprint,
+private scripts/runs and limitations are in the integration plan.
+
+No VLC playback, stream handoff, natural EOF, audible effect, tvOS interaction
+or successfully switched episode is established. The primary deliverable remains
+the staged integration plan plus the already isolated Debug compressor prototype.
+
 ## 2026-11-15 — Label-gated develop delivery beside stable
 
 The user wants two independent TV installations and authorized repository-side
@@ -1115,6 +1238,39 @@ personal-token workaround, which would also trigger the unchanged stable release
 workflow. Draft assets are inspected through authenticated release listing and
 published by release ID, avoiding the published-release-by-tag lookup for drafts.
 
+
+## 2026-11-15 — Implement an opt-in iframe-to-VLC trial (2.22.0)
+
+The user requested an actual automatic-capture experiment after clarifying that
+research plans and the disabled compressor gave the installed test copy no new
+web-video behavior. The user reminded us of the accidental fullscreen stream
+capture. This is new authorization to implement that bounded path, superseding
+the earlier research-only scope; it is not authorization for physical-TV work.
+
+Reuse the existing all-frame fullscreen hook for direct HTTP(S) video offers.
+Add an OFF-by-default shared-style toggle under held-Center Debug options, exposed
+in Debug and the named develop Release app. Bind child offers/replies to native
+WKFrameInfo, validate the video document URL and current source, and fail closed
+if frame-scoped WKContentWorld evaluation is unavailable. Keep cookie/UA/referrer
+handling in the existing native helpers. No parent URL relay, network interceptor
+or new native player is introduced.
+
+Prepare shared VLC muted, wait for Playing and advancing time, then accept/pause
+the exact website video, resample position, align seekable VLC and restore audio.
+Retain iframe fullscreen behind VLC. Error/15-second startup timeout returns to
+the website; Back returns position/audio and attempts website Play on the same
+live source. Reject stale source/document replies and detected DRM/Blob/MSE.
+This first trial does not provide Next/Previous, owner adapters or natural episode
+continuation. Select episodes on the website after returning from VLC.
+
+Advance both marketing versions to 2.22.0 and document the experimental feature
+and exact enable/try steps. JavaScript syntax and diff/source inspection passed.
+No app tests, Xcode/CI build, Simulator/TV interaction, installation, Git remote
+push or playback observation ran. Native frame API support, stream authentication,
+startup/audio and restoration are unverified until a built trial is observed.
+The updated plan checkpoint records implementation interfaces and next checks.
+
+
 ## 2026-11-15 — Separate develop icon
 
 The user requested a slightly different beta icon. Add the sibling asset catalog
@@ -1138,3 +1294,24 @@ BETA. A white compass is composited separately. No other text or extra borders."
 Final project assets are in the beta brand catalog above; private preview stays
 under `.data/icon-preview/`. Visual preview and JSON/Bash/diff syntax inspection
 only; no app tests, Xcode build, device action or Git remote push performed.
+
+
+## 2026-11-15 — Trial Back recovery and renderer identification
+
+User reports black fullscreen and Back not returning on the reported website, and asks
+for a way to identify VLC. Exact page and visible-control evidence were requested;
+no physical-TV access is authorized by this report. Source review found the
+browser's global Menu path could consume Back through the retained website
+fullscreen before dismissing visible VLC. Prioritize that modal, add a VLC Menu
+recognizer and restore ancestor iframe layout immediately on exit rather than
+waiting for child acknowledgement. Experimental close/fallback also exits the
+parent fullscreen. Require hasVideoOut/nonzero videoSize plus advancing time for
+handoff acceptance; keep a visible startup countdown and independent 15-second
+deadline. Label native/website headers VLC/Website, including native loading.
+
+Consolidate into unreleased 2.22.0; develop run/build metadata distinguishes this
+trial update. Validate the production bridge via the webkit-testbench extractor
+and syntax compilation, plus source/diff inspection. No app tests, native build,
+website/TV playback reproduction or Git remote push in this turn. These are
+code-path fixes and diagnostic UI, not proof the site's missing picture is fixed.
+See the trial feedback checkpoint in plans/automatic-web-video-vlc.md.

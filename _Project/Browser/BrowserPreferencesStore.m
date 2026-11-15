@@ -33,6 +33,18 @@ NSNotificationName const BrowserDebugEnabledDidChangeNotification = @"BrowserDeb
     return self.debugEnabled;
 }
 
+// The Release develop IPA has a separate identity; ordinary signed builds stay unchanged.
++ (BOOL)iframeVLCExperimentAvailable {
+#if DEBUG
+    return YES;
+#else
+    return [NSBundle.mainBundle.infoDictionary[@"CFBundleDisplayName"] isEqual:@"tvOSofaBrowse Test"];
+#endif
+}
++ (BOOL)iframeVLCExperimentEnabled {
+    return self.iframeVLCExperimentAvailable && [NSUserDefaults.standardUserDefaults boolForKey:@"BrowserIframeVLCExperiment"];
+}
+
 + (BOOL)debugEnabled {
     NSNumber *value = [NSUserDefaults.standardUserDefaults objectForKey:kDebugEnabledDefaultsKey];
     return value == nil ? YES : value.boolValue;

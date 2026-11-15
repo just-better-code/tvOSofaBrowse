@@ -2054,10 +2054,25 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
         @{ @"id": @"2", @"title": @"Background Probe" },
         @{ @"id": @"3", @"title": @"Inspect WebKit Media Prefs" },
     ];
+    if (BrowserPreferencesStore.iframeVLCExperimentAvailable)
+        settings.rows = [settings.rows arrayByAddingObject:@{@"id":@"4", @"title":@"Iframe Video in VLC (Experimental)"}];
+    [self.host browserPresentViewController:settings];
+}
+
+- (void)presentIframeVLCExperiment {
+    BrowserOptionsViewController *settings = [[BrowserOptionsViewController alloc]
+        initWithEnabledProvider:^BOOL { return BrowserPreferencesStore.iframeVLCExperimentEnabled; }
+        toggleEnabled:^{
+            [NSUserDefaults.standardUserDefaults setBool:!BrowserPreferencesStore.iframeVLCExperimentEnabled
+                forKey:@"BrowserIframeVLCExperiment"];
+        } activateRow:nil];
+    settings.toggleTitle = @"Iframe Video in VLC (Experimental)";
+    settings.rows = @[];
     [self.host browserPresentViewController:settings];
 }
 
 - (void)presentDebugReport:(NSUInteger)index {
+    if (index == 4) { [self presentIframeVLCExperiment]; return; }
     switch (index) {
     case 0: {
         NSArray<NSString *> *recent = BrowserDebugRecentLogs();
