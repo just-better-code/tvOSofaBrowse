@@ -150,3 +150,57 @@ Final simple-contract checkpoint:
 No automated test touched the user's manually controlled visible stand. Parent owns
 atomic app/stand contract commit and native CI build; all above observations are
 Linux engine/decoder evidence plus explicitly modeled UIKit state.
+
+## Home/orphan and failed-start regression checkpoint, 2026-11-15
+
+A later TV report describes intermittent UASerials capture, particularly after Home.
+Investigations used separate headless ephemeral contexts; the user's visible stand
+was not touched. App lifecycle/foreground changes remain modeled, not TV evidence.
+
+A dropped-offer reply control reproduced a production-JS liveness defect: one offer
+was intentionally ignored, then inactive/active and new Play of the same URL left
+an unaccepted pending request, HTML advancing and no new native offer. A changed
+URL recovered actual VLC playback. After production cleanup of unaccepted requests
+on inactive/hidden/disabled state, the identical same-source retry recovered.
+
+- Before: run `20-11-38.440Z-18872179`; JS SHA-256
+  `cb4debe82a719d88906df3a2d59e7ac95cd8dde154c9d40823896b4b35de8bdd`;
+  combined bridge `e6196cd1ed8534bd2bb7669c1ada615459de89e7f9512f60792720b614f5b486`.
+- After: run `20-14-38.116Z-00e3ae3e`; JS SHA-256
+  `fc0c7c72d1db6670f1ea4db5753de20b4c5bdade898112930869f47aed0db119`;
+  combined bridge `01ecaa7c44804851689e15fe62150727189e0010651d7a8ddd12785ef570941f`.
+- Reusable `scenarios/home.mjs` passes all three modes in run
+  `20-16-52.660Z-7db6fc7b`: healthy foreground cycles, explicitly interrupted accepted
+  acknowledgement before presentation, and a single deliberately lost offer reply.
+  Every recovery reaches actual Linux libVLC playback. The driver waits for the
+  modeled foreground transition to complete before clicking Play; an earlier driver
+  clicked while still inactive and was not evidence of stuck ownership.
+- Actual UASerials main content (1429.36 s) passes modeled Home before capture and
+  after accepted capture/close/manual Play in `20-19-46.572Z-cdd14fcf`; actual capture
+  time 0.187 s and actual decoder output were observed. This does not establish the
+  physical TV failure's cause or reproduce native window-detachment ordering.
+
+The worker now matches the app's start-time-only initial positioning. Initial
+pending seek was removed; explicit seek commands remain. The canonical actual-media
+round trip passes in `20-13-51.791Z-3f2b07a1`. Linux direct libVLC time queries cannot
+reproduce TVVLCKit's cached-time update timing, so they are not native stutter proof.
+
+Actual libVLC 3.0.20 returns Ended (C state 6) for HTTP403, an empty HLS playlist and
+a valid playlist whose segment returns403, all with zero decoded video/audio and
+zero displayed pictures. The broken playlist even reports a 5000 ms length. Thus
+Ended or a known duration alone does not prove playback occurred. Raw numeric traces
+are private under `.data/webkit-testbench/terminal-probe-yEiEyl/`.
+
+The worker now emits an immediate failed-start event for Ended with no decoded
+output, matching the app's new guard instead of waiting for its diagnostic timeout.
+`scenarios/denied-start.mjs` passes in `20-20-24.686Z-d0fbfa90`: HTTP403 is injected only
+after real accepted pause acknowledgement, the modeled player remains presented
+with an error, HTML is not forced to EOF, Back leaves it paused and manual replay
+recaptures after restoring the fixture resource. This test starts at 0.102 s; the
+worker's raw C time is0 on failure and its modeled return is0, so it is not evidence
+of exact arbitrary-position fallback parity with VLCKit's nullable cached time.
+
+Neither explicit dropped replies nor injected403 establishes that these occurred
+on the user's TV. Keep lost accepted-ACK/cancel delivery and native window lifetime
+as distinct, unverified cases. No commit/push or physical-device action was performed
+by the stand agent for this checkpoint.

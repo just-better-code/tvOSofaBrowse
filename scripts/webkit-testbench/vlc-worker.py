@@ -81,7 +81,6 @@ for cookie in configuration.get('cookies', []):
     stored += bool(store_cookie(media,value.encode(),cookie['domain'].lstrip('.').encode(),cookie['path'].encode()))
 player = player_new(media)
 started = time.monotonic()
-pending_seek = max(0, int(configuration.get('currentTime', 0)*1000))
 last_time = -1
 baseline_decoded = baseline_shown = 0
 ready = False
@@ -125,30 +124,27 @@ try:
             last_state = current_state
         stats_fn(media, c.byref(stats))
         now = get_time(player)
+        if current_state == 6:
+            if stats.i_decoded_video == 0 and stats.i_decoded_audio == 0:
+                emit('failure', reason='ended-before-decoded-output', state=current_state,
+                     timeMs=now, lengthMs=get_length(player), decodedVideo=0, decodedAudio=0)
+            else:
+                emit('ended', timeMs=now, lengthMs=get_length(player),
+                     decodedVideo=stats.i_decoded_video, decodedAudio=stats.i_decoded_audio)
+            break
+        if current_state == 7:
+            emit('failure', reason='decoder-error'); break
         if not ready:
-            if current_state == 7:
-                emit('failure', reason='decoder-error'); break
             if time.monotonic()-started > 15:
                 emit('failure', reason='preparation-timeout'); break
-            if pending_seek and current_state == 3 and seekable(player):
-                baseline_decoded, baseline_shown = stats.i_decoded_video, stats.i_displayed_pictures
-                if abs(now-pending_seek)>1000:
-                    set_time(player, pending_seek)
-                    emit('seek', timeMs=pending_seek)
-                pending_seek = 0
-                last_time = -1
-                continue
             get_size(player, 0, c.byref(width), c.byref(height))
-            if not pending_seek and current_state == 3 and stats.i_decoded_video >= baseline_decoded+3 and stats.i_displayed_pictures > baseline_shown and has_vout(player) and width.value and height.value and last_time >= 0 and 0 < now-last_time < 5000:
+            if current_state == 3 and stats.i_decoded_video >= baseline_decoded+3 and stats.i_displayed_pictures > baseline_shown and has_vout(player) and width.value and height.value and last_time >= 0 and 0 < now-last_time < 5000:
                 ready = True
                 if configuration.get('pauseOnReady',False): pause(player, 1)
                 emit('ready', timeMs=now, lengthMs=get_length(player), width=width.value, height=height.value,
                      decodedVideo=stats.i_decoded_video, displayedPictures=stats.i_displayed_pictures,
                      decodedAudio=stats.i_decoded_audio, elapsedMs=round((time.monotonic()-started)*1000))
             last_time = now
-        elif current_state == 6:
-            emit('ended', timeMs=now)
-            break
 finally:
     stop(player)
     release_player(player)

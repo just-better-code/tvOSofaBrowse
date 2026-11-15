@@ -947,3 +947,41 @@ Implementation checkpoint before CI:
   Preserve the requested one-EOF baseline and report this boundary, not a Next fix.
 - The user's three-site confirmations apply to the manually driven stand only.
   No physical TV/Simulator verification has been performed or implied.
+
+## Follow-up — TV startup interruption and initial playback stalls
+
+The user subsequently confirms that the simplified beta behaves as planned on TV,
+then reports a hiccup a few seconds into playback. Requested presentation remains
+fullscreen first, visible buffering, then uninterrupted playback; do not restore
+hidden preparation behind the website. Whether the hiccup affects fresh starts or
+only resumed positions has not yet been established.
+
+Priority changes to intermittent UASerials startup, especially after visiting the
+Apple TV Home screen: a click causes less than a second of apparent activity and
+then nothing. The user cannot distinguish whether native VLC appears briefly.
+This is not evidence that decoding started or that buffering alone is responsible.
+
+Next investigation: exercise inactive/active before handoff, during its pause
+acknowledgement and after native close in an independent ephemeral stand; retain
+the user's visible session. Inspect inactive capture state, orphaned pending or
+accepted source ownership and repeat Play. Native lifecycle/visibility ordering
+remains unverified by a Linux host model. Separately inspect whether start-time
+plus a later pending resume seek flushes an already running decoder. Do not claim
+either hypothesis as the TV cause without matching observations. Preserve HTTP
+context, actual 0.1 s playback eligibility, immediate native presentation and the
+single genuine EOF path for Next.
+
+Investigation findings and edits (not yet native verification):
+- An explicit dropped native-reply control reproduces an orphaned unaccepted
+  request with the production JS. After inactive/active and manual same-source
+  Play, HTML advances but no new offer is emitted; changing source emits an offer
+  and actual Linux libVLC decodes. Before-fix run: 20-11-38.440-18872179.
+  Clear only automatic unaccepted requests/attempts when capture becomes inactive,
+  disabled or invisible. Preserve accepted ownership and a pending/accepted pause
+  acknowledgement so presenting VLC cannot release the website underneath it.
+- VLCKit's `time` getter returns a cache initialized to null and updated by time
+  events (`.references/vlckit-compressor`, revision 319ed2c). A Playing state need
+  not have a fresh cached time. Remove web initial pendingResumeMs; retain the
+  per-media start-time and explicit user/torrent pending seeks. Closing before a
+  reported time falls back to the initial website time, or an explicit queued seek.
+  This removes a duplicate decoder seek; it does not establish the TV stall cause.

@@ -9,10 +9,12 @@ export async function waitFor(predicate,{timeout=20000,describe=()=>''}={}){
 }
 export async function fixture(){
  let bytes;try{bytes=await readFile(path.join(dataRoot,'fixture.webm'))}catch{throw Error('Generate the ignored fixture first: scripts/webkit-testbench/generate-fixture.sh')}
- let origin;const requests=new Map();
+ let origin;const requests=new Map();let mediaDenied=false;
  const server=http.createServer((request,response)=>{
   const url=new URL(request.url,origin);
   if(url.pathname.endsWith('.webm')){
+   if(mediaDenied){response.writeHead(403);response.end('forbidden');return}
+
    const count=(requests.get(url.pathname)||0)+1;requests.set(url.pathname,count);
    if(url.pathname==='/stall.webm'&&count>1){setTimeout(()=>response.destroy(),25000).unref();return}
 
@@ -25,5 +27,5 @@ export async function fixture(){
   response.writeHead(200,{'content-type':'text/html'});response.end(body);
  });
  await new Promise(r=>server.listen(0,'127.0.0.1',r));origin=`http://127.0.0.1:${server.address().port}`;
- return{origin,close:()=>new Promise(r=>{server.close(r);server.closeAllConnections()})};
+ return{origin,setMediaDenied:denied=>{mediaDenied=!!denied},close:()=>new Promise(r=>{server.close(r);server.closeAllConnections()})};
 }

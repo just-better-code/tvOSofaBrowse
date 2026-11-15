@@ -319,9 +319,15 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldReceivePress:(UIPress *)press {
     return ![self.view.window.screen.focusedView isKindOfClass:BrowserSeekButton.class];
 }
+- (int64_t)playbackTimeMilliseconds {
+    if (self.pendingResumeMs > 0) return self.pendingResumeMs;
+    NSNumber *time = self.vlcPlayer.time.value;
+    return time ? MAX(0, time.longLongValue) : (int64_t)(self.initialWebTime * 1000);
+}
+
 - (void)beginHeldSeek:(NSInteger)kind {
     [self stopHeldSeek]; self.seekHoldKind = kind;
-    self.seekHoldTargetMs = self.pendingResumeMs > 0 ? self.pendingResumeMs : self.vlcPlayer.time.value.longLongValue;
+    self.seekHoldTargetMs = [self playbackTimeMilliseconds];
     self.seekHoldStartTime = CACurrentMediaTime(); [self repeatHeldSeek];
 }
 
@@ -376,7 +382,9 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
 - (void)prepareCurrentMedia {
     self.playbackEnded = NO;
     BrowserTorrentManager *manager = self.webVideoURL ? nil : [BrowserTorrentManager sharedManager];
-    self.pendingResumeMs = self.webVideoURL ? (int64_t)(self.initialWebTime * 1000)
+    // Web inputs seek once through :start-time. VLCKit's cached time may still
+    // be null at Playing; treating that as a failed seek flushes the decoder again.
+    self.pendingResumeMs = self.webVideoURL ? 0
         : [manager playbackPositionForTorrent:self.identifier fileIndex:self.fileIndex];
     self.lastPositionSaveTime = NSDate.date.timeIntervalSince1970;
     NSURL *mediaURL = self.webVideoURL;
@@ -464,8 +472,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     [self stopHeldSeek];
     [self savePlaybackPosition];
     if (self.webVideoURL && self.webVideoDidClose) {
-        double time = MAX(0, self.vlcPlayer.time.value.longLongValue / 1000.0);
-        if (self.pendingResumeMs > 0) time = self.initialWebTime;
+        double time = [self playbackTimeMilliseconds] / 1000.0;
         void (^closed)(double, double, BOOL, NSString *) = self.webVideoDidClose;
         double volume = self.vlcPlayer.audio.volume / 100.0;
         BOOL muted = self.vlcPlayer.audio.isMuted;
@@ -701,9 +708,8 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
         int64_t target = self.pendingResumeMs;
         self.pendingResumeMs = 0;
         self.lastPositionSaveTime = NSDate.date.timeIntervalSince1970;
-        // Web input already starts at this position; avoid a second decoder flush.
-        if (!self.webVideoURL || llabs(self.vlcPlayer.time.value.longLongValue - target) > 1000)
-            self.vlcPlayer.time = [VLCTime timeWithNumber:@(target)];
+        // Only torrent resume and explicit user seeks reach this queue.
+        self.vlcPlayer.time = [VLCTime timeWithNumber:@(target)];
         BrowserDebugLog(@"[TorrentVLC] resume seek fileIndex=%ld positionMs=%lld",
             (long)self.fileIndex, (long long)target);
     }
@@ -844,7 +850,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
 
 - (void)previousFilePressed {
     [self stopHeldSeek];
-    int64_t position = self.pendingResumeMs > 0 ? self.pendingResumeMs : self.vlcPlayer.time.value.longLongValue;
+    int64_t position = [self playbackTimeMilliseconds];
     if (position <= 5000) [self switchToAdjacentFileInDirection:-1];
     else [self restartPressed];
 }
@@ -953,7 +959,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
 
 - (void)seekByMilliseconds:(int64_t)delta { [self seekByMilliseconds:delta revealControls:YES]; }
 - (void)seekByMilliseconds:(int64_t)delta revealControls:(BOOL)reveal {
-    int64_t position = self.pendingResumeMs > 0 ? self.pendingResumeMs : self.vlcPlayer.time.value.longLongValue;
+    int64_t position = [self playbackTimeMilliseconds];
     [self seekToMilliseconds:position + delta];
     if (reveal) [self showControls];
     [self refreshProgress];
@@ -980,6 +986,15 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
                 ? @"Playback failed. Return to the page to use its player." : @"Playback failed. Check torrent availability or file format."; break;
             case VLCMediaPlayerStateEnded:
                 if (self.returnWebVideoOnEnd) {
+                    VLCMediaStats stats = player.media.statistics;
+                    // Adaptive HTTP failures can report Ended without decoding
+                    // anything. Do not turn a failed start into website EOF/Next.
+                    if (stats.decodedVideo == 0 && stats.decodedAudio == 0) {
+                        self.statusLabel.text = @"Playback could not start. Return to the page and try again.";
+                        [self showControls];
+                        BrowserDebugLog(@"[WebVLC] endedBeforeDecode=1");
+                        return;
+                    }
                     [self finishWebVideo:@"ended"]; return;
                 }
                 self.playbackEnded = YES;

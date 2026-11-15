@@ -87,7 +87,10 @@ window.__browserTVSetIframeVLCExperiment = function(enabled, active, visible) {
     }
     notify(document);
     observePlayerJSFactory();
-    if (!mediaVLCIframeCapture || !mediaVLCCaptureActive || !mediaVLCFrameVisible) stopVLCWatch();
+    if (!mediaVLCIframeCapture || !mediaVLCCaptureActive || !mediaVLCFrameVisible) {
+        stopVLCWatch();
+        discardUnacceptedVLCRequests();
+    }
     observeVLCResources();
     if (mediaVLCIframeCapture) scanAutomaticVLCVideos();
 };
@@ -233,6 +236,17 @@ function stopVLCWatch(video) {
     if (video) mediaVLCWatched.delete(video);
     else mediaVLCWatched.clear();
     if (!mediaVLCWatched.size && mediaVLCWatchTimer) { clearInterval(mediaVLCWatchTimer); mediaVLCWatchTimer = null; }
+}
+function discardUnacceptedVLCRequests() {
+    Object.keys(mediaVLCRequests).forEach(function(id) {
+        var request = mediaVLCRequests[id];
+        // Keep ownership while native VLC is presented or its pause ACK is in
+        // flight. An unanswered offer must not block a new Play after Home.
+        if (!request.automatic || request.accepted ||
+            (request.handoff && (request.handoff.pending || request.handoff.accepted))) return;
+        if (request.video) mediaVLCAutoAttempts.delete(request.video);
+        delete mediaVLCRequests[id];
+    });
 }
 function ownsVLCVideo(video) {
     return Object.keys(mediaVLCRequests).some(function(id) {
