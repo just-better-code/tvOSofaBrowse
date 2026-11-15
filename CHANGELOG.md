@@ -14,15 +14,15 @@ Published packages are available for [2.21.9](https://github.com/just-better-cod
 
 ### Added
 
-- Try direct HTTP(S) iframe video and active Starlight and PlayerJS HLS sources in shared VLC through an opt-in experiment in Debug and develop builds, with bounded startup and return to the website; keep episode selection on the site ([Playback controls](docs/USER_GUIDE.md), [Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
+- Open eligible web video in shared VLC after 0.1 seconds of website playback through an opt-in Debug/develop toggle, supporting direct HTTP(S) and bound Starlight/PlayerJS HLS sources with visible buffering ([Playback controls](docs/USER_GUIDE.md), [Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
+- Provide a reusable WebKit stand with production scripts, adblock, actual Linux libVLC and replayable capture/return checks ([Stand runbook](docs/agent/WEBKIT_TESTBENCH.md)).
 
 ### Fixed
 
-- Reject advertisements outside the active HLS video bindings and prevent an unsupported fullscreen source from turning into a late HTTP advertisement capture ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
-- Run experimental Next after VLC dismissal completes, retain accepted sessions through temporary system interruptions, retry cancelled preparation on new Play, recapture the next eligible playing source automatically, and open native fullscreen only after muted preparation produces fresh video frames ([Playback controls](docs/USER_GUIDE.md), [Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
-- Route experimental iframe capture through the main document and await the original video’s pause acknowledgement before enabling VLC audio ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
-- Capture eligible playing video automatically in the visible active tab, retain explicit Center/fullscreen retries, and stop hidden website playback during native VLC ([Playback controls](docs/USER_GUIDE.md)).
-- Prioritize Back dismissal of visible VLC over the underlying iframe fullscreen, restore the page layout without waiting for a child reply, and require video output before accepting experimental capture ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
+- Pause the bound website source before opening VLC, return mid-video closes to its position paused, and allow a new Play to capture that same source again ([Playback controls](docs/USER_GUIDE.md)).
+- Route Next through VLC's actual EOF by seeking to its final 0.1 seconds, then resume the website at its own final 0.1 seconds for natural episode completion ([Playback controls](docs/USER_GUIDE.md)).
+- Restrict automatic capture to foreground visible video with real playback progress, preserve iframe source acknowledgements and HTTP context, and reject unrelated or unsupported sources ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
+- Prioritize Back dismissal of visible VLC over website fullscreen and retain accepted playback across temporary system interruptions ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
 
 ## 2.21.9 - 2026-11-07
 

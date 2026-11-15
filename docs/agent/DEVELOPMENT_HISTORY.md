@@ -1597,3 +1597,48 @@ Stand commit d756a57 and app commit 42d9f2e were pushed to beta PR #20. Actions 
 43743814825 successfully compiled and packaged native Release 2.22.0 Build 16.1
 before this documentation update. Keep 2.22.0 consolidated. No device or Simulator
 work was performed; UIKit presentation remains unverified by the Linux evidence.
+
+## 2026-11-15 — User-approved simple takeover baseline and beta Build 18.1
+
+The user manually confirms the simplified stand on UAKino (also called Юафільм),
+UASerials and Teleportal, explicitly says TV has not been tested, and requests push
+and build as a working baseline. Preserve that distinction. Move the proved behavior
+into production source: event-armed 50 ms sampling, at least 100 ms real playback,
+one accepted leaf pause acknowledgement, then immediate visible VLC presentation.
+Remove background-child decoder preparation, muted readiness presentation gates and
+the app startup deadline. Actual decoding now follows presentation, as requested.
+Keep source/document/foreground checks and native per-media UA/referrer/cookie context.
+Input start-time preserves the site position without a second unnecessary decoder seek.
+
+Mid-close returns the website to the VLC position paused; a new manual Play rearms
+capture. Completion or close within the final two seconds seeks the website to its
+final 100 ms and Play so its own real end listener handles episodes. Per the user's
+clarification, Next seeks VLC itself to its final 100 ms and plays; natural VLC EOF
+alone performs the same closure/return mechanism. Remove the separate JS Next action.
+A real resumed WebKit fixture emitted play/timeupdate but delayed playing until EOF;
+arm on play too while still requiring real advancement. Fullscreen metadata cannot
+bypass that threshold.
+
+Final production bridge/actual libVLC fixture passed position roundtrip, paused
+mid-close, same-source replay, single accepted ACK, presentation-before-readiness,
+actual-VLC Next EOF and trusted HTML completion with new-source capture. Final runs:
+19-45-54.475Z-9f 3d 4018 and fullscreen 19-45-58.466Z-c 30cc 55d. Cancellation/source-change
+and stalled HTTP checks also pass. A controlled actual Teleportal leaf passes capture,
+actual decoding, paused return 12 s, manual recapture, actual VLC EOF and actual HTML EOF;
+episode 93 does not start there within 35 s. Do not describe Teleportal auto-advance as
+fixed or infer behavior of its full host or TV from that isolated embed.
+
+Correct earlier stand conclusions: the UAKino adblock-OFF decode may have been preroll,
+not main content. Later causal A/B proves PlayerJS's Safari-UA native-HLS choice fails
+on Linux WebKit; HLS.js plays actual main content. Desktop VLC's ignored global UA flag
+caused 403, while per-input :http-user-agent fixed actual decoding. These are stand
+issues with direct evidence, not explanations of the TV reports. Native code already
+uses per-media options. Stand helpers/skill and [the runbook](WEBKIT_TESTBENCH.md) now
+use current production bridge source rather than the private prototype as a second
+implementation. Private raw logs and signed media values remain ignored.
+
+Atomic source/stand contract commit 7743352 was pushed to PR #20. Actions run 43754626533
+successfully compiled Apple TV Release, packaged/verified the unsigned IPA and published
+2.22.0 Build 18.1 before this documentation update. Both marketing versions remain 2.22.0,
+consolidated as the unreleased minor feature. No device or Simulator work was performed.
+Native fullscreen/focus and website episode behavior now require the user's TV check.
