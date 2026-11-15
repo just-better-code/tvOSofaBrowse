@@ -751,3 +751,68 @@ experiment OFF, decoded real ended with fullscreen ON/OFF, and Next fallback wit
 no recognized track API. Helpers remain ignored. Native callback/header/control
 changes are unbuilt on Linux; the latest available IPA remains Build 11.1 without
 these local follow-ups. Push hold remains in force.
+
+## 2026-11-15 — TV failure report and automatic preparation before presentation
+
+User reports Teleportal Next fails, fullscreen usually flashes white then exits to
+container playback, and video can play behind/in a background tab. New requested
+behavior: catch the main video when it starts, buffer before showing native
+fullscreen, and avoid website-fullscreen -> brief playback -> interruption -> VLC.
+No physical device access is authorized; continue stand validation and immediate
+push of completed stages to the beta PR.
+
+Acceptance/implementation stages:
+1. Separate experiment enablement from active-page permission. Offer eligible
+   playing video through the actual visible frame chain without invoking website
+   fullscreen. Keep source/playlist/DRM/ad validation and bounded per-source attempts.
+2. Add a prepare acknowledgement that freezes only the verified original video
+   after the native active-tab check. Prepare muted VLC as an attached child behind
+   the browser, with an opaque/visible drawable and about two seconds network cache.
+   Present native fullscreen once output/time is confirmed; rollback on failure.
+3. Deliver close/Next after native dismissal, restore active capture permission,
+   and let the next real source produce its own automatic offer. Cancel preparation
+   on tab change/background/modal conflicts, without restarting hidden website audio.
+4. Check live Teleportal plus targeted nested/visibility/source/cancellation cases.
+   The Linux stand cannot verify UIKit child-to-modal rendering or actual tvOS.
+
+Implementation checkpoint: automatic playing-video offers now use foreground-tab
+permission independently of ancestor visibility. Prepare freezes the bound HTML
+source, including late site Play; native keeps an opaque drawable attached behind
+the browser, uses 2000 ms network caching and waits for fresh decoded/displayed
+frames and an advancing clock after any resume seek. Accepted acknowledgement is
+obtained while the website is foreground; only then detach and present the prepared
+controller. Return/Next runs after modal disappearance, restores capture permission
+and allows a new source/playlist item to offer automatically. Back and preparation
+failure resume once; inactive pages remain paused. A declined offscreen relay sends
+a deferred reply so stale visibility configuration cannot permanently consume the
+source's one automatic attempt.
+
+Stand evidence (private helpers/logs under ignored `.data/webkit-testbench/`):
+- Live production bridge on actual Teleportal: a single Play emitted an automatic
+  offer without website fullscreen; simulated prepare/accepted paused the real
+  source. Next switched 92 -> 93 and 93 -> 94 through the actual Starlight control;
+  both new real sources played and emitted new automatic offers. The second
+  transition included native-active permission OFF/ON simulation. Run
+  2026-11-15T16-42-42.299Z-b286491a.
+- Current production bridge, decoded WebM in three cross-origin documents: automatic
+  offer, prepare/accept, late Play held, no fullscreen, Back without recapture,
+  new-source offer, failed preparation rollback once, inactive late Play stopped,
+  inactive failure kept paused, offscreen decline/scroll-visible retry and changed
+  source rejected. Run 2026-11-15T16-57-39.141Z-5ef7c172. The added scroll case exposed
+  and fixed a real stale-configuration/consumed-attempt race; the first late-Play
+  check also exposed clock drift, fixed by stopping at `play`, before `playing`.
+- Main-document and iframe natural completion/Next without a track API each produced
+  exactly one trusted ended event, no website fullscreen and duplicate rejection.
+  Run 2026-11-15T16-58-08.183Z-9c63274e.
+- Unsupported MSE -> late HTTP remained ineligible until an explicit new entry.
+  Run 2026-11-15T16-55-29.239Z-07ad6301.
+- Actual new Teleportal offer in Linux libVLC 3.0.20 with 2000 ms cache: decoded,
+  sought to 120 s, produced fresh post-seek displayed frames and held its decoded
+  time on pause (120720 ms). This uses dummy Linux output, not TVVLCKit/UIKit.
+
+Native replies in WebKit are simulated. The user reported native Build 13.1
+failure; these checks do not establish its exact UIKit cause or prove the new
+child-to-modal surface transfer on tvOS. Next step: CI compilation/publication,
+then record its result and update public usage/changelog; user TV observation of
+first-frame presentation and consecutive native Next remains necessary. Keep
+2.22.0 consolidated; do not change signing, workflow, master or device state.

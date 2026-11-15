@@ -9,6 +9,10 @@
 @property (nonatomic) BOOL prepareWebVideoHandoff;
 @property (nonatomic, copy) void (^webVideoDidPrepare)(void);
 - (void)activateWebVideoHandoffAtTime:(double)time;
+@property (nonatomic, copy) void (^webVideoPreparationDidFail)(void);
+- (void)startBackgroundWebVideoPreparation;
+- (void)cancelBackgroundWebVideoPreparation;
+- (void)detachBackgroundWebVideoForPresentation;
 // Return experimental iframe EOF/End to the site's own episode lifecycle.
 @property (nonatomic) BOOL returnWebVideoOnEnd;
 @property (nonatomic, copy) void (^webVideoDidClose)(double time, double volume, BOOL muted, NSString *action);

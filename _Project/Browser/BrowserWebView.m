@@ -445,13 +445,14 @@ static NSString *BrowserFrameClickBridgeScript(NSString *secret, NSString *nativ
                 "}"
                 "function enterFullscreen(element) {"
                     "if (!element || fullscreenTarget) { return; }"
+                    "if (deferVLCFullscreen(element)) return;"
                     "fullscreenTarget = element;"
                     "fullscreenTargetStyle = element.style.cssText;"
                     "beginTheater(element);"
                     "element.style.cssText += ';position:fixed!important;left:0!important;top:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;z-index:2147483647!important;background:#000!important';"
                     "sendFullscreenToParent('enter');"
                     "notifyFullscreenChange();"
-                    "mediaVLCRequests = Object.create(null); mediaVLCAttempted = false; requestVLCFullscreen(element);"
+                    "mediaVLCAttempted = false; requestVLCFullscreen(element);"
                 "}"
                 "function exitFullscreen() {"
                     "if (!fullscreenTarget) { return false; }"
@@ -814,8 +815,9 @@ static id BrowserPersistentWebsiteDataStore(void) {
     // Playback and media-state messages retain exact document URL validation.
     if (mainFrame && ![body[@"vlcConfigRequest"] boolValue] && ![request.URL isEqual:owner.request.URL]) return;
     if (mainFrame && [body[@"vlcConfigRequest"] boolValue]) {
-        NSString *script = [NSString stringWithFormat:@"window.__browserTVSetIframeVLCExperiment && window.__browserTVSetIframeVLCExperiment(%@)",
-            BrowserPreferencesStore.iframeVLCExperimentEnabled ? @"true" : @"false"];
+        BOOL active = !owner.fullscreenMediaSuspended && owner.window && UIApplication.sharedApplication.applicationState == UIApplicationStateActive;
+        NSString *script = [NSString stringWithFormat:@"window.__browserTVSetIframeVLCExperiment && window.__browserTVSetIframeVLCExperiment(%@,%@)",
+            BrowserPreferencesStore.iframeVLCExperimentEnabled ? @"true" : @"false", active ? @"true" : @"false"];
         [owner evaluateJavaScript:script completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
         return;
     }
@@ -825,20 +827,20 @@ static id BrowserPersistentWebsiteDataStore(void) {
     }
     if ([body[@"vlcRequest"] boolValue])
         BrowserDebugLog(@"[WebVLC] offer=1 child=%d enabled=%d", !mainFrame, BrowserPreferencesStore.iframeVLCExperimentEnabled);
-    BOOL iframeExperiment = mainFrame && [body[@"iframeRelay"] boolValue] && [body[@"vlcRequest"] boolValue];
+    BOOL iframeExperiment = mainFrame && ([body[@"iframeRelay"] boolValue] || [body[@"automatic"] boolValue]) && [body[@"vlcRequest"] boolValue];
     if (!mainFrame || (iframeExperiment && !BrowserPreferencesStore.iframeVLCExperimentEnabled)) return;
     if ([body[@"fullscreenState"] isKindOfClass:NSNumber.class]) {
         [owner updatePageFullscreenActive:[body[@"fullscreenState"] boolValue]];
         return;
     }
-    if (owner.loading) return;
+    if (owner.loading && ![body[@"vlcRequest"] boolValue]) return;
     if ([body[@"vlcRequest"] boolValue]) {
         // Direct offers retain exact WebKit document binding. Experimental relay
         // context is checked against MessageEvent.origin by the first parent;
         // subsequent hops are restricted to the selected fullscreen frame.
         NSString *documentString = [body[@"documentURL"] isKindOfClass:NSString.class] ? body[@"documentURL"] : nil;
         NSURL *documentURL = documentString.length > 0 && documentString.length <= 8192 ? [NSURL URLWithString:documentString] : nil;
-        if ((!iframeExperiment && ![documentURL isEqual:request.URL]) ||
+        if ((![body[@"iframeRelay"] boolValue] && ![documentURL isEqual:request.URL]) ||
             !documentURL.host.length || documentURL.user.length || documentURL.password.length ||
             ![@[@"http", @"https"] containsObject:documentURL.scheme.lowercaseString]) {
             BrowserDebugLog(@"[WebVLC] documentMismatch=1 child=%d", !mainFrame); return;
@@ -857,6 +859,7 @@ static id BrowserPersistentWebsiteDataStore(void) {
             @"referrerPolicy": [body[@"referrerPolicy"] isKindOfClass:NSString.class] && [body[@"referrerPolicy"] length] <= 64 ? body[@"referrerPolicy"] : @"",
             @"crossOrigin": [body[@"crossOrigin"] isKindOfClass:NSString.class] && [body[@"crossOrigin"] length] <= 32 ? body[@"crossOrigin"] : @""} mutableCopy];
         if (iframeExperiment) info[@"iframeExperiment"] = @YES;
+        info[@"automatic"] = @([body[@"automatic"] boolValue]);
         if ([owner.delegate respondsToSelector:@selector(webView:didRequestVLCPlayback:)]) {
             [owner.delegate webView:owner didRequestVLCPlayback:info];
         }
@@ -1324,8 +1327,11 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 }
 
 - (void)setFullscreenMediaControlsSuspended:(BOOL)suspended {
+    _fullscreenMediaSuspended = suspended;
     if (suspended) [self evaluateJavaScript:@"window.__browserTVResetClickSequence && window.__browserTVResetClickSequence()" completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
-    NSString *script = [NSString stringWithFormat:@"window.__browserTVSetFullscreenMediaSuspended && window.__browserTVSetFullscreenMediaSuspended(%@)", suspended ? @"true" : @"false"];
+    BOOL active = !suspended && self.window && UIApplication.sharedApplication.applicationState == UIApplicationStateActive;
+    NSString *script = [NSString stringWithFormat:@"window.__browserTVSetFullscreenMediaSuspended && window.__browserTVSetFullscreenMediaSuspended(%@);window.__browserTVSetIframeVLCExperiment && window.__browserTVSetIframeVLCExperiment(%@,%@)",
+        suspended ? @"true" : @"false", BrowserPreferencesStore.iframeVLCExperimentEnabled ? @"true" : @"false", active ? @"true" : @"false"];
     [self evaluateJavaScript:script completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
 }
 
@@ -1360,6 +1366,7 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
     BrowserEnsureWebKitRuntimeLoaded();
 
     self.backgroundColor = UIColor.blackColor;
+    _fullscreenMediaSuspended = YES;
     self.userAgent = userAgent;
     self.pageZoomFactor = 1.0;
     self.textZoomFactor = 1.0;

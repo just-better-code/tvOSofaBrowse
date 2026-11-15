@@ -54,6 +54,7 @@ FOUNDATION_EXPORT NSString * const BrowserAdBlockSourceStatusDidChangeNotificati
 @property (nonatomic, readonly) NSUInteger javaScriptGeneration;
 - (void)invalidatePendingJavaScript;
 @property (nonatomic, readonly) BOOL pageFullscreenActive;
+@property (nonatomic, readonly) BOOL fullscreenMediaSuspended;
 - (void)evaluateJavaScript:(NSString *)script
         completionHandler:(void (^ _Nullable)(NSString * _Nullable result, NSError * _Nullable error))completion;
 // Evaluate only in the WKFrameInfo that supplied the video offer; never fall back to top.
