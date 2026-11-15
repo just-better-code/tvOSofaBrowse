@@ -1003,3 +1003,26 @@ candidate, not established causation. Compare an unshaped same-page control befo
 changing source-loader behavior or introducing a visible initial prebuffer gate.
 If contention is established, evaluate stopping/restarting only the already bound
 HLS loader, preserving source identity, frozen position and real website EOF.
+
+## Session stop — user feedback after the startup fixes
+
+The user reports that it now works, but the playback hiccup remains at approximately
+the tenth second. Treat startup/capture as user-confirmed working in this check;
+do not mark the hiccup fixed or infer coverage of every Home/replay scenario. The
+exact installed build was not separately confirmed. The last communicated available
+beta was 2.22.0 Build 20.1. The user explicitly ends work for today.
+
+The unshaped same-page control is now available: run
+20-31-23.191Z-42ef0475 advances10995ms over11515ms, compared with8313ms over11519ms
+under2000kbit/s,+150ms. The unshaped control also has four backward raw C clock
+updates versus two under shaping; backwards-update counts alone do not identify
+the hiccup. See ignored `.data/webkit-testbench/slow-network-CHECKPOINT.md` for
+private drivers and raw evidence locations.
+
+Resume with the remaining approximately10s hiccup. Correlate displayed-frame/time
+stalls with network delivery and continued paused-site HLS loads before attributing
+causation. Use the standard isolated slow-network stand for controlled comparisons.
+Preserve immediate fullscreen with visible buffering, the0.1s eligibility threshold,
+source/HTTP context and the single real-EOF mechanism. No additional buffering gate
+or loader stop/restart behavior has been implemented. Do not resume investigations,
+tests, builds or delivery until the user resumes work.

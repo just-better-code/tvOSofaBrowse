@@ -1682,3 +1682,15 @@ but a12s observation exposes early clock/output stalls and continued paused-brow
 TS downloads. This is useful stand evidence; attribution and the user's TV hiccup
 remain unresolved. The wrapper, dependency boundary and commands are recorded in
 [the stand runbook](WEBKIT_TESTBENCH.md); raw evidence remains ignored.
+
+### Session-end user confirmation
+
+The user reports that the change works, while a playback hiccup at approximately
+the tenth second remains. Record startup/capture as working in this user check;
+the exact installed build and all individual Home scenarios were not separately
+confirmed. The hiccup is still open. The unshaped UASerials control advances10995ms
+over11515ms versus8313ms over11519ms under the slow connection, but raw backward
+clock updates also occur without shaping and do not establish the TV cause.
+The user explicitly ends work for today. Save the resumable checkpoint in
+[the experiment plan](plans/automatic-web-video-vlc.md) and stop further work.
+This is a progress-only update; application code and version are unchanged.
