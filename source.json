@@ -11,10 +11,10 @@
       "versions": [
         {
           "version": "2.22.0",
-          "buildVersion": "6.2",
-          "date": "2026-11-15T11:21:30Z",
-          "downloadURL": "https://github.com/just-better-code/tvOSofaBrowse/releases/download/test-pr-20-43707934025-2/tvOSofaBrowse-test-2.22.0-6.2-unsigned.ipa",
-          "size": 22524145
+          "buildVersion": "7.1",
+          "date": "2026-11-15T11:37:02Z",
+          "downloadURL": "https://github.com/just-better-code/tvOSofaBrowse/releases/download/test-pr-20-43709504253-1/tvOSofaBrowse-test-2.22.0-7.1-unsigned.ipa",
+          "size": 22524742
         }
       ]
     }
@@ -22,10 +22,10 @@
   "_tvOSofaBrowse": {
     "channel": "develop",
     "pullRequest": 20,
-    "commit": "ba8b0d0ce851b73411283d1ced77646b82931513",
-    "headCommit": "68290a4c575eb6f306b021d2765071267b7cdb85",
-    "runNumber": 6,
-    "runAttempt": 2,
-    "publicationAttempt": 2
+    "commit": "11ffb1cf5fcc84c18994ac84387d54991a8cb995",
+    "headCommit": "b494c43dac48049557a5adb3e69246d74d21839a",
+    "runNumber": 7,
+    "runAttempt": 1,
+    "publicationAttempt": 1
   }
 }
