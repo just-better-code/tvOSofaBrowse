@@ -212,7 +212,9 @@ static UIColor *kTextColor(void) {
 #pragma mark - Notifications
 
 - (void)handleApplicationWillResignActive:(NSNotification *)notification {
-    self.webVideoOfferSerial++;
+    // Invalidate preparation, but keep an already accepted VLC session valid
+    // across temporary system interruptions so its later Next is not cancelled.
+    if (![self.presentedViewController isKindOfClass:BrowserVLCPlayerViewController.class]) self.webVideoOfferSerial++;
     [self cancelPreparingWebVideoResumingPage:NO];
     [self.arrowPressDriver handlePlaybackPressPhase:UIPressPhaseCancelled];
     [self.webview setFullscreenMediaControlsSuspended:YES];
@@ -718,7 +720,8 @@ static UIColor *kTextColor(void) {
     UIViewController *presented = self.presentedViewController;
     if ([presented isKindOfClass:BrowserVLCPlayerViewController.class]) {
         UIViewController *child = presented.presentedViewController;
-        [(child ?: presented) dismissViewControllerAnimated:YES completion:nil];
+        if (child) [child dismissViewControllerAnimated:YES completion:nil];
+        else [(BrowserVLCPlayerViewController *)presented closePlayer];
         return;
     }
     if ([self fullscreenMediaInputActive]) { [self.fullscreenMediaControls closePlayer]; return; }

@@ -319,6 +319,10 @@ window.__browserTVVLCResponse = function(id, action, time, volume, muted) {
         delete mediaVLCRequests[id];
         return true;
     }
+    // A cancelled warm-up never resumes its video. Let a later real Play retry
+    // after returning to this tab; keep Back/failure's resume-once suppression.
+    if (action === 'cancelled' && request.preparing && !request.accepted)
+        mediaVLCAutoAttempts.delete(request.video);
     if (action === 'next' && request.accepted && vlcRequestSourceIsCurrent(request)) {
         // Reuse the site's existing Media Session/recognized-control route.
         // An explicit Next is not EOF; do not seek near the end as well.

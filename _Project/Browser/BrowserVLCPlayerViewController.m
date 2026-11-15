@@ -18,6 +18,7 @@
 @property (nonatomic) BOOL backgroundWebPreparation;
 @property (nonatomic) BOOL transferringPreparedWebVideo;
 @property (nonatomic) BOOL playbackStarted;
+@property (nonatomic) BOOL webVideoDismissalInProgress;
 @property (nonatomic) NSInteger webDecodedBaseline;
 @property (nonatomic) NSInteger webDisplayedBaseline;
 @property (nonatomic, copy) void (^pendingWebVideoClose)(void);
@@ -536,9 +537,13 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
 - (void)viewDidDisappear:(BOOL)animated {
     [super viewDidDisappear:animated];
     if (self.backgroundWebPreparation || self.transferringPreparedWebVideo) return;
+    if (!self.webVideoDismissalInProgress) [self notifyWebVideoClosed];
+}
+
+- (void)notifyWebVideoClosed {
     void (^closed)(void) = self.pendingWebVideoClose;
     self.pendingWebVideoClose = nil;
-    if (closed) dispatch_async(dispatch_get_main_queue(), closed);
+    if (closed) closed();
 }
 
 - (BOOL)canBecomeFirstResponder { return YES; }
@@ -880,6 +885,8 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     });
 }
 
+- (void)closePlayer { [self closePressed]; }
+
 - (void)closePressed {
     if (self.backgroundWebPreparation) {
         void (^failed)(void) = self.webVideoPreparationDidFail;
@@ -887,8 +894,13 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
         if (failed) failed();
         return;
     }
-    if (!self.isBeingDismissed && self.presentingViewController)
-        [self dismissViewControllerAnimated:YES completion:nil];
+    if (!self.isBeingDismissed && self.presentingViewController) {
+        self.webVideoDismissalInProgress = YES;
+        [self dismissViewControllerAnimated:YES completion:^{
+            self.webVideoDismissalInProgress = NO;
+            [self notifyWebVideoClosed];
+        }];
+    }
 }
 - (void)playPausePressed {
     if (self.prepareWebVideoHandoff) return;

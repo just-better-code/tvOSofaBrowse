@@ -822,3 +822,57 @@ packaging/verification in run 43738492640, Build 14.1. Public documentation now
 reflects automatic preparation and Next after dismissal. Documentation-only follow-up
 keeps MARKETING_VERSION 2.22.0 in both configurations; it does not change app code.
 Native frame transfer and repeated TV Next remain unverified until user observation.
+
+## 2026-11-15 — User rejects Build 14/15 behavior; faithful stand prerequisite
+
+User reports UAKino pauses after about one second with no VLC, UASerials first
+capture works but Next returns to website playback, and Teleportal first capture
+works but Next leaves the same episode without playback. Fullscreen retention and
+per-site auto-exit are explicitly deferred; prioritize reliable automatic capture.
+The user also requests a direct ON/OFF row in Debug instead of a one-item submenu.
+Do not represent former scripted web replies as end-to-end native validation.
+
+User explicitly authorizes a subagent to build a reusable maximum-parity stand,
+including Linux libVLC as an acceptable analog for TVVLCKit, app adblock, production
+injections and native host state/order. Adblock on actual Teleportal blocks
+Adtelligent/Smartytech/Google requests; the real main player loads without pageerror.
+With blocking it can autoplay and offer before the first mouse click, so previous
+click-then-late-reply procedures are invalid for an automatic-capture test. A late
+click pauses that existing video and correctly invalidates a subsequent prepare.
+
+Local app edits pending stand evidence and CI:
+- Put experiment badge directly in Debug; toggle stays on the same settings screen.
+- Deliver explicit close/Next callback from dismissal completion, rather than
+  assuming viewDidDisappear plus a queued block means presentation state cleared.
+- Keep an accepted VLC offer serial valid across temporary application inactivity;
+  invalidate pending preparation. Otherwise later Next is coerced to cancelled even
+  after returning to foreground. Add the interruption case to the faithful host.
+
+No new beta trial should be claimed fixed merely from a host model or compilation.
+Use the libVLC-backed host to reproduce the user-visible failure first, then test
+changed source/Next/rollback behavior with real adblocked website lifecycle. Native
+UIKit first-frame rendering remains outside Linux validation. Per-site fullscreen
+exit preference remains deferred and unchanged in this stage.
+
+Additional reproduced bridge defect: a prepared capture cancelled by backgrounding
+kept the per-source automatic attempt consumed. Returning and pressing Play on the
+same real video never offered VLC again (2 s assertion timeout in private
+check-cancelled-restart.mjs). Clear that attempt only for cancelled, prepared,
+not-yet-accepted requests. The same decoded nested-video check then passes, including
+its earlier Back/failure no-loop and inactive-playback assertions. Evidence run
+2026-11-15T17-43-25.523Z-c3cf3252. Do not clear accepted Back or failure suppression.
+
+The new stand reproduces the early-dismissal-callback lost-recapture failure with
+actual decoded media: new source plays in WebKit, its native offer is cancelled
+while modeled presented remains true, then the native host is idle. Delivering
+close at modeled completion instead permits the new source to decode in libVLC.
+This confirms the host-contract race, without claiming UIKit timing evidence.
+Subagent's fixture run 2026-11-15T17-41-08.222Z-e9ddfdc3 and live Teleportal
+2026-11-15T17-42-16.690Z-23976076 passed the integrated capture/Next/decode path;
+remaining live site checks are still in progress at this checkpoint.
+
+Latest menu steering supersedes the local Debug-row approach: move the experiment
+badge to the main Settings tile occupied by Magnifier, label it VLC, and remove the
+Debug entry entirely. Retain the magnifier's existing remote shortcut and automatic
+timeout. Debug/develop retain experiment availability; ordinary stable builds keep
+the existing Magnifier tile while that experiment is unavailable. No new submenu.

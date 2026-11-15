@@ -2054,30 +2054,22 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
         @{ @"id": @"2", @"title": @"Background Probe" },
         @{ @"id": @"3", @"title": @"Inspect WebKit Media Prefs" },
     ];
-    if (BrowserPreferencesStore.iframeVLCExperimentAvailable)
-        settings.rows = [settings.rows arrayByAddingObject:@{@"id":@"4", @"title":@"Iframe Video in VLC (Experimental)"}];
     [self.host browserPresentViewController:settings];
 }
 
-- (void)presentIframeVLCExperiment {
-    __weak typeof(self) weakSelf = self;
-    BrowserOptionsViewController *settings = [[BrowserOptionsViewController alloc]
-        initWithEnabledProvider:^BOOL { return BrowserPreferencesStore.iframeVLCExperimentEnabled; }
-        toggleEnabled:^{
+- (BrowserAdvancedMenuItem *)iframeVLCToggleMenuItem {
+    BrowserAdvancedMenuItem *item = [self advancedMenuItemWithTitle:@"Web Video in VLC"
+        style:UIAlertActionStyleDefault handler:^{
             [NSUserDefaults.standardUserDefaults setBool:!BrowserPreferencesStore.iframeVLCExperimentEnabled
                 forKey:@"BrowserIframeVLCExperiment"];
-            NSString *script = [NSString stringWithFormat:@"window.__browserTVSetIframeVLCExperiment && window.__browserTVSetIframeVLCExperiment(%@)",
-                BrowserPreferencesStore.iframeVLCExperimentEnabled ? @"true" : @"false"];
-            [weakSelf.host.browserWebView evaluateJavaScript:script
-                completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
-        } activateRow:nil];
-    settings.toggleTitle = @"Iframe Video in VLC (Experimental)";
-    settings.rows = @[];
-    [self.host browserPresentViewController:settings];
+            BrowserWebView *webView = self.host.browserWebView;
+            [webView setFullscreenMediaControlsSuspended:webView.fullscreenMediaSuspended];
+        }];
+    item.toggleStateProvider = ^BOOL { return BrowserPreferencesStore.iframeVLCExperimentEnabled; };
+    return item;
 }
 
 - (void)presentDebugReport:(NSUInteger)index {
-    if (index == 4) { [self presentIframeVLCExperiment]; return; }
     switch (index) {
     case 0: {
         NSArray<NSString *> *recent = BrowserDebugRecentLogs();
@@ -2206,7 +2198,9 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
         [BrowserAdvancedMenuSection sectionWithTitle:@"Settings"
                                                items:@[
             [self tileItem:[self adBlockToggleMenuItem] title:@"Ad Block" symbol:@"hand.raised.fill"],
-            [self tileItem:[self cursorMagnifierToggleMenuItem] title:@"Magnifier" symbol:@"magnifyingglass"],
+            (BrowserPreferencesStore.iframeVLCExperimentAvailable
+                ? [self tileItem:[self iframeVLCToggleMenuItem] title:@"VLC" symbol:@"play.rectangle.fill"]
+                : [self tileItem:[self cursorMagnifierToggleMenuItem] title:@"Magnifier" symbol:@"magnifyingglass"]),
             [self tileItem:[self torrentKeepAliveToggleMenuItem] title:@"Keep Alive" symbol:@"waveform"],
             [self tileItem:[self userAgentModeMenuItem] title:@"Mobile Site" symbol:@"iphone"],
         ]],
