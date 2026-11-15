@@ -6,11 +6,21 @@
 #import "BrowserTVAppearance.h"
 #import "BrowserPlaybackSymbols.h"
 #import "BrowserPlaybackSeek.h"
+#import "BrowserVLCCompressor.h"
 #import "BrowserFullscreenMediaControlsController.h"
 
 #import <TVVLCKit/TVVLCKit.h>
 
 @interface BrowserVLCPlayerViewController () <VLCMediaPlayerDelegate, UIGestureRecognizerDelegate>
+@property (nonatomic) NSTimeInterval webHandoffStarted;
+@property (nonatomic) int64_t webHandoffLastTime;
+@property (nonatomic) BOOL webHandoffReported;
+@property (nonatomic) BOOL backgroundWebPreparation;
+@property (nonatomic) BOOL transferringPreparedWebVideo;
+@property (nonatomic) BOOL playbackStarted;
+@property (nonatomic) NSInteger webDecodedBaseline;
+@property (nonatomic) NSInteger webDisplayedBaseline;
+@property (nonatomic, copy) void (^pendingWebVideoClose)(void);
 @property (nonatomic, copy) NSString *identifier;
 @property (nonatomic) NSInteger fileIndex;
 @property (nonatomic, copy) NSURL *webVideoURL;
@@ -34,12 +44,15 @@
 @property (nonatomic) UIButton *muteButton;
 @property (nonatomic) UIButton *audioTrackButton;
 @property (nonatomic) UIButton *subtitleTrackButton;
+@property (nonatomic) UIButton *autoExitFullscreenButton;
 @property (nonatomic, copy) NSString *audioMenuKey;
 @property (nonatomic, copy) NSString *subtitleMenuKey;
 @property (nonatomic) NSTimer *progressTimer;
 @property (nonatomic) NSUInteger controlsGeneration;
 @property (nonatomic) NSInteger lastReportedState;
 @property (nonatomic) BOOL playbackEnded;
+@property (nonatomic) BOOL webVideoFinished;
+@property (nonatomic, copy) NSString *webVideoCompletionAction;
 @property (nonatomic) UIView *headerView;
 @property (nonatomic) NSTimeInterval lastDurationLogTime;
 @property (nonatomic) UIView *videoView;
@@ -87,6 +100,8 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     UIView *videoView = [UIView new];
     videoView.translatesAutoresizingMaskIntoConstraints = NO;
     videoView.backgroundColor = UIColor.blackColor;
+    // Background preparation attaches this visible drawable behind the browser.
+    // Do not use alpha zero: a hidden output is not a prepared video surface.
     [self.view addSubview:videoView];
     self.videoView = videoView;
     [NSLayoutConstraint activateConstraints:@[
@@ -103,9 +118,15 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     self.headerView = header;
     UIVisualEffectView *headerBackdrop = [self glassBackdrop];
     [header addSubview:headerBackdrop];
+    UIImageView *playerIcon = [[UIImageView alloc] initWithImage:BrowserPlaybackControlImage(@"browser.vlc")];
+    playerIcon.translatesAutoresizingMaskIntoConstraints = NO;
+    playerIcon.tintColor = UIColor.whiteColor;
+    playerIcon.contentMode = UIViewContentModeScaleAspectFit;
+    playerIcon.isAccessibilityElement = NO;
+    [header addSubview:playerIcon];
     UILabel *title = [UILabel new];
     title.translatesAutoresizingMaskIntoConstraints = NO;
-    title.text = self.mediaTitle;
+    title.text = self.mediaTitle ?: @"";
     title.textColor = UIColor.whiteColor;
     title.font = [UIFont systemFontOfSize:26 weight:UIFontWeightSemibold];
     [header addSubview:title];
@@ -126,7 +147,11 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
         [headerBackdrop.trailingAnchor constraintEqualToAnchor:header.trailingAnchor],
         [headerBackdrop.topAnchor constraintEqualToAnchor:header.topAnchor],
         [headerBackdrop.bottomAnchor constraintEqualToAnchor:header.bottomAnchor],
-        [title.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:80],
+        [playerIcon.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:80],
+        [playerIcon.centerYAnchor constraintEqualToAnchor:title.centerYAnchor],
+        [playerIcon.widthAnchor constraintEqualToConstant:30],
+        [playerIcon.heightAnchor constraintEqualToConstant:30],
+        [title.leadingAnchor constraintEqualToAnchor:playerIcon.trailingAnchor constant:12],
         [title.topAnchor constraintEqualToAnchor:header.topAnchor constant:55],
         [title.trailingAnchor constraintLessThanOrEqualToAnchor:header.trailingAnchor constant:-80],
         [status.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
@@ -176,8 +201,13 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     forward.tag = 1;
     forwardPercent.tag = 2;
     self.playButton = play;
-    UIButton *audioTrack = [self trackButtonWithTitle:@"Audio: Unavailable" action:@selector(audioTrackPressed)];
-    UIButton *subtitleTrack = [self trackButtonWithTitle:@"Subtitles: Unavailable" action:@selector(subtitleTrackPressed)];
+    UIButton *audioTrack = [self controlButtonWithSymbol:@"waveform" label:@"Audio" action:@selector(audioTrackPressed)];
+    UIButton *subtitleTrack = [self controlButtonWithSymbol:@"captions.bubble" label:@"Subtitles" action:@selector(subtitleTrackPressed)];
+    UIButton *autoExit = [self controlButtonWithSymbol:@"arrow.down.right.and.arrow.up.left"
+        label:@"Exit fullscreen after Next or completion" action:@selector(toggleAutoExitFullscreen)];
+    self.autoExitFullscreenButton = autoExit;
+    autoExit.hidden = !self.returnWebVideoOnEnd;
+    [self refreshAutoExitFullscreenControl];
     self.audioTrackButton = audioTrack;
     self.subtitleTrackButton = subtitleTrack;
     NSArray<UIButton *> *mainButtons = @[previous, backPercent, back, restart, play, end, forward, forwardPercent, volumeDown, mute, volumeUp, next];
@@ -186,8 +216,11 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
         [button.widthAnchor constraintEqualToConstant:diameter].active = YES;
         [button.heightAnchor constraintEqualToConstant:diameter].active = YES;
     }
-    for (UIButton *button in @[audioTrack, subtitleTrack]) {
-        [button.widthAnchor constraintEqualToConstant:220].active = YES;
+    for (UIButton *button in @[audioTrack, subtitleTrack, autoExit]) {
+        // A hidden arranged view needs zero width; let the stack collapse it.
+        NSLayoutConstraint *width = [button.widthAnchor constraintEqualToConstant:68];
+        width.priority = UILayoutPriorityDefaultHigh;
+        width.active = YES;
         [button.heightAnchor constraintEqualToConstant:68].active = YES;
     }
     UIStackView *buttons = [[UIStackView alloc] initWithArrangedSubviews:
@@ -202,7 +235,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     volumeButtons.spacing = 10;
     volumeButtons.alignment = UIStackViewAlignmentCenter;
     [controls addSubview:volumeButtons];
-    UIStackView *trackButtons = [[UIStackView alloc] initWithArrangedSubviews:@[audioTrack, subtitleTrack]];
+    UIStackView *trackButtons = [[UIStackView alloc] initWithArrangedSubviews:@[audioTrack, subtitleTrack, autoExit]];
     trackButtons.translatesAutoresizingMaskIntoConstraints = NO;
     trackButtons.spacing = 10;
     trackButtons.alignment = UIStackViewAlignmentCenter;
@@ -223,12 +256,17 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
         [time.topAnchor constraintEqualToAnchor:progress.bottomAnchor constant:10],
         [volumeButtons.leadingAnchor constraintEqualToAnchor:buttons.trailingAnchor constant:34],
         [volumeButtons.centerYAnchor constraintEqualToAnchor:buttons.centerYAnchor],
-        [trackButtons.leadingAnchor constraintEqualToAnchor:volumeButtons.trailingAnchor constant:34],
+        [trackButtons.leadingAnchor constraintGreaterThanOrEqualToAnchor:volumeButtons.trailingAnchor constant:34],
         [trackButtons.trailingAnchor constraintEqualToAnchor:controls.trailingAnchor constant:-80],
         [trackButtons.centerYAnchor constraintEqualToAnchor:buttons.centerYAnchor],
+        [buttons.centerXAnchor constraintEqualToAnchor:controls.centerXAnchor],
         [buttons.topAnchor constraintEqualToAnchor:time.bottomAnchor constant:15.2],
         [buttons.heightAnchor constraintEqualToConstant:81.6],
     ]];
+
+    UITapGestureRecognizer *backPress = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(closePressed)];
+    backPress.allowedPressTypes = @[@(UIPressTypeMenu)];
+    [self.view addGestureRecognizer:backPress];
 
     UILongPressGestureRecognizer *contextPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self
                                                                                                action:@selector(handleContextPress:)];
@@ -364,7 +402,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
         mediaURL = self.server.mediaURL;
     }
     VLCMedia *media = [VLCMedia mediaWithURL:mediaURL];
-    [media addOption:@":network-caching=3000"];
+    [media addOption:self.returnWebVideoOnEnd ? @":network-caching=2000" : @":network-caching=3000"];
     if (self.webVideoURL) {
         NSString *agent = self.webRequestHeaders[@"User-Agent"];
         NSString *referrer = self.webRequestHeaders[@"Referer"];
@@ -392,13 +430,13 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
         }
         BrowserDebugLog(@"[TorrentVLC] webContext cookies=%lu referrer=%d", (unsigned long)stored, referrer.length > 0);
     }
-    self.vlcPlayer = [[VLCMediaPlayer alloc] initWithOptions:@[]];
+    self.vlcPlayer = BrowserVLCCreatePlayer();
     self.vlcPlayer.delegate = self;
     self.vlcPlayer.drawable = self.videoView;
     self.vlcPlayer.media = media;
     if (self.webVideoURL) {
         self.vlcPlayer.audio.volume = (int)lround(self.initialWebVolume * 100);
-        self.vlcPlayer.audio.muted = self.initialWebMuted;
+        self.vlcPlayer.audio.muted = self.prepareWebVideoHandoff || self.initialWebMuted;
     }
     self.audioMenuKey = nil;
     self.subtitleMenuKey = nil;
@@ -414,30 +452,93 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
+    if (self.prepareWebVideoHandoff && self.parentViewController && !self.presentingViewController) return;
+    self.transferringPreparedWebVideo = NO;
     [self becomeFirstResponder];
+    [self startPlaybackIfNeeded];
+}
+
+- (void)startBackgroundWebVideoPreparation {
+    self.backgroundWebPreparation = YES;
+    [self loadViewIfNeeded];
+    self.view.userInteractionEnabled = NO;
+    [self.view layoutIfNeeded];
+    [self startPlaybackIfNeeded];
+}
+
+- (void)detachBackgroundWebVideoForPresentation {
+    self.transferringPreparedWebVideo = YES;
+    self.backgroundWebPreparation = NO;
+    self.view.userInteractionEnabled = YES;
+    [self willMoveToParentViewController:nil];
+    [self.view removeFromSuperview];
+    [self removeFromParentViewController];
+}
+
+- (void)cancelBackgroundWebVideoPreparation {
+    self.transferringPreparedWebVideo = YES;
+    self.backgroundWebPreparation = NO;
+    self.webVideoDidPrepare = nil;
+    self.webVideoPreparationDidFail = nil;
+    self.webVideoDidClose = nil;
+    self.pendingWebVideoClose = nil;
+    self.vlcPlayer.delegate = nil;
+    [self.vlcPlayer stop];
+    [self.progressTimer invalidate];
+    self.progressTimer = nil;
+}
+
+- (void)startPlaybackIfNeeded {
+    if (self.playbackStarted) return;
+    self.playbackStarted = YES;
+    self.webHandoffStarted = NSDate.date.timeIntervalSince1970;
+    self.webHandoffLastTime = -1;
+    if (self.prepareWebVideoHandoff) {
+        __weak typeof(self) weakSelf = self;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 15 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            if (weakSelf.prepareWebVideoHandoff && weakSelf.viewIfLoaded.window && !weakSelf.isBeingDismissed) {
+                BrowserDebugLog(@"[WebVLC] startupDeadline=1");
+                [weakSelf closePressed];
+            }
+        });
+    }
     if (self.vlcPlayer) [self.vlcPlayer play];
-    self.progressTimer = [NSTimer scheduledTimerWithTimeInterval:1 target:self selector:@selector(refreshProgress) userInfo:nil repeats:YES];
+    self.progressTimer = [NSTimer scheduledTimerWithTimeInterval:self.prepareWebVideoHandoff ? 0.1 : 1 target:self selector:@selector(refreshProgress) userInfo:nil repeats:YES];
     [self refreshProgress];
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
     [self.arrowPressDriver handlePlaybackPressPhase:UIPressPhaseCancelled];
     [super viewWillDisappear:animated];
+    if (self.backgroundWebPreparation || self.transferringPreparedWebVideo) return;
     self.arrowSeekDirection = 0;
     [self stopHeldSeek];
     [self savePlaybackPosition];
     if (self.webVideoURL && self.webVideoDidClose) {
         double time = MAX(0, self.vlcPlayer.time.value.longLongValue / 1000.0);
         if (self.pendingResumeMs > 0) time = self.initialWebTime;
-        self.webVideoDidClose(time, self.vlcPlayer.audio.volume / 100.0, self.vlcPlayer.audio.isMuted);
+        void (^closed)(double, double, BOOL, NSString *) = self.webVideoDidClose;
+        double volume = self.vlcPlayer.audio.volume / 100.0;
+        BOOL muted = self.vlcPlayer.audio.isMuted;
+        NSString *action = self.webVideoCompletionAction ?: @"closed";
+        self.pendingWebVideoClose = ^{ closed(time, volume, muted, action); };
         self.webVideoDidClose = nil;
     }
+    self.webVideoDidPrepare = nil;
     self.vlcPlayer.delegate = nil;
     [self.vlcPlayer stop];
     [self.server stop];
     [self.progressTimer invalidate];
     self.progressTimer = nil;
     self.controlsGeneration++;
+}
+
+- (void)viewDidDisappear:(BOOL)animated {
+    [super viewDidDisappear:animated];
+    if (self.backgroundWebPreparation || self.transferringPreparedWebVideo) return;
+    void (^closed)(void) = self.pendingWebVideoClose;
+    self.pendingWebVideoClose = nil;
+    if (closed) dispatch_async(dispatch_get_main_queue(), closed);
 }
 
 - (BOOL)canBecomeFirstResponder { return YES; }
@@ -480,30 +581,19 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     return button;
 }
 
-- (UIButton *)trackButtonWithTitle:(NSString *)title action:(SEL)action {
-    UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
-    button.backgroundColor = UIColor.clearColor;
-    button.layer.cornerRadius = 34;
-    button.clipsToBounds = YES;
-    UIVisualEffectView *backdrop = [self glassBackdrop];
-    backdrop.userInteractionEnabled = NO;
-    [button insertSubview:backdrop atIndex:0];
-    [NSLayoutConstraint activateConstraints:@[
-        [backdrop.leadingAnchor constraintEqualToAnchor:button.leadingAnchor],
-        [backdrop.trailingAnchor constraintEqualToAnchor:button.trailingAnchor],
-        [backdrop.topAnchor constraintEqualToAnchor:button.topAnchor],
-        [backdrop.bottomAnchor constraintEqualToAnchor:button.bottomAnchor],
-    ]];
-    button.titleLabel.font = [UIFont systemFontOfSize:18 weight:UIFontWeightSemibold];
-    button.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
-    button.titleLabel.adjustsFontSizeToFitWidth = YES;
-    button.titleLabel.minimumScaleFactor = 0.85;
-    [button setTitle:title forState:UIControlStateNormal];
-    [button setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-    [button setTitleColor:BrowserTVFocusedTextColor() forState:UIControlStateFocused];
-    [button addTarget:self action:action forControlEvents:UIControlEventPrimaryActionTriggered];
-    button.enabled = NO;
-    return button;
+- (void)refreshAutoExitFullscreenControl {
+    BOOL enabled = [BrowserPreferencesStore new].automaticallyExitIframeFullscreen;
+    self.autoExitFullscreenButton.selected = enabled;
+    self.autoExitFullscreenButton.accessibilityValue = enabled ? @"ON" : @"OFF";
+    UIImageView *icon = (UIImageView *)[self.autoExitFullscreenButton viewWithTag:kBrowserVLCControlIconTag];
+    icon.tintColor = BrowserTVToggleBadgeColor(enabled);
+}
+
+- (void)toggleAutoExitFullscreen {
+    BrowserPreferencesStore *preferences = [BrowserPreferencesStore new];
+    preferences.automaticallyExitIframeFullscreen = !preferences.automaticallyExitIframeFullscreen;
+    [self refreshAutoExitFullscreenControl];
+    [self showControls];
 }
 
 - (void)refreshTrackControls {
@@ -519,18 +609,21 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
                   indexes:(NSArray<NSNumber *> *)indexes names:(NSArray<NSString *> *)names
             selectedIndex:(int)selectedIndex {
     NSUInteger count = MIN(indexes.count, names.count);
-    BOOL hasTrack = NO;
+    NSUInteger realTrackCount = 0;
     NSString *selection = @"Off";
     for (NSUInteger i = 0; i < count; i++) {
         int trackIndex = indexes[i].intValue;
-        if (trackIndex >= 0) hasTrack = YES;
+        if (trackIndex >= 0) realTrackCount++;
         if (trackIndex == selectedIndex) selection = trackIndex < 0 ? @"Off" : names[i];
     }
-    button.enabled = hasTrack;
-    NSString *title = hasTrack ? [NSString stringWithFormat:@"%@: %@ ▾", prefix, selection]
-                               : [NSString stringWithFormat:@"%@: Unavailable", prefix];
-    if (![button.currentTitle isEqualToString:title]) [button setTitle:title forState:UIControlStateNormal];
-    button.accessibilityLabel = title;
+    BOOL relevant = button == self.audioTrackButton ? realTrackCount > 1 : realTrackCount > 0;
+    button.enabled = relevant;
+    if (button.hidden != !relevant) {
+        button.hidden = !relevant;
+        [self setNeedsFocusUpdate];
+    }
+    button.accessibilityLabel = prefix;
+    button.accessibilityValue = relevant ? selection : @"Unavailable";
     if (@available(tvOS 17.0, *)) {
         BOOL audio = button == self.audioTrackButton;
         NSString *menuKey = [NSString stringWithFormat:@"%@|%@|%d", indexes, names, selectedIndex];
@@ -553,8 +646,8 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
                 action.state = trackIndex == selectedIndex ? UIMenuElementStateOn : UIMenuElementStateOff;
                 [actions addObject:action];
             }
-            button.menu = hasTrack ? [UIMenu menuWithTitle:prefix children:actions] : nil;
-            button.showsMenuAsPrimaryAction = hasTrack;
+            button.menu = relevant ? [UIMenu menuWithTitle:prefix children:actions] : nil;
+            button.showsMenuAsPrimaryAction = relevant;
             if (audio) self.audioMenuKey = menuKey; else self.subtitleMenuKey = menuKey;
         }
     }
@@ -609,7 +702,9 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
         [coordinator addCoordinatedAnimations:^{
             view.backgroundColor = focused ? BrowserTVFocusedSurfaceColor() : UIColor.clearColor;
             UIImageView *icon = (UIImageView *)[view viewWithTag:kBrowserVLCControlIconTag];
-            icon.tintColor = focused ? BrowserTVFocusedTextColor() : UIColor.whiteColor;
+            icon.tintColor = view == self.autoExitFullscreenButton
+                ? BrowserTVToggleBadgeColor(self.autoExitFullscreenButton.selected)
+                : focused ? BrowserTVFocusedTextColor() : UIColor.whiteColor;
         } completion:nil];
     }
     if ([context.nextFocusedView isKindOfClass:UIButton.class] &&
@@ -649,12 +744,55 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     self.lastPositionSaveTime = NSDate.date.timeIntervalSince1970;
 }
 
+- (void)activateWebVideoHandoffAtTime:(double)time {
+    // Avoid a second decoder flush for a small drift after the initial resume.
+    double current = self.vlcPlayer.time.value.longLongValue / 1000.0;
+    if (isfinite(time) && time >= 0 && time < 1e9 && fabs(time - current) > 1 && self.vlcPlayer.isSeekable)
+        self.vlcPlayer.time = [VLCTime timeWithNumber:@((int64_t)llround(time * 1000))];
+    BrowserDebugLog(@"[WebVLC] handoffMs=%ld", (long)lround((NSDate.date.timeIntervalSince1970 - self.webHandoffStarted) * 1000));
+    self.prepareWebVideoHandoff = NO;
+    self.videoView.alpha = 1;
+    self.view.backgroundColor = UIColor.blackColor;
+    [self.progressTimer invalidate];
+    self.progressTimer = [NSTimer scheduledTimerWithTimeInterval:1 target:self selector:@selector(refreshProgress) userInfo:nil repeats:YES];
+    [self showControls];
+    self.vlcPlayer.audio.volume = (int)lround(self.initialWebVolume * 100);
+    self.vlcPlayer.audio.muted = self.initialWebMuted;
+    [self.vlcPlayer play];
+}
+
 - (void)refreshProgress {
     [self refreshTrackControls];
+    if (self.prepareWebVideoHandoff) {
+        self.vlcPlayer.audio.muted = YES;
+        int64_t now = self.vlcPlayer.time.value.longLongValue;
+        VLCMediaStats frames = self.vlcPlayer.media.statistics;
+        if (!self.webHandoffReported && self.vlcPlayer.isPlaying && self.pendingResumeMs == 0 &&
+            frames.decodedVideo >= self.webDecodedBaseline + 3 && frames.displayedPictures > self.webDisplayedBaseline &&
+            self.vlcPlayer.hasVideoOut && self.vlcPlayer.videoSize.width > 0 && self.vlcPlayer.videoSize.height > 0 &&
+            self.webHandoffLastTime >= 0 && now > self.webHandoffLastTime && now - self.webHandoffLastTime < 5000) {
+            self.webHandoffReported = YES;
+            [self.vlcPlayer pause]; // Hold a decoded frame until the prepared surface is presented.
+            BrowserDebugLog(@"[WebVLC] readyMs=%ld", (long)lround((NSDate.date.timeIntervalSince1970 - self.webHandoffStarted) * 1000));
+            if (self.webVideoDidPrepare) self.webVideoDidPrepare();
+        }
+        self.webHandoffLastTime = now;
+        if (self.vlcPlayer.state == VLCMediaPlayerStateError ||
+            NSDate.date.timeIntervalSince1970 - self.webHandoffStarted > 15) {
+            BrowserDebugLog(@"[WebVLC] preparationFailed=1");
+            [self closePressed]; return;
+        }
+    }
     if (self.pendingResumeMs > 0 && self.vlcPlayer.isPlaying && self.vlcPlayer.isSeekable) {
         int64_t target = self.pendingResumeMs;
         self.pendingResumeMs = 0;
         self.lastPositionSaveTime = NSDate.date.timeIntervalSince1970;
+        if (self.prepareWebVideoHandoff) {
+            VLCMediaStats frames = self.vlcPlayer.media.statistics;
+            self.webDecodedBaseline = frames.decodedVideo;
+            self.webDisplayedBaseline = frames.displayedPictures;
+            self.webHandoffLastTime = -1;
+        }
         self.vlcPlayer.time = [VLCTime timeWithNumber:@(target)];
         BrowserDebugLog(@"[TorrentVLC] resume seek fileIndex=%ld positionMs=%lld",
             (long)self.fileIndex, (long long)target);
@@ -690,6 +828,12 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
         state != VLCMediaPlayerStateError && state != VLCMediaPlayerStateEnded) {
         self.statusLabel.text = [self downloadStatusWithPrefix:streaming ? @"Streaming" : @"Buffering"];
     }
+    if (self.prepareWebVideoHandoff) {
+        double left = MAX(0, 15 - (now - self.webHandoffStarted));
+        self.statusLabel.text = [NSString stringWithFormat:@"Preparing video · %.0fs · Back to website", left];
+        self.headerView.hidden = NO;
+        self.titleLabel.hidden = NO;
+    }
     self.lastPlaybackTime = elapsed;
     if (self.pendingResumeMs == 0 && elapsed >= 5000 && now - self.lastPositionSaveTime >= 10)
         [self savePlaybackPosition];
@@ -712,7 +856,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
 }
 
 - (void)showControls {
-    self.controlsView.hidden = NO;
+    self.controlsView.hidden = self.prepareWebVideoHandoff;
     self.headerView.hidden = NO;
     self.titleLabel.hidden = NO;
     self.controlsGeneration++;
@@ -723,7 +867,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     __weak typeof(self) weakSelf = self;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         if (!weakSelf || weakSelf.controlsGeneration != generation || !weakSelf.view.window) return;
-        if (weakSelf.presentedViewController || !weakSelf.vlcPlayer.isPlaying ||
+        if (weakSelf.prepareWebVideoHandoff || weakSelf.presentedViewController || !weakSelf.vlcPlayer.isPlaying ||
             NSDate.date.timeIntervalSince1970 - weakSelf.lastPlaybackProgressTime > 2.5) {
             [weakSelf scheduleControlsHideForGeneration:generation after:1];
             return;
@@ -736,8 +880,18 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     });
 }
 
-- (void)closePressed { [self dismissViewControllerAnimated:YES completion:nil]; }
+- (void)closePressed {
+    if (self.backgroundWebPreparation) {
+        void (^failed)(void) = self.webVideoPreparationDidFail;
+        self.webVideoPreparationDidFail = nil;
+        if (failed) failed();
+        return;
+    }
+    if (!self.isBeingDismissed && self.presentingViewController)
+        [self dismissViewControllerAnimated:YES completion:nil];
+}
 - (void)playPausePressed {
+    if (self.prepareWebVideoHandoff) return;
     if (self.playbackEnded || self.vlcPlayer.state == VLCMediaPlayerStateEnded) {
         [self reopenFinishedMediaAtMilliseconds:0];
     } else if (self.vlcPlayer.isPlaying) {
@@ -791,7 +945,21 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     else [self restartPressed];
 }
 
-- (void)nextFilePressed { [self endPressed]; [self switchToAdjacentFileInDirection:1]; }
+- (void)nextFilePressed {
+    if (self.returnWebVideoOnEnd) {
+        if (!self.prepareWebVideoHandoff) [self finishWebVideo:@"next"];
+        return;
+    }
+    [self endPressed]; [self switchToAdjacentFileInDirection:1];
+}
+
+- (void)finishWebVideo:(NSString *)action {
+    if (self.webVideoFinished || self.isBeingDismissed) return;
+    self.webVideoFinished = YES;
+    self.webVideoCompletionAction = action;
+    [self stopHeldSeek];
+    [self closePressed];
+}
 
 - (void)switchToAdjacentFileInDirection:(NSInteger)direction {
     [self stopHeldSeek];
@@ -814,7 +982,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     [self.server stop];
     self.fileIndex = candidate.index;
     self.mediaTitle = candidate.name;
-    self.titleLabel.text = candidate.name;
+    self.titleLabel.text = candidate.name ?: @"";
     self.statusLabel.text = @"Preparing torrent playback…";
     self.lastReportedState = -1;
     self.lastDurationLogTime = 0;
@@ -835,7 +1003,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     previous.delegate = nil;
     [previous stop];
     previous.drawable = nil;
-    VLCMediaPlayer *player = [[VLCMediaPlayer alloc] initWithOptions:@[]];
+    VLCMediaPlayer *player = BrowserVLCCreatePlayer();
     self.vlcPlayer = player;
     self.playbackEnded = NO;
     self.lastReportedState = -1;
@@ -900,6 +1068,9 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
             case VLCMediaPlayerStateError: self.statusLabel.text = self.webVideoURL
                 ? @"Playback failed. Return to the page to use its player." : @"Playback failed. Check torrent availability or file format."; break;
             case VLCMediaPlayerStateEnded:
+                if (self.returnWebVideoOnEnd && !self.prepareWebVideoHandoff) {
+                    [self finishWebVideo:@"ended"]; return;
+                }
                 self.playbackEnded = YES;
                 self.statusLabel.text = @"Playback finished";
                 [self savePlaybackPosition];
@@ -915,6 +1086,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
 
 - (void)arrowShortSeek { [self seekByMilliseconds:self.arrowSeekDirection * 10000 revealControls:NO]; }
 - (BOOL)browserHandlePlaybackArrow:(UIPress *)press {
+    if (self.prepareWebVideoHandoff) return YES;
     if (press.phase == UIPressPhaseBegan) {
         if (!(self.view.window && self.controlsView.hidden && !self.presentedViewController)) return NO;
         self.arrowSeekDirection = press.type == UIPressTypeLeftArrow ? -1 : 1;
