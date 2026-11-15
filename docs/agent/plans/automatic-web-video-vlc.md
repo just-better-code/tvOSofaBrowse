@@ -507,3 +507,61 @@ User follow-up after successful develop Build 10.1 (source 688d411): capture
 works on TV. The capture acceptance criterion is now user-confirmed. Playback
 continuity, audio and Back restoration still need separate observations; do not
 extend this confirmation to episode transitions or general site compatibility.
+
+## 2026-11-15 — Follow-up: startup visibility, episode completion, labels
+
+User reports capture works in Build 10.1, but transition shows approximately five
+seconds of black, End/Next stops at EOF in fullscreen until Back, and VLC/Website
+identification prefixes are no longer wanted.
+
+Acceptance criteria:
+- Keep website video visible while muted VLC prepares; shorten deliberate web
+  buffering/readiness polling without weakening video-output/leaf-ack checks.
+- Experimental End/Next and natural VLC EOF dismiss native playback and return
+  near-end playback to the same website source outside fullscreen. Let the site's
+  real ended handler own episode selection; do not synthesize ended events or
+  scrape a next media URL. Ordinary direct-video replay and torrents stay intact.
+- Remove VLC/Website title prefixes and startup branding; keep useful titles.
+- Exercise production JS on the actual UAKino page plus an actual decoded media
+  fixture for natural ended behavior before push. Distinguish any supplied media
+  or simulated native replies from the site's own code and actual TV playback.
+
+Source observation: UAKino's current top page listens for the iframe PlayerJS
+`finish` event and clicks the next item in the same data-id group, followed by its
+own delayed autoplay. `PlayerNextCustom` uses that same selection path. The current
+native VLC code does not notify or resume this lifecycle at EOF. Native startup
+uses network-caching=3000 and one-second progress polling.
+
+
+Implementation checkpoint:
+- Use over-fullscreen native presentation with a transparent root and an attached
+  alpha-zero VLC drawable while preparing; reveal the drawable after the existing
+  video-output, advancing-time and leaf-ack checks. Keep the website underneath.
+- Reduce experimental web caching from 3000 to 500 ms; retain torrent/direct-main
+  cache behavior. Poll readiness every 100 ms during preparation, returning to
+  one-second progress updates after acceptance. Avoid a second seek for <=1 s drift.
+- Add experimental-only returnWebVideoOnEnd and a finished close reason. Both
+  End/Next and VLC EOF dismiss once and send ended through the existing reply
+  chain; parent fullscreen cleanup remains independent. The leaf restores audio,
+  seeks to duration minus 0.25 s and plays. Its real ended event belongs to the site.
+  No PlayerJS/UAKino adapter, source extraction, synthetic ended event or forced
+  next-source capture was added. User explicitly requested generic video behavior
+  first; preserve that scope.
+- Remove VLC/Website title prefixes, including torrent titles and preparation text.
+
+Validation before push: actual UAKino, unchanged source, emitted a new main-frame
+relay offer with exact URL equality. A generic supplied HTML video fixture decoded
+five-second WebM in WebKit, accepted the simulated native handoff, resumed at EOF,
+produced one trusted ended event, exited fullscreen, restored audio, and rejected
+repeat completion. The existing nested-frame fixture also passed acknowledgement,
+ordinary close, changed-source/deleted-session rejection and experiment OFF.
+Private helpers: generic-end-check.mjs and relay-check.mjs under
+.data/webkit-testbench/, run 2026-11-15T14-05-12.287Z-52ced1c2.
+
+The attempted decoded-media substitution inside the real UAKino PlayerJS did not
+establish actual site auto-advance: the player reloaded/reset the original source,
+then play rejected with NotSupportedError on Linux. A diagnostic PlayerJS file API
+attempt also timed out. Stop that path; these are not evidence of a working site
+transition. Production changes use no such API. Generic decoded media is confirmed;
+actual native timing, alpha-zero drawable behavior and site episode advancement
+remain TV observations. No physical device work or local tvOS compilation occurred.

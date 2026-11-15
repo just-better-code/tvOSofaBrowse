@@ -111,9 +111,13 @@ window.__browserTVVLCResponse = function(id, action, time, volume, muted) {
     if (request.video && request.video.isConnected) {
         var video = request.video;
         if (action === 'accepted') { request.accepted = true; video.pause(); }
-        if (action === 'closed' && directVideoSource(video) === request.url) {
+        if ((action === 'closed' || action === 'ended') && directVideoSource(video) === request.url) {
             try {
-                if (Number.isFinite(time)) video.currentTime = Math.max(0, time);
+                // Resume the real media just before EOF so the site's own ended
+                // listener runs. Do not dispatch synthetic ended/finish messages.
+                if (action === 'ended' && Number.isFinite(video.duration) && video.duration > 0)
+                    video.currentTime = Math.max(0, video.duration - 0.25);
+                else if (Number.isFinite(time)) video.currentTime = Math.max(0, time);
                 if (Number.isFinite(volume)) video.volume = Math.max(0, Math.min(1, volume));
                 video.muted = !!muted;
                 if (window !== window.top && request.accepted) { var play = video.play(); if (play && play.catch) play.catch(function() {}); }

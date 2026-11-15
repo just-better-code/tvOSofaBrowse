@@ -1414,3 +1414,26 @@ user reported that capture worked. This confirms the user-observed capture
 outcome for the restored main-document relay. Playback continuity, audio,
 Back restoration and episode changes were not separately reported. No agent
 inspection of the physical TV was performed.
+
+
+## 2026-11-15 — Generic iframe completion and less intrusive preparation
+
+User reports roughly five seconds of black during capture and End/Next leaving
+VLC stopped in fullscreen; Back lets the website advance. The user asks to remove
+VLC/Website prefixes and explicitly prefers generic video behavior before any
+player-specific integration.
+
+Keep the website visible beneath muted VLC preparation, shorten experimental
+buffering/readiness polling and avoid a redundant seek for small drift. Return
+experimental End/Next and natural EOF to the same HTML video near its end outside
+fullscreen, allowing its real ended listener to run. Preserve direct-main replay
+and torrent behavior. Remove temporary player-identification title prefixes.
+
+The unchanged live UAKino still supplies the exact media URL through the relay.
+A supplied decoded HTML video fixture produced a trusted ended event after the
+production completion reply and passed fullscreen/audio/repeat-completion checks;
+nested-frame regression checks also passed. Native replies were simulated. Attempts
+to substitute media inside real PlayerJS failed to establish a site transition on
+Linux and were stopped; no PlayerJS-specific code entered the implementation.
+Native transition duration and UAKino episode advancement require user observations.
+See [the checkpoint](plans/automatic-web-video-vlc.md).

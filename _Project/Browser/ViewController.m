@@ -947,7 +947,7 @@ static UIColor *kTextColor(void) {
         NSString *json = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
         if (json) [view evaluateVideoJavaScript:[NSString stringWithFormat:@"window.__browserTVVLCResponse && window.__browserTVVLCResponse.apply(null,%@)", json] frame:videoFrame
                          completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
-        if (iframeExperiment && ([action isEqual:@"closed"] || [action isEqual:@"rejected"])) {
+        if (iframeExperiment && ([action isEqual:@"closed"] || [action isEqual:@"ended"] || [action isEqual:@"rejected"])) {
             // Restore the parent layout even if the original leaf has navigated.
             [view evaluateJavaScript:@"window.__browserTVExitFullscreen && window.__browserTVExitFullscreen()"
                 completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
@@ -984,6 +984,8 @@ static UIColor *kTextColor(void) {
                 requestHeaders:headers cookies:mediaCookies];
             if (iframeExperiment) {
                 player.prepareWebVideoHandoff = YES;
+                player.returnWebVideoOnEnd = YES;
+                player.modalPresentationStyle = UIModalPresentationOverFullScreen;
                 __block BOOL accepted = NO;
                 __weak BrowserVLCPlayerViewController *weakPlayer = player;
                 player.webVideoDidPrepare = ^{
@@ -1011,12 +1013,12 @@ static UIColor *kTextColor(void) {
                         }];
                     }];
                 };
-                player.webVideoDidClose = ^(double time, double volume, BOOL muted) {
-                    respond(accepted ? @"closed" : @"rejected", time, volume, muted);
+                player.webVideoDidClose = ^(double time, double volume, BOOL muted, BOOL finished) {
+                    respond(accepted ? (finished ? @"ended" : @"closed") : @"rejected", time, volume, muted);
                     BrowserDebugLog(@"[WebVLC] iframeClosed=1 accepted=%d", accepted);
                 };
             } else {
-                player.webVideoDidClose = ^(double time, double volume, BOOL muted) { respond(@"closed", time, volume, muted); };
+                player.webVideoDidClose = ^(double time, double volume, BOOL muted, __unused BOOL finished) { respond(@"closed", time, volume, muted); };
                 respond(@"accepted", 0, 0, NO);
             }
             [owner removeFullscreenMediaControls];

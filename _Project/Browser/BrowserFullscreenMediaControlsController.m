@@ -208,7 +208,7 @@ static NSInteger const BrowserMediaIconTag = 891;
     BOOL wasPlaying = self.mediaState && ![self.mediaState[@"paused"] boolValue] && [self.mediaState[@"available"] boolValue];
     self.mediaState = state;
     NSString *title = [state[@"pageTitle"] isKindOfClass:NSString.class] ? state[@"pageTitle"] : @"";
-    self.pageTitle.text = title.length ? [@"Website · " stringByAppendingString:title] : @"Website";
+    self.pageTitle.text = title ?: @"";
     double current = [state[@"currentTime"] doubleValue], duration = [state[@"duration"] doubleValue];
     self.progress.progress = duration > 0 ? MIN(1, MAX(0, current / duration)) : 0;
     self.timeLabel.text = [NSString stringWithFormat:@"%@ / %@", [self timeText:current], duration > 0 ? [self timeText:duration] : @"--:--"];
