@@ -502,3 +502,8 @@ injected script, and git diff --check passed. No tvOS build or native VLC/device
 verification was performed on Linux. Keep version 2.22.0 unreleased; CI supplies
 a fresh technical build number and revision. Next observation required is whether
 the installed native build receives this main-frame offer and opens VLC.
+
+User follow-up after successful develop Build 10.1 (source 688d411): capture
+works on TV. The capture acceptance criterion is now user-confirmed. Playback
+continuity, audio and Back restoration still need separate observations; do not
+extend this confirmation to episode transitions or general site compatibility.

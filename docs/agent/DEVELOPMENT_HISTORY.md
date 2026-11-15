@@ -1406,3 +1406,11 @@ confirmed changed-source rejection and experiment-OFF suppression. These are Web
 bridge observations; native tvOS receipt, compilation and VLC playback remain
 unverified. The stand's Linux media backend is not a TV playback verdict.
 See [the implementation checkpoint](plans/automatic-web-video-vlc.md).
+
+## 2026-11-15 — User confirms iframe capture on TV
+
+After delivery of successful develop Build 10.1 (2.22.0, source 688d411), the
+user reported that capture worked. This confirms the user-observed capture
+outcome for the restored main-document relay. Playback continuity, audio,
+Back restoration and episode changes were not separately reported. No agent
+inspection of the physical TV was performed.
