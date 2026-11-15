@@ -354,3 +354,37 @@ diff checks only. No native build, TV action or real-site test. This repairs
 specific exit/readiness gaps; it does not establish the cause of the user's black
 picture or prove playback compatibility. Next: obtain exact page/renderer report,
 then a requested build and observed Back, timeout and picture/audio checks.
+
+
+### Recover the original accidental entry point, 2026-11-15
+
+The user reports VLC still does not capture and explicitly requests Git history
+research. Inspect committed `7416ee4` (shared VLC implementation, 2026-10-11),
+`45862ce` (iframe rollback) and the retained unbuilt draft separately. The actual
+old committed bridge had two entries: fullscreen AND Center on controlled video.
+`__browserTVOpenControlledVideo` admitted `<video controls>` in child documents;
+`45862ce` later restricted it to top. The new trial removed the top restriction
+from `requestVLCFullscreen` but accidentally left this controlled-click restriction
+intact. This is a proven source difference, not a proved cause on the user's TV.
+
+Restore the controlled-video entry for child documents only when the experiment
+is enabled. Native provides that flag at document start; validated parent/child
+messages propagate it through existing/open-shadow iframe trees. Native menu
+changes broadcast immediately to the active page; newly loaded child documents
+request current configuration. Hidden tabs may receive configuration but native
+playback offers remain gated by owner.window and the native preference. Keep the
+existing top-document controlled-video behavior. Detected mediaKeys still reject.
+Add numeric offer/document-mismatch diagnostics without recording source URLs.
+
+The old offer delivery used iframe -> validated parent chain -> top native handler;
+the new trial uses direct native WKFrameInfo and frame-bound evaluation. Do not
+remove native URL validation or revert to parent-supplied document context without
+evidence that this stage rejects a real offer. The retained draft added owner and
+continuation code but was never built; do not confuse it with the committed old
+entry point. No Next/EOF experiment is restored by this fix.
+
+Validation: current production bridge extraction/JavaScript syntax and diff/source
+review only. No app tests, native build or live-site/TV reproduction. Next user
+trial: enable the experiment, press Center on the already playing controlled video
+inside the iframe, then separately try its fullscreen button; report whether the
+VLC header ever appears. If not, inspect the numeric offer/URL-validation stage.

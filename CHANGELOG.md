@@ -16,6 +16,7 @@ Published packages are available for [2.21.9](https://github.com/just-better-cod
 
 ### Fixed
 
+- Restore Center capture of controlled iframe video when the VLC experiment is enabled, propagating the setting to current and newly loaded frames ([Playback controls](docs/USER_GUIDE.md)).
 - Prioritize Back dismissal of visible VLC over the underlying iframe fullscreen, restore the page layout without waiting for a child reply, and require video output before accepting experimental capture ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
 
 ## 2.21.9 - 2026-11-07

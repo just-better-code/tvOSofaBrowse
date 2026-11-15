@@ -2060,11 +2060,16 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
 }
 
 - (void)presentIframeVLCExperiment {
+    __weak typeof(self) weakSelf = self;
     BrowserOptionsViewController *settings = [[BrowserOptionsViewController alloc]
         initWithEnabledProvider:^BOOL { return BrowserPreferencesStore.iframeVLCExperimentEnabled; }
         toggleEnabled:^{
             [NSUserDefaults.standardUserDefaults setBool:!BrowserPreferencesStore.iframeVLCExperimentEnabled
                 forKey:@"BrowserIframeVLCExperiment"];
+            NSString *script = [NSString stringWithFormat:@"window.__browserTVSetIframeVLCExperiment && window.__browserTVSetIframeVLCExperiment(%@)",
+                BrowserPreferencesStore.iframeVLCExperimentEnabled ? @"true" : @"false"];
+            [weakSelf.host.browserWebView evaluateJavaScript:script
+                completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
         } activateRow:nil];
     settings.toggleTitle = @"Iframe Video in VLC (Experimental)";
     settings.rows = @[];

@@ -804,17 +804,27 @@ static id BrowserPersistentWebsiteDataStore(void) {
 - (void)userContentController:(id)controller didReceiveScriptMessage:(id)message {
     BrowserWebView *owner = self.owner;
     if (!owner) return;
+    id frame = [message valueForKey:@"frameInfo"];
+    BOOL mainFrame = [[frame valueForKey:@"isMainFrame"] boolValue];
+    NSURLRequest *request = [frame valueForKey:@"request"];
+    id body = [message valueForKey:@"body"];
+    if (![body isKindOfClass:NSDictionary.class] || ![body[@"token"] isEqual:self.token]) return;
+    if (![body[@"session"] isKindOfClass:NSString.class] || [body[@"session"] length] > 128) return;
+    // Configuration only returns a boolean; it may arrive during redirect/commit.
+    // Playback and media-state messages retain exact document URL validation.
+    if (mainFrame && ![body[@"vlcConfigRequest"] boolValue] && ![request.URL isEqual:owner.request.URL]) return;
+    if (mainFrame && [body[@"vlcConfigRequest"] boolValue]) {
+        NSString *script = [NSString stringWithFormat:@"window.__browserTVSetIframeVLCExperiment && window.__browserTVSetIframeVLCExperiment(%@)",
+            BrowserPreferencesStore.iframeVLCExperimentEnabled ? @"true" : @"false"];
+        [owner evaluateJavaScript:script completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
+        return;
+    }
     if (!owner.window) {
         [owner setFullscreenMediaControlsSuspended:YES];
         return;
     }
-    id frame = [message valueForKey:@"frameInfo"];
-    BOOL mainFrame = [[frame valueForKey:@"isMainFrame"] boolValue];
-    NSURLRequest *request = [frame valueForKey:@"request"];
-    if (mainFrame && ![request.URL isEqual:owner.request.URL]) return;
-    id body = [message valueForKey:@"body"];
-    if (![body isKindOfClass:NSDictionary.class] || ![body[@"token"] isEqual:self.token]) return;
-    if (![body[@"session"] isKindOfClass:NSString.class] || [body[@"session"] length] > 128) return;
+    if ([body[@"vlcRequest"] boolValue])
+        BrowserDebugLog(@"[WebVLC] offer=1 child=%d enabled=%d", !mainFrame, BrowserPreferencesStore.iframeVLCExperimentEnabled);
     BOOL iframeExperiment = !mainFrame && BrowserPreferencesStore.iframeVLCExperimentEnabled && [body[@"vlcRequest"] boolValue];
     if (!mainFrame && !iframeExperiment) return;
     if ([body[@"fullscreenState"] isKindOfClass:NSNumber.class]) {
@@ -827,7 +837,9 @@ static id BrowserPersistentWebsiteDataStore(void) {
         // context to WebKit frame metadata, never to a parent-relayed URL.
         NSString *documentString = [body[@"documentURL"] isKindOfClass:NSString.class] ? body[@"documentURL"] : nil;
         NSURL *documentURL = documentString.length > 0 && documentString.length <= 8192 ? [NSURL URLWithString:documentString] : nil;
-        if (![documentURL isEqual:request.URL]) return;
+        if (![documentURL isEqual:request.URL]) {
+            BrowserDebugLog(@"[WebVLC] documentMismatch=1 child=%d", !mainFrame); return;
+        }
         NSString *URLString = [body[@"url"] isKindOfClass:NSString.class] ? body[@"url"] : nil;
         NSURL *URL = URLString.length > 0 && URLString.length <= 8192 ? [NSURL URLWithString:URLString] : nil;
         if (!URL.host.length || URL.user.length || URL.password.length || ![@[@"http", @"https"] containsObject:URL.scheme.lowercaseString]) return;

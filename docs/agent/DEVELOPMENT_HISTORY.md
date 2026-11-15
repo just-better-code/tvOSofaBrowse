@@ -1315,3 +1315,23 @@ and syntax compilation, plus source/diff inspection. No app tests, native build,
 website/TV playback reproduction or Git remote push in this turn. These are
 code-path fixes and diagnostic UI, not proof the site's missing picture is fixed.
 See the trial feedback checkpoint in plans/automatic-web-video-vlc.md.
+
+
+## 2026-11-15 — Find and restore the accidental iframe capture entry
+
+At the user's request search Git history after the trial still failed to capture.
+The committed 7416ee4 bridge opened controlled video on Center in all frames as
+well as on fullscreen, relaying child offers through the selected parent chain.
+45862ce restricted both entry points to top. The 6dd2e7c trial restored child
+fullscreen offers but left __browserTVOpenControlledVideo top-only. Restore that
+missing controlled-click entry under the experiment flag. Deliver native settings
+at document start, propagate them through validated parent/child relationships
+and broadcast menu changes; keep native preference/window checks authoritative.
+Add numeric native offer/document-mismatch logs. Keep frame-bound native context
+validation and single-source behavior; do not revive the unbuilt continuation draft.
+
+Consolidate into unreleased 2.22.0. Current bridge extraction/JavaScript syntax and
+diff/source checks passed. No app tests, native build or real-site/TV reproduction.
+The historical code difference is established; success on the user's site remains
+unverified. Push this completed stage to the working PR under standing permission.
+The integration plan records exact commits, differences and next observations.

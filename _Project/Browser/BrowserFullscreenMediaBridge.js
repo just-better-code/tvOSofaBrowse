@@ -15,6 +15,33 @@ var mediaVolumeVideos = new WeakMap();
 var mediaVLCRequests = Object.create(null);
 var mediaVLCSerial = 0;
 var mediaVLCAttempted = false;
+// Configuration comes from native at document start and follows the real frame tree.
+var mediaVLCIframeCapture = false;
+window.__browserTVSetIframeVLCExperiment = function(enabled) {
+    mediaVLCIframeCapture = enabled === true;
+    function notify(root) {
+        Array.prototype.forEach.call(root.querySelectorAll('*'), function(element) {
+            if ((element.tagName === 'IFRAME' || element.tagName === 'FRAME') && element.contentWindow)
+                element.contentWindow.postMessage({browserTVVLCConfiguration:secret, enabled:mediaVLCIframeCapture}, '*');
+            if (element.shadowRoot) notify(element.shadowRoot);
+        });
+    }
+    notify(document);
+    if (mediaVLCIframeCapture && fullscreenTarget) requestVLCFullscreen(fullscreenTarget);
+};
+window.addEventListener('message', function(event) {
+    var data = event.data;
+    if (!data) return;
+    if (window !== window.top && event.source === window.parent && data.browserTVVLCConfiguration === secret)
+        window.__browserTVSetIframeVLCExperiment(data.enabled === true);
+    else if (data.browserTVVLCConfigurationRequest === secret) {
+        var frame = frameForSource(event.source);
+        if (frame && frame.isConnected) event.source.postMessage({browserTVVLCConfiguration:secret, enabled:mediaVLCIframeCapture}, '*');
+    }
+});
+if (window !== window.top) window.parent.postMessage({browserTVVLCConfigurationRequest:secret}, '*');
+else try { window.webkit.messageHandlers.browserFullscreenMedia.postMessage({token:nativeToken,session:'vlc-config',vlcConfigRequest:true}); } catch(error) {}
+
 function directVideoSource(video) {
     var source = video.currentSrc || video.src;
     if (!source) {
@@ -27,7 +54,8 @@ function directVideoSource(video) {
     return /^https?:$/.test(source.protocol) && source.hostname && !source.username && !source.password && source.href.length <= 8192 ? source.href : null;
 }
 window.__browserTVOpenControlledVideo = function(element) {
-    if (window !== window.top || !element || element.tagName !== 'VIDEO' || !element.controls || !directVideoSource(element)) return false;
+    if ((window !== window.top && !mediaVLCIframeCapture) || !element || element.tagName !== 'VIDEO' ||
+        !element.controls || element.mediaKeys || !directVideoSource(element)) return false;
     enterFullscreen(element);
     return true;
 };
@@ -36,6 +64,7 @@ function publishVLCRequest(id, info) {
         Object.assign({token:nativeToken,session:id,vlcRequest:true},info)); } catch(error) {}
 }
 function requestVLCFullscreen(element) {
+    if (window !== window.top && !mediaVLCIframeCapture) return;
     if (mediaVLCAttempted) return;
     var videos = element.tagName === 'VIDEO' ? [element] : Array.prototype.slice.call(element.querySelectorAll('video'));
     var video = videos.find(function(v) { return !v.paused && !v.ended; }) || videos[0];
