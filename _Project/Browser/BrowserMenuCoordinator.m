@@ -2057,6 +2057,18 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
     [self.host browserPresentViewController:settings];
 }
 
+- (BrowserAdvancedMenuItem *)iframeVLCToggleMenuItem {
+    BrowserAdvancedMenuItem *item = [self advancedMenuItemWithTitle:@"Web Video in VLC"
+        style:UIAlertActionStyleDefault handler:^{
+            [NSUserDefaults.standardUserDefaults setBool:!BrowserPreferencesStore.iframeVLCExperimentEnabled
+                forKey:@"BrowserIframeVLCExperiment"];
+            BrowserWebView *webView = self.host.browserWebView;
+            [webView setFullscreenMediaControlsSuspended:webView.fullscreenMediaSuspended];
+        }];
+    item.toggleStateProvider = ^BOOL { return BrowserPreferencesStore.iframeVLCExperimentEnabled; };
+    return item;
+}
+
 - (void)presentDebugReport:(NSUInteger)index {
     switch (index) {
     case 0: {
@@ -2186,7 +2198,9 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
         [BrowserAdvancedMenuSection sectionWithTitle:@"Settings"
                                                items:@[
             [self tileItem:[self adBlockToggleMenuItem] title:@"Ad Block" symbol:@"hand.raised.fill"],
-            [self tileItem:[self cursorMagnifierToggleMenuItem] title:@"Magnifier" symbol:@"magnifyingglass"],
+            (BrowserPreferencesStore.iframeVLCExperimentAvailable
+                ? [self tileItem:[self iframeVLCToggleMenuItem] title:@"VLC" symbol:@"play.rectangle.fill"]
+                : [self tileItem:[self cursorMagnifierToggleMenuItem] title:@"Magnifier" symbol:@"magnifyingglass"]),
             [self tileItem:[self torrentKeepAliveToggleMenuItem] title:@"Keep Alive" symbol:@"waveform"],
             [self tileItem:[self userAgentModeMenuItem] title:@"Mobile Site" symbol:@"iphone"],
         ]],
@@ -2204,12 +2218,20 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
 - (NSString *)advancedMenuFooterText {
     NSDictionary *infoDictionary = NSBundle.mainBundle.infoDictionary;
     NSString *version = infoDictionary[@"CFBundleShortVersionString"];
-    BOOL hasVersion = [self stringHasVisibleContent:version];
-
-    if (hasVersion) {
-        return [NSString stringWithFormat:@"Version %@", version];
-    }
-    return @"";
+    if (![self stringHasVisibleContent:version]) return @"";
+    BOOL beta = [infoDictionary[@"CFBundleDisplayName"] isEqual:@"tvOSofaBrowse Test"];
+    NSMutableArray<NSString *> *parts = [NSMutableArray arrayWithObject:
+        [NSString stringWithFormat:@"%@ %@", beta ? @"Beta" : @"Version", version]];
+    NSString *build = infoDictionary[@"CFBundleVersion"];
+    if ([self stringHasVisibleContent:build])
+        [parts addObject:[NSString stringWithFormat:@"Build %@", build]];
+    NSURL *revisionURL = [NSBundle.mainBundle URLForResource:@"BuildRevision" withExtension:@"txt"];
+    NSString *revision = revisionURL ? [[NSString stringWithContentsOfURL:revisionURL encoding:NSUTF8StringEncoding error:nil]
+        stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] : nil;
+    NSCharacterSet *nonHex = [[NSCharacterSet characterSetWithCharactersInString:@"0123456789abcdefABCDEF"] invertedSet];
+    if (revision.length == 40 && [revision rangeOfCharacterFromSet:nonHex].location == NSNotFound)
+        [parts addObject:[revision substringToIndex:7]];
+    return [parts componentsJoinedByString:@" · "];
 }
 
 @end
