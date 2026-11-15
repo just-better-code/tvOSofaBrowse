@@ -12,6 +12,7 @@
 - Commit completed implementation stages separately, after their requested build/delivery, so each stage can be reviewed and reverted independently.
 - On local Linux, prefer a native graphical authorization dialog for necessary administrative actions; never request the system password in chat.
 - Git commits are authorized. The user authorizes immediately pushing completed implementation stages to the agreed working PR branch until revoked. Other Git remote pushes still require an explicit request. This standing Git authorization does not authorize merging the PR, updating master, or delivering to a physical Apple TV.
+- For experimental media capture, obtain meaningful evidence on the WebKit stand before pushing another trial or asking the user to repeat a TV check. Syntax checks and CI success alone are insufficient. Keep unconfirmed fixes local and distinguish website discovery/bridge evidence from native tvOS/VLC verification.
 - Preserve automatic signing and the effective local development-team and bundle-identifier settings. Personal values belong in the ignored `Signing.local.xcconfig`; shared configuration uses neutral defaults.
 - Add or run tests only when the user asks for testing or verification. Run builds when requested. Report exactly what was checked; compilation or launch alone does not prove an interaction bug is fixed.
 - When a task includes a build, finish the code and build before updating the changelog, user guide, or development history.

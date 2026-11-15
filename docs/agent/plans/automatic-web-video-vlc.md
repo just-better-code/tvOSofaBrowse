@@ -399,3 +399,106 @@ next user observation before attributing a failure to a specific fix. The Xcode
 metadata output uses existing GITHUB_SHA environment data; no workflow changes.
 Capture remains unverified and unresolved. Do not call the historical entry
 repair a successful site fix without observed URL/native/video evidence.
+
+
+## 2026-11-15 — Live historical comparison, before another trial push
+
+The user now requires meaningful stand evidence before another media trial push
+or TV loop, and specifically asks what unrelated work caused the accidental
+capture. Root instructions record that constraint. No application changes or
+pushes were made in this investigation.
+
+Historical context: the shared-VLC implementation was added while replacing the
+separate native web player and making the ordinary MDN controlled-video demo work
+with the remote. The generic enterFullscreen hook was injected in all frames.
+During later Ad Block work the user noticed iframe playback entering the native
+path. Commit 7416ee4 (merged as Volume control fix #13) contains that generic
+implementation; its parent lacks requestVLCFullscreen. 45862ce later removes
+child routing. The controlled-video Center entry is another old entry, not proof
+that it caused this site's original accidental capture.
+
+Open the actual saved Example C canonical URL on the network, not saved HTML.
+The saved file supplied only the URL. Live ordinary WebKit initially showed no
+playlist/playerfr; scrolling .players-section into view caused lazy loading:
+440 playlist items, one active item, playerfr and an HTTP(S) video source appeared.
+The video uses custom PlayerJS controls and controls=false. Ordinary Play on two
+different voice sources produced readyState=0, video error code 4 and the site's
+not found banner on Linux. This does not disprove the user's working TV website
+playback or block source discovery; decoding is a separate backend observation.
+
+Current production bridge, with only the native experiment boolean modeled ON,
+was injected at document start. An actual mouse click on the website fullscreen
+icon produced exactly one child-frame vlcRequest whose HTTPS URL equals the
+live video's URL and whose documentURL equals that leaf's location. Main had no
+vlcRequest. This confirms JS discovery and submission, not native receipt.
+
+Extract the complete old bridge from 7416ee4 unchanged, combining its Objective-C
+all-frame template with its original media script. In a fresh visible WebKit
+context on the same live page, scroll, wait for the actual iframe/source, then
+click the same fullscreen icon. Exactly one vlcRequest appears in the MAIN
+frame; sourceMatchesRealVideo=true and leafDocumentDifferent=true. No request
+payload, accepted reply, native player or successful VLC playback was fabricated.
+This establishes the original iframe -> parent chain -> top native-entry route.
+The new direct-child/native-frame route differs materially from that old path.
+Do not claim the Center fix restored the complete original behavior or that this
+comparison proves which native condition currently rejects the request.
+
+Private evidence:
+- baseline: .data/webkit-testbench/runs/2026-11-15T13-20-20.421Z-5db37ca8/
+- current bridge: .data/webkit-testbench/runs/2026-11-15T13-26-59.311Z-94affb41/
+- original bridge: .data/webkit-testbench/runs/2026-11-15T13-31-25.776Z-8fe24872/
+  capture-summary.json records the exact URL-equality result without URLs.
+- private live-capture-driver.mjs has plain/bridge/old modes and in-process stdin
+  control; capture-setting.js only supplies the native boolean, not acceptance.
+  prepare-historical-bridge.mjs pins 7416ee4 and verifies template syntax.
+
+Resume: inspect native receipt/config/documentURL/frame-evaluation conditions
+against the proven top-frame historical route. Preserve the native URL/cookie
+context checks; do not simply trust arbitrary parent-provided media context.
+A future transport correction must again be exercised on the actual live page
+before pushing. Native tvOS/VLC remains unverified; no physical-TV authorization.
+The visible old-bridge browser remains available via exec session 48939 if alive.
+Browser interaction through Node REPL was unavailable (no process global); the
+ordinary Node in-process driver works. Git extraction in Node required shell
+escalation after EPERM; do not repeat the sandboxed preparation path.
+
+
+## 2026-11-15 — Restore main-document relay and acknowledged handoff
+
+Implemented the 7416ee4 transport shape: leaf fullscreen offers travel through
+selected fullscreen frames to the main document; native replies return through
+that stored chain. Native no longer evaluates experimental replies in WKFrameInfo.
+The explicit native experiment gate remains mandatory. Each hop checks the
+shared bridge secret and exact selected child window; the first parent also
+checks the leaf document origin against MessageEvent.origin. Native validates
+HTTP(S), host, lengths and absence of URL credentials, retains the main-document
+request/generation guard, and continues filtering cookies against the media URL.
+A relayed leaf document URL intentionally differs from the native main request;
+requiring their equality would reject this historical route. This is page-world
+bridge validation, not native attestation of the leaf URL.
+
+Acceptance now has a separate acknowledgement: the original video validates its
+source/session, pauses, and returns its current time through the chain. Native
+polls the main-document result at 50 ms intervals against a two-second deadline and
+activates VLC audio only after a positive reply. Rejection/closure follows the
+stored route; parent layout cleanup remains independent of a surviving leaf.
+
+Evidence: current production bridge on the actual UAKino page emitted one main
+frame native offer, with URL exactly equal to the actual video source and context
+exactly equal to the leaf document URL; the actual PlayerJS video has controls=false.
+The bench explicitly simulated the native accepted/closed replies AFTER discovery.
+Acceptance first returned pending, then accepted=true after one observed call to
+the real video's pause method. Closed restored time=7, volume approximately 0.4,
+and muted=true. Reaccepting the deleted session returned false. Linux playback
+was not used as an acceptance criterion and native VLC was not launched.
+
+A separate supplied fixture with two nested iframe hops passed relay, acceptance
+acknowledgement, close restoration, deleted-session rejection, changed-source
+rejection, and experiment-OFF suppression. Fixture network content and native
+replies are simulated. Private evidence/scripts:
+.data/webkit-testbench/runs/2026-11-15T13-40-44.376Z-de92573a/ and
+.data/webkit-testbench/relay-check.mjs. Bridge extraction also compiled the full
+injected script, and git diff --check passed. No tvOS build or native VLC/device
+verification was performed on Linux. Keep version 2.22.0 unreleased; CI supplies
+a fresh technical build number and revision. Next observation required is whether
+the installed native build receives this main-frame offer and opens VLC.

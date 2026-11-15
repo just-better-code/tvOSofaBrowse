@@ -1361,3 +1361,48 @@ tests, local Xcode build or on-device footer observation. Push the completed
 stage to the working PR; CI must establish the build before the user's next
 atvloadly update. The earlier failed site-capture observation remains pending
 exact-page and renderer/native-stage evidence.
+
+
+## 2026-11-15 — Confirm the historical accidental capture route on live WebKit
+
+The user rejected further unconfirmed trial pushes and requested the original
+context rather than another designed extractor. Existing history places the
+observation during Ad Block work, after shared VLC was attached to the generic
+all-frame fullscreen hook for ordinary web video/MDN controls. 7416ee4 is the first
+committed all-frame VLC path; 45862ce later restricts it. The original accidental
+iframe route was not a site-specific stream extractor or the unbuilt later draft.
+
+Run live Example C on visible Linux WebKit. Scrolling into the player triggers
+lazy playlist/iframe loading, revealing 440 items and a direct HTTPS source.
+PlayerJS controls=false disproves treating the standard-controlled-video Center
+entry as the sole explanation. Ordinary Play returns media error 4/not found on
+Linux for two voice sources; that backend failure does not establish TV failure.
+With current production JS and only an ON setting simulation, a real fullscreen
+click emits a child-frame native request matching the real video URL. With the
+complete unchanged 7416ee4 bridge, the same action emits a matching request from
+the top document, relayed through the real iframe chain. No native acceptance or
+playback is simulated. This is meaningful discovery/transport evidence, not a
+VLC playback success or a proved native rejection cause.
+
+Correct the earlier overconfident focus on Center. Preserve the run IDs, private
+driver and native-vs-web boundary in plans/automatic-web-video-vlc.md. No app code,
+version change, native build, physical-TV action or remote push during this work.
+Keep the user out of another TV trial until the relevant correction has evidence.
+
+
+## 2026-11-15 — Restore experimental iframe capture through the main document
+
+Restore the selected-frame relay from the original 7416ee4 fullscreen bridge,
+retaining the opt-in gate and validated HTTP(S) media context. Replace direct
+child-frame native evaluation with main-document requests and routed replies.
+Wait for a leaf acknowledgement and resample its position after pausing before
+activating prepared VLC audio. Keep the existing bounded startup and Back recovery.
+
+Live UAKino with the production bridge emitted one main-document offer containing
+the exact real video URL and leaf document URL. Explicitly simulated native replies
+confirmed pending -> pause acknowledgement, close position/volume/mute restoration,
+and deleted-session rejection. A supplied two-hop iframe fixture additionally
+confirmed changed-source rejection and experiment-OFF suppression. These are WebKit
+bridge observations; native tvOS receipt, compilation and VLC playback remain
+unverified. The stand's Linux media backend is not a TV playback verdict.
+See [the implementation checkpoint](plans/automatic-web-video-vlc.md).

@@ -825,19 +825,22 @@ static id BrowserPersistentWebsiteDataStore(void) {
     }
     if ([body[@"vlcRequest"] boolValue])
         BrowserDebugLog(@"[WebVLC] offer=1 child=%d enabled=%d", !mainFrame, BrowserPreferencesStore.iframeVLCExperimentEnabled);
-    BOOL iframeExperiment = !mainFrame && BrowserPreferencesStore.iframeVLCExperimentEnabled && [body[@"vlcRequest"] boolValue];
-    if (!mainFrame && !iframeExperiment) return;
+    BOOL iframeExperiment = mainFrame && [body[@"iframeRelay"] boolValue] && [body[@"vlcRequest"] boolValue];
+    if (!mainFrame || (iframeExperiment && !BrowserPreferencesStore.iframeVLCExperimentEnabled)) return;
     if ([body[@"fullscreenState"] isKindOfClass:NSNumber.class]) {
         [owner updatePageFullscreenActive:[body[@"fullscreenState"] boolValue]];
         return;
     }
     if (owner.loading) return;
     if ([body[@"vlcRequest"] boolValue]) {
-        // Child offers require the explicit experiment. Bind replies and document
-        // context to WebKit frame metadata, never to a parent-relayed URL.
+        // Direct offers retain exact WebKit document binding. Experimental relay
+        // context is checked against MessageEvent.origin by the first parent;
+        // subsequent hops are restricted to the selected fullscreen frame.
         NSString *documentString = [body[@"documentURL"] isKindOfClass:NSString.class] ? body[@"documentURL"] : nil;
         NSURL *documentURL = documentString.length > 0 && documentString.length <= 8192 ? [NSURL URLWithString:documentString] : nil;
-        if (![documentURL isEqual:request.URL]) {
+        if ((!iframeExperiment && ![documentURL isEqual:request.URL]) ||
+            !documentURL.host.length || documentURL.user.length || documentURL.password.length ||
+            ![@[@"http", @"https"] containsObject:documentURL.scheme.lowercaseString]) {
             BrowserDebugLog(@"[WebVLC] documentMismatch=1 child=%d", !mainFrame); return;
         }
         NSString *URLString = [body[@"url"] isKindOfClass:NSString.class] ? body[@"url"] : nil;
@@ -853,7 +856,7 @@ static id BrowserPersistentWebsiteDataStore(void) {
             @"documentURL": [body[@"documentURL"] isKindOfClass:NSString.class] && [body[@"documentURL"] length] <= 8192 ? body[@"documentURL"] : @"",
             @"referrerPolicy": [body[@"referrerPolicy"] isKindOfClass:NSString.class] && [body[@"referrerPolicy"] length] <= 64 ? body[@"referrerPolicy"] : @"",
             @"crossOrigin": [body[@"crossOrigin"] isKindOfClass:NSString.class] && [body[@"crossOrigin"] length] <= 32 ? body[@"crossOrigin"] : @""} mutableCopy];
-        if (iframeExperiment) { info[@"frame"] = frame; info[@"iframeExperiment"] = @YES; }
+        if (iframeExperiment) info[@"iframeExperiment"] = @YES;
         if ([owner.delegate respondsToSelector:@selector(webView:didRequestVLCPlayback:)]) {
             [owner.delegate webView:owner didRequestVLCPlayback:info];
         }

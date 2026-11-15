@@ -912,6 +912,24 @@ static UIColor *kTextColor(void) {
 
 #pragma mark - BrowserWebViewDelegate
 
+// WK evaluateJavaScript cannot return a page Promise. Poll the main-document
+// acknowledgement against a two-second deadline; submission is not acceptance.
+- (void)finishWebVideoHandoff:(BrowserWebView *)view sessionJSON:(NSString *)sessionJSON
+                  generation:(NSUInteger)generation deadline:(NSTimeInterval)deadline
+                  completion:(void (^)(NSString *, NSError *))completion {
+    if (view.documentGeneration != generation) { completion(nil, nil); return; }
+    NSString *script = [NSString stringWithFormat:@"window.__browserTVVLCHandoffResult && window.__browserTVVLCHandoffResult.apply(null,%@)", sessionJSON];
+    [view evaluateJavaScript:script completionHandler:^(NSString *result, NSError *error) {
+        NSDictionary *reply = [result isKindOfClass:NSString.class] ? [NSJSONSerialization JSONObjectWithData:[result dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil] : nil;
+        if (error || ![reply isKindOfClass:NSDictionary.class] || ![reply[@"pending"] boolValue] || [NSDate timeIntervalSinceReferenceDate] >= deadline) {
+            completion(result, error); return;
+        }
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self finishWebVideoHandoff:view sessionJSON:sessionJSON generation:generation deadline:deadline completion:completion];
+        });
+    }];
+}
+
 - (void)webView:(BrowserWebView *)webView didRequestVLCPlayback:(NSDictionary *)info {
     NSString *session = info[@"session"];
     id videoFrame = info[@"frame"];
@@ -977,17 +995,20 @@ static UIColor *kTextColor(void) {
                     }
                     NSData *data = [NSJSONSerialization dataWithJSONObject:@[session, @"accepted", @0, @0, @NO] options:0 error:nil];
                     NSString *json = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-                    NSString *acceptScript = [NSString stringWithFormat:@"(function(){var args=%@;var ok=window.__browserTVVLCResponse && window.__browserTVVLCResponse.apply(null,args);return JSON.stringify({accepted:!!ok,time:window.__browserTVVLCRequestTime(args[0])});})()", json];
-                    [target evaluateVideoJavaScript:acceptScript frame:videoFrame completionHandler:^(NSString *result, NSError *error) {
-                        BrowserVLCPlayerViewController *active = weakPlayer;
-                        NSDictionary *reply = [result isKindOfClass:NSString.class] ? [NSJSONSerialization JSONObjectWithData:[result dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil] : nil;
-                        if (!active || active.isBeingDismissed || host.presentedViewController != active ||
-                            target != host.webview || target.documentGeneration != generation || error || ![reply isKindOfClass:NSDictionary.class] || ![reply[@"accepted"] boolValue]) {
-                            [active dismissViewControllerAnimated:YES completion:nil]; return;
-                        }
-                        accepted = YES;
-                        [active activateWebVideoHandoffAtTime:[reply[@"time"] doubleValue]];
-                        BrowserDebugLog(@"[WebVLC] iframeAccepted=1");
+                    NSString *acceptScript = [NSString stringWithFormat:@"(function(){var args=%@;var ok=window.__browserTVVLCResponse && window.__browserTVVLCResponse.apply(null,args);return !!ok;})()", json];
+                    [target evaluateJavaScript:acceptScript completionHandler:^(NSString *submitted, NSError *submitError) {
+                        if (submitError || ![submitted boolValue]) { [weakPlayer dismissViewControllerAnimated:YES completion:nil]; return; }
+                        [host finishWebVideoHandoff:target sessionJSON:sessionJSON generation:generation deadline:[NSDate timeIntervalSinceReferenceDate] + 2 completion:^(NSString *result, NSError *error) {
+                            BrowserVLCPlayerViewController *active = weakPlayer;
+                            NSDictionary *reply = [result isKindOfClass:NSString.class] ? [NSJSONSerialization JSONObjectWithData:[result dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil] : nil;
+                            if (!active || active.isBeingDismissed || host.presentedViewController != active ||
+                                target != host.webview || target.documentGeneration != generation || !BrowserPreferencesStore.iframeVLCExperimentEnabled || error || ![reply isKindOfClass:NSDictionary.class] || ![reply[@"accepted"] boolValue]) {
+                                [active dismissViewControllerAnimated:YES completion:nil]; return;
+                            }
+                            accepted = YES;
+                            [active activateWebVideoHandoffAtTime:[reply[@"time"] doubleValue]];
+                            BrowserDebugLog(@"[WebVLC] iframeAccepted=1");
+                        }];
                     }];
                 };
                 player.webVideoDidClose = ^(double time, double volume, BOOL muted) {
