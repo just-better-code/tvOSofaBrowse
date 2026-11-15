@@ -17,8 +17,9 @@ static inline UIImage *BrowserPlaybackControlImage(NSString *symbol) {
     BOOL beginning = [symbol isEqualToString:@"backward.end.alt.fill"];
     BOOL pause = [symbol isEqualToString:@"pause.fill"];
     BOOL ending = [symbol isEqualToString:@"browser.end.fill"];
+    BOOL vlc = [symbol isEqualToString:@"browser.vlc"];
     BOOL playPause = [symbol isEqualToString:@"playpause.fill"];
-    if (!(singleRight || singleLeft || rewind || forward || previous || next || beginning || pause || playPause || ending)) {
+    if (!(singleRight || singleLeft || rewind || forward || previous || next || beginning || pause || playPause || ending || vlc)) {
         return [UIImage systemImageNamed:symbol withConfiguration:
             [UIImageSymbolConfiguration configurationWithPointSize:29 weight:UIImageSymbolWeightSemibold]];
     }
@@ -32,7 +33,30 @@ static inline UIImage *BrowserPlaybackControlImage(NSString *symbol) {
             [path addLineToPoint:CGPointMake(right ? x : x + width, 33)];
             [path closePath]; [path fill];
         };
-        if (ending) {
+        if (vlc) {
+            // Reuse the original monochrome torrent VLC cone geometry.
+            UIBezierPath *cone = [UIBezierPath bezierPath];
+            [cone moveToPoint:CGPointMake(19, 2)];
+            [cone addLineToPoint:CGPointMake(29, 29)];
+            [cone addLineToPoint:CGPointMake(9, 29)];
+            [cone closePath]; [cone fill];
+            CGContextSetBlendMode(context.CGContext, kCGBlendModeClear);
+            UIBezierPath *upperBand = [UIBezierPath bezierPath];
+            [upperBand moveToPoint:CGPointMake(16, 10)];
+            [upperBand addLineToPoint:CGPointMake(22, 10)];
+            [upperBand addLineToPoint:CGPointMake(23.5, 14)];
+            [upperBand addLineToPoint:CGPointMake(14.5, 14)];
+            [upperBand closePath]; [upperBand fill];
+            UIBezierPath *lowerBand = [UIBezierPath bezierPath];
+            [lowerBand moveToPoint:CGPointMake(12.5, 20)];
+            [lowerBand addLineToPoint:CGPointMake(25.5, 20)];
+            [lowerBand addLineToPoint:CGPointMake(27, 24)];
+            [lowerBand addLineToPoint:CGPointMake(11, 24)];
+            [lowerBand closePath]; [lowerBand fill];
+            CGContextSetBlendMode(context.CGContext, kCGBlendModeNormal);
+            [[UIBezierPath bezierPathWithRoundedRect:CGRectMake(7, 28, 24, 4) cornerRadius:1] fill];
+            [[UIBezierPath bezierPathWithRoundedRect:CGRectMake(4, 32, 30, 5) cornerRadius:1.5] fill];
+        } else if (ending) {
             triangle(3, 19, YES);
             UIRectFill(CGRectMake(25, 5, 4, 28)); UIRectFill(CGRectMake(31, 5, 4, 28));
         } else if (playPause) {
