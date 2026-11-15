@@ -13,11 +13,12 @@ Published packages are available for [2.21.9](https://github.com/just-better-cod
 
 ### Added
 
-- Try direct HTTP(S) iframe video in shared VLC through an opt-in experiment in Debug and develop builds, with bounded startup and return to the website; keep episode selection on the site ([Playback controls](docs/USER_GUIDE.md), [Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
+- Try direct HTTP(S) iframe video and active Starlight and PlayerJS HLS sources in shared VLC through an opt-in experiment in Debug and develop builds, with bounded startup and return to the website; keep episode selection on the site ([Playback controls](docs/USER_GUIDE.md), [Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
 
 ### Fixed
 
-- Return experimental iframe End/Next and completed playback to the website with optional fullscreen exit so its own video-ended handling can continue, and keep website video visible during muted VLC preparation ([Playback controls](docs/USER_GUIDE.md), [Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
+- Reject advertisements outside the active HLS video bindings and prevent an unsupported fullscreen source from turning into a late HTTP advertisement capture ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
+- Route experimental Next through available website track controls, return completed playback to the website with optional fullscreen exit, and keep website video visible during muted VLC preparation ([Playback controls](docs/USER_GUIDE.md), [Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
 - Route experimental iframe capture through the main document and await the original video’s pause acknowledgement before enabling VLC audio ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
 - Restore Center capture of controlled iframe video when the VLC experiment is enabled, propagating the setting to current and newly loaded frames ([Playback controls](docs/USER_GUIDE.md)).
 - Prioritize Back dismissal of visible VLC over the underlying iframe fullscreen, restore the page layout without waiting for a child reply, and require video output before accepting experimental capture ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).

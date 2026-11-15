@@ -1485,3 +1485,43 @@ stand. This verifies bridge compatibility, not UIKit menus, preference persisten
 focus, native compilation or a specific website's next episode. No native build,
 device work or push. Private evidence: WebKit run
 2026-11-15T14-35-44.494Z-8fdc6fb7, check-fullscreen-completion.mjs.
+
+
+## 2026-11-15 — Live Teleportal and UASerials HLS capture
+
+At the user's request, test both real sites before any further push. The user
+clarifies that Teleportal must enter VLC: shared VLC is the foundation for future
+features, so website-only playback is insufficient. Extend the generic bridge with
+source-bound Starlight and documented PlayerJS HLS capabilities, rejecting ads and
+unrelated/detached loaders. Track PlayerJS constructor results only while the
+experiment is enabled; reload pages whose unexposed instance already existed.
+
+Distinguish explicit Next from EOF in the native close callback. Submit the site's
+Media Session/existing Starlight control/registered PlayerJS playlist command once;
+use near-end HTML playback only when no track route exists. Keep natural EOF and
+optional fullscreen behavior, source/session guards and direct HTTP capture.
+
+Actual Teleportal main HLS was offered, acknowledged, decoded with Linux libVLC
+and sought to 120 seconds. Simulated native Next switched 92 -> 93 with actual
+content playing and fullscreen retained, then 93 -> 94 with fullscreen exit.
+Actual UASerials production bridge emitted main HLS that Linux libVLC decoded and
+sought. Next selected episode 2 without an old-video ended event; the site's ad
+held further website playback on this stand. Its HTTP ad failed source eligibility.
+The visible UAKino regression emitted the exact original HTTPS video URL after
+transient headless/readiness failures were investigated. All raw logs and signed
+media context remain ignored. See [the detailed checkpoint](plans/automatic-web-video-vlc.md)
+and [primary source index](RESEARCH_SOURCES.md).
+
+These are actual-site WebKit observations plus Linux libVLC verification, with
+explicit simulated native replies. They do not verify tvOS/TVVLCKit UI, startup
+latency or seamless native episode playback. No native build or push; all changes
+remain local under the user's hold. Keep 2.22.0 consolidated.
+
+Follow-up within the same local stage: complete the UASerials PlayerJS path using
+its documented HLS getter and a bounded opt-in constructor registry. A fresh
+production-only bridge emitted the real main HLS offer, paused the original Blob
+video on acknowledgement and selected episode 2 via explicit Next, without an EOF
+or duplicate transition. The exact production URL decoded and sought in local
+libVLC; ads remained ineligible. Post-Next website content was still behind an ad,
+so seamless native playback of the next episode is pending. Final generic/nested
+regressions and actual UAKino fullscreen capture passed. No push or native build.

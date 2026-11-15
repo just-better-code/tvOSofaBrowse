@@ -602,3 +602,152 @@ branch were modeled. Private run 2026-11-15T14-35-44.494Z-8fdc6fb7, helper
 .data/webkit-testbench/check-fullscreen-completion.mjs. UIKit visibility/focus,
 native persistence, compilation and real-site episode continuity remain unverified.
 No build/push requested; retain this stage locally along with the cone/title work.
+
+## 2026-11-15 — Live Teleportal/UASerials and expanded VLC requirement
+
+User explicitly requires Teleportal's main video to transfer into shared VLC;
+website playback alone is not an acceptable completion result. VLC is the intended
+foundation for further capabilities. Keep pushes withheld. Preserve generic bridge
+and controls; reuse the existing Starlight capability adapter rather than matching
+Teleportal URLs or guessing arbitrary network requests.
+
+Actual Teleportal episode 92 plays as Blob/MSE in nested Starlight. Direct video
+fullscreen produced no initial offer, as expected from old HTTP-only discovery.
+Seeking through the production website End command produced a trusted content EOF,
+post-roll HTTP ads and an erroneous late VLC offer for an ad. The source remained
+92 after that sequence. This is not confirmed auto-advance. Inspect exact active
+adapter/video association before offering any Starlight media. Actual core exposes
+engine.attachedAdapter; its mediaSource equals the video's Blob URL, currentUrl
+is the declared HTTP(S) HLS master, and hls.media points to the same video. Source
+integrity is preserved in ignored upstream-core.js; no URLs/tokens belong in docs.
+
+Next implementation: resolve an eligible Starlight HLS source only through the
+active adapter associated with that video, reject detached/ad/DRM contexts, retain
+source/session/generation checks, and exercise live main-video offers plus replies.
+Do not infer media from generic recent network URLs. Verify current URL against the
+adapter's declared source list and HLS loader. Native VLC remains unverified on
+Linux and cannot be published or delivered under the current hold.
+
+Actual UASerials domain supplied by user is uaserials.com; pagination was incidental.
+Opened /1511-akademiya-tancyu.html. Player is in open shadow-frame nesting, hosted
+at tortuga.tw/embed/801; actual content now plays as Blob/MSE (readyState 4).
+Continue its fullscreen/episode observation separately; do not claim VLC capture.
+
+
+## 2026-11-15 — Final live HLS bindings and explicit Next
+
+The expanded requirement treats VLC as the foundation for future functionality,
+with Teleportal required to enter VLC. The generic frame relay and native controls
+remain shared. Add bounded capability adapters instead of domain checks or guessed
+recent network URLs:
+
+- Starlight: require engine.video identity, its attached adapter's mediaSource to
+  match this video's source, software-HLS identity, hls.media===video, no EME/media
+  keys, currentUrl===hls.url and membership in the engine's declared HLS source list.
+  Preserve source-object identity in each request. Detached/ad-video sources fail.
+- PlayerJS: use documented API only. When the experiment is ON, observe script load
+  and wrap the global factory with a transparent construction/call Proxy, preserving
+  prototype/static behavior and retaining at most 16 created APIs per document.
+  Find the player by its api('id') container containing the video; use api('hls')
+  only when an actual source is initialized, then require loader.media===video,
+  Blob source and no EME/media keys. Preserve player/HLS/playlist_id identity in the
+  request. Skip unused HLS plugins for ordinary HTTP videos. Enabling after an
+  unexposed instance already exists needs a page reload. BFCache retains valid
+  constructed API references; pagehide still clears playback requests.
+- Explicit Next is now a distinct native close reason, not EOF. Reuse Media Session,
+  existing Starlight controls, or PlayerJS api('next') for a registered playlist.
+  Never also seek to EOF after submitting a track action. If no capability exists,
+  resume near-end HTML video as before. Natural EOF retains the real-ended path.
+  Preserve optional fullscreen cleanup for both next and ended; Back/failure always
+  exit. Do not automatically recapture the new episode in native VLC yet.
+- Freeze an unsupported unrecognized source's fullscreen capture decision, so a
+  later HTTP ad cannot become a new request. A new explicit fullscreen can retry.
+
+Live evidence, with actual site media and no source substitution:
+
+Teleportal /ua/serials/stb/kod/2026/seriya-92: actual video is Blob/MSE. Production
+bridge offered the exact active adapter HLS URL in the main document and received
+an explicit simulated-native acceptance acknowledgement from the paused original
+video. Local libVLC 3.0.20 decoded real video/audio and sought to 120000 ms (104 video
+frames / 202 audio buffers at the observed sample). This is Linux libVLC, not the
+app's TVVLCKit, and its output used dummy audio/video sinks. A real post-roll HTTP
+advertisement was ineligible for capture. Explicit next reply switched 92 -> 93
+with zero old-video ended events, readyState 4, playing new content and fullscreen
+retained. A second host-boundary capture/reply switched 93 -> 94 with fullscreen
+exit. Native responses are simulated; site source changes and playback are real.
+
+UASerials domain was supplied by the user; /series/drama/page/70/ was incidental.
+On /1511-akademiya-tancyu.html the Tortuga/PlayerJS video uses Blob/MSE. An initial
+observational factory probe confirmed official API availability and matching HLS
+media. Then a fresh context with production bridge ONLY (no private factory probe)
+produced a main-frame HTTP HLS offer, a valid current session and a paused-original
+acknowledgement. The exact URL emitted by production was opened in Linux libVLC:
+86 decoded video frames / 166 decoded audio buffers, seek to 120000 ms confirmed.
+Explicit next reply selected episode 2, with zero old-video ended events and
+fullscreen retained; repeat acceptance of the old session returned false. The
+new main Blob source remained eligible, while the real HTTP ad video was rejected.
+Post-Next website content playback remained held behind the site's advertisement
+on this Linux stand; this is not a confirmed native/UI seamless episode transition.
+No full uBO runtime/native content-rule environment was modeled.
+
+UAKino regression: two headless attempts failed at different stages (no offer after
+an early click, then lazy iframe not attached). Changed to a visible context with
+source-readiness observations; actual fullscreen click produced a main offer with
+URL exactly equal to the site's direct HTTPS video. Its api('hls') returned undefined.
+Keep ordinary HTTP capture intact and do not misattribute transient stand readiness
+failures to the adapter. No unchanged ineffective path was retried blindly.
+
+Private evidence/helpers (all ignored; never publish signed media URLs):
+- Teleportal HLS/advertisement: run 2026-11-15T14-50-32.746Z-650a426c.
+- Teleportal explicit Next retained/exited: 2026-11-15T14-57-03.380Z-c3fb83b8,
+  teleportal-capture-check.mjs and host-boundary follow-up in the same live context.
+- UASerials initial website EOF/selected second episode/ad hold:
+  2026-11-15T14-38-33.971Z-52f6396e (older bridge, baseline observation only).
+- UASerials API probe: 2026-11-15T15-14-07.414Z-19872f02,
+  capture-playerjs-instance.js. Production-only test: 2026-11-15T15-18-37.356Z-44bd901c.
+- UAKino final live regression: 2026-11-15T15-25-37.178Z-aedb36a6.
+- Linux VLC check-vlc-stream.py; private vlc-context.json and
+  vlc-uaserials-context.json, numeric vlc-summary.json. Official 3.x stats structure
+  reference is indexed in RESEARCH_SOURCES.md. Native offer arrays cap at 100;
+  recover older offers from private events.jsonl rather than assuming none existed.
+- Generic decoded ON/OFF/Next fallback: 2026-11-15T14-59-49.756Z-a1ce0645.
+- Unknown-MSE -> late HTTP regression: 2026-11-15T15-06-40.589Z-0cda5a13,
+  check-unsupported-source.mjs; declined until a new explicit fullscreen.
+
+Current native source additionally carries the string close reason closed/next/ended
+through BrowserVLCPlayerViewController.webVideoDidClose and ViewController.respond.
+No local tvOS build, physical device work, remote push or release publication.
+Keep unreleased 2.22.0. TV UI/timing, actual native HLS handoff, preference persistence
+and seamless site/episode behavior require native observation after a future delivery.
+
+### PlayerJS follow-up: completed production binding
+
+Continue beyond the initial UASerials limitation above: official PlayerJS API
+inspection established api('hls') as a supported getter. The host's player instance
+is not exposed in a global variable, so an opt-in script-load constructor observer
+records created API objects without calling setters or probing unrelated globals.
+An observational prototype found one actual PlayerJS instance, container
+videoplayer801, matching HLS media, HTTP master and playlist 1-1. A fresh production
+context (no private observer) then passed actual fullscreen capture, current-source
+validation and accepted/pause acknowledgement for episode 1.
+
+The exact URL emitted by the production bridge decoded in Linux libVLC (86 video
+frames / 166 audio buffers at the sample), including seek to 120000 ms. Next reply
+used the documented API once: selected episode 2, zero old-video ended events,
+fullscreen retained, stale-session acceptance false. The real HTTP advertisement
+was rejected; the main Blob source remained eligible. The website still held
+post-Next content behind its ad on this Linux stand. Do not call that a seamless
+native second-episode playback verification.
+
+Ignore uninitialized HLS plugins when ordinary HTTP media is in use. Preserve
+PlayerJS API references through persisted pagehide/BFCache, and clear transient
+VLC requests as before. Final visible UAKino (same production source except this
+non-behavioral BFCache follow-up) produced an exact native-offer/source URL match
+from the actual fullscreen click; its HLS API was undefined.
+
+Final production bridge regression run 2026-11-15T15-29-46.161Z-1ea58838 passed
+nested-frame acknowledgement/ordinary close, stale and changed-source rejection,
+experiment OFF, decoded real ended with fullscreen ON/OFF, and Next fallback with
+no recognized track API. Helpers remain ignored. Native callback/header/control
+changes are unbuilt on Linux; the latest available IPA remains Build 11.1 without
+these local follow-ups. Push hold remains in force.

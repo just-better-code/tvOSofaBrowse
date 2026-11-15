@@ -46,6 +46,7 @@
 @property (nonatomic) NSInteger lastReportedState;
 @property (nonatomic) BOOL playbackEnded;
 @property (nonatomic) BOOL webVideoFinished;
+@property (nonatomic, copy) NSString *webVideoCompletionAction;
 @property (nonatomic) UIView *headerView;
 @property (nonatomic) NSTimeInterval lastDurationLogTime;
 @property (nonatomic) UIView *videoView;
@@ -472,7 +473,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     if (self.webVideoURL && self.webVideoDidClose) {
         double time = MAX(0, self.vlcPlayer.time.value.longLongValue / 1000.0);
         if (self.pendingResumeMs > 0) time = self.initialWebTime;
-        self.webVideoDidClose(time, self.vlcPlayer.audio.volume / 100.0, self.vlcPlayer.audio.isMuted, self.webVideoFinished);
+        self.webVideoDidClose(time, self.vlcPlayer.audio.volume / 100.0, self.vlcPlayer.audio.isMuted, self.webVideoCompletionAction ?: @"closed");
         self.webVideoDidClose = nil;
     }
     self.webVideoDidPrepare = nil;
@@ -873,15 +874,16 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
 
 - (void)nextFilePressed {
     if (self.returnWebVideoOnEnd) {
-        if (!self.prepareWebVideoHandoff) [self finishWebVideo];
+        if (!self.prepareWebVideoHandoff) [self finishWebVideo:@"next"];
         return;
     }
     [self endPressed]; [self switchToAdjacentFileInDirection:1];
 }
 
-- (void)finishWebVideo {
+- (void)finishWebVideo:(NSString *)action {
     if (self.webVideoFinished || self.isBeingDismissed) return;
     self.webVideoFinished = YES;
+    self.webVideoCompletionAction = action;
     [self stopHeldSeek];
     [self closePressed];
 }
@@ -994,7 +996,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
                 ? @"Playback failed. Return to the page to use its player." : @"Playback failed. Check torrent availability or file format."; break;
             case VLCMediaPlayerStateEnded:
                 if (self.returnWebVideoOnEnd && !self.prepareWebVideoHandoff) {
-                    [self finishWebVideo]; return;
+                    [self finishWebVideo:@"ended"]; return;
                 }
                 self.playbackEnded = YES;
                 self.statusLabel.text = @"Playback finished";

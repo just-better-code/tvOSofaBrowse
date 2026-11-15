@@ -948,7 +948,7 @@ static UIColor *kTextColor(void) {
         if (json) [view evaluateVideoJavaScript:[NSString stringWithFormat:@"window.__browserTVVLCResponse && window.__browserTVVLCResponse.apply(null,%@)", json] frame:videoFrame
                          completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
         BOOL exitFullscreen = [action isEqual:@"closed"] || [action isEqual:@"rejected"] ||
-            ([action isEqual:@"ended"] && [BrowserPreferencesStore new].automaticallyExitIframeFullscreen);
+            (([action isEqual:@"ended"] || [action isEqual:@"next"]) && [BrowserPreferencesStore new].automaticallyExitIframeFullscreen);
         if (iframeExperiment && exitFullscreen) {
             // Back/failure always restores layout. Completion follows the user's
             // preference; the website may still exit fullscreen on its own.
@@ -1018,12 +1018,12 @@ static UIColor *kTextColor(void) {
                         }];
                     }];
                 };
-                player.webVideoDidClose = ^(double time, double volume, BOOL muted, BOOL finished) {
-                    respond(accepted ? (finished ? @"ended" : @"closed") : @"rejected", time, volume, muted);
+                player.webVideoDidClose = ^(double time, double volume, BOOL muted, NSString *action) {
+                    respond(accepted ? action : @"rejected", time, volume, muted);
                     BrowserDebugLog(@"[WebVLC] iframeClosed=1 accepted=%d", accepted);
                 };
             } else {
-                player.webVideoDidClose = ^(double time, double volume, BOOL muted, __unused BOOL finished) { respond(@"closed", time, volume, muted); };
+                player.webVideoDidClose = ^(double time, double volume, BOOL muted, __unused NSString *action) { respond(@"closed", time, volume, muted); };
                 respond(@"accepted", 0, 0, NO);
             }
             [owner removeFullscreenMediaControls];

@@ -17,6 +17,56 @@ var mediaVLCSerial = 0;
 var mediaVLCAttempted = false;
 // Configuration comes from native at document start and follows the real frame tree.
 var mediaVLCIframeCapture = false;
+var mediaVLCPlayerJSInstances = [];
+var mediaVLCPlayerJSFactories = new WeakSet();
+// PlayerJS documents api('hls'), api('id') and playlist commands. Keep the
+// constructed API objects without probing unrelated globals or network traffic.
+function observePlayerJSFactory() {
+    if (!mediaVLCIframeCapture || typeof window.Playerjs !== 'function') return;
+    var original = window.Playerjs;
+    if (mediaVLCPlayerJSFactories.has(original)) return;
+    function remember(player) {
+        try {
+            if (player && typeof player.api === 'function' && mediaVLCPlayerJSInstances.indexOf(player) < 0) {
+                mediaVLCPlayerJSInstances.push(player);
+                if (mediaVLCPlayerJSInstances.length > 16) mediaVLCPlayerJSInstances.shift();
+            }
+        } catch (error) {}
+        return player;
+    }
+    try {
+        var wrapped = new Proxy(original, {
+            construct: function(target, args, newTarget) { return remember(Reflect.construct(target, args, newTarget)); },
+            apply: function(target, receiver, args) { return remember(Reflect.apply(target, receiver, args)); }
+        });
+        window.Playerjs = wrapped;
+        mediaVLCPlayerJSFactories.add(original);
+        mediaVLCPlayerJSFactories.add(wrapped);
+    } catch (error) {}
+}
+// A library's load event runs before the following script creates its players.
+document.addEventListener('load', function(event) {
+    if (event.target && event.target.tagName === 'SCRIPT') observePlayerJSFactory();
+}, true);
+document.addEventListener('DOMContentLoaded', observePlayerJSFactory);
+function playerJSVideoBinding(video) {
+    if (!mediaVLCIframeCapture || !video) return null;
+    for (var i = mediaVLCPlayerJSInstances.length - 1; i >= 0; i--) {
+        try {
+            var player = mediaVLCPlayerJSInstances[i];
+            var id = player.api('id');
+            var container = typeof id === 'string' && id.length <= 256 && document.getElementById(id);
+            if (container && container.isConnected && container.contains(video))
+                return {player:player, hls:player.api('hls')};
+        } catch (error) {}
+    }
+    return null;
+}
+function playerJSNextController(video) {
+    var binding = playerJSVideoBinding(video);
+    if (!binding) return null;
+    try { return binding.player.api('playlist_length') > 1 ? binding.player : null; } catch (error) { return null; }
+}
 window.__browserTVSetIframeVLCExperiment = function(enabled) {
     mediaVLCIframeCapture = enabled === true;
     function notify(root) {
@@ -27,6 +77,7 @@ window.__browserTVSetIframeVLCExperiment = function(enabled) {
         });
     }
     notify(document);
+    observePlayerJSFactory();
     if (mediaVLCIframeCapture && fullscreenTarget) requestVLCFullscreen(fullscreenTarget);
 };
 window.addEventListener('message', function(event) {
@@ -42,20 +93,63 @@ window.addEventListener('message', function(event) {
 if (window !== window.top) window.parent.postMessage({browserTVVLCConfigurationRequest:secret}, '*');
 else try { window.webkit.messageHandlers.browserFullscreenMedia.postMessage({token:nativeToken,session:'vlc-config',vlcConfigRequest:true}); } catch(error) {}
 
-function directVideoSource(video) {
+// Existing Starlight capability adapter: bind to this actual video's engine,
+// never to the embedding domain or a recently observed network URL.
+function starlightVideoEngine(video) {
+    if (!video || !window.adt || typeof adt.player !== 'function') return null;
+    var engine = video.engine;
+    return engine && engine.video === video && engine.source && engine.source.id &&
+        Array.isArray(engine.source.sources) && engine.group && Array.isArray(engine.group.playlist) ? engine : null;
+}
+function vlcVideoSource(video) {
     var source = video.currentSrc || video.src;
     if (!source) {
         var sources = Array.prototype.slice.call(video.querySelectorAll('source[src]'));
         var candidate = sources.find(function(item) { return !item.type || video.canPlayType(item.type); }) || sources[0];
         source = candidate && candidate.src;
     }
-    if (!source) return null;
+    if (!source || video.mediaKeys) return null;
+    var engine = starlightVideoEngine(video);
+    if (engine) {
+        try {
+            var adapter = engine.attachedAdapter;
+            // Ads temporarily borrow the same video, while the content adapter
+            // retains/detaches its own source. Never offer that unrelated media.
+            if (!adapter || !adapter.mediaSource || adapter.mediaSource !== source) return null;
+            if (/^blob:/.test(source)) {
+                if (!mediaVLCIframeCapture || !adapter.isSoftwareHLSAdapter || !adapter.hls ||
+                    adapter.hls.media !== video || adapter.hls.config.emeEnabled) return null;
+                source = adapter.currentUrl;
+                if (source !== adapter.hls.url || !engine.source.sources.some(function(stream) {
+                    return stream.type === 'HLS' && Array.isArray(stream.source) && stream.source.some(function(item) {
+                        return item && item.url === source;
+                    });
+                })) return null;
+            }
+        } catch (error) { return null; }
+    } else {
+        var binding = playerJSVideoBinding(video);
+        if (binding && binding.hls) {
+            try {
+                // The documented HLS plugin must own this actual Blob video.
+                // Its ad video, detached loader or EME source is not eligible.
+                // Ignore an uninitialized HLS plugin for ordinary HTTP video.
+                // Only a loader with a source owns this decision.
+                var hlsURL = binding.hls.url;
+                if (typeof hlsURL === 'string' && hlsURL) {
+                    if (!/^blob:/.test(source) || binding.hls.media !== video || binding.hls.config.emeEnabled) return null;
+                    source = hlsURL;
+                }
+            } catch (error) { return null; }
+        }
+    }
+    if (typeof source !== 'string' || !source) return null;
     try { source = new URL(source, document.baseURI); } catch (error) { return null; }
     return /^https?:$/.test(source.protocol) && source.hostname && !source.username && !source.password && source.href.length <= 8192 ? source.href : null;
 }
 window.__browserTVOpenControlledVideo = function(element) {
     if ((window !== window.top && !mediaVLCIframeCapture) || !element || element.tagName !== 'VIDEO' ||
-        !element.controls || element.mediaKeys || !directVideoSource(element)) return false;
+        !element.controls || element.mediaKeys || !vlcVideoSource(element)) return false;
     enterFullscreen(element);
     return true;
 };
@@ -73,12 +167,23 @@ function requestVLCFullscreen(element) {
     var videos = element.tagName === 'VIDEO' ? [element] : Array.prototype.slice.call(element.querySelectorAll('video'));
     var video = videos.find(function(v) { return !v.paused && !v.ended; }) || videos[0];
     if (!video) return;
-    var source = directVideoSource(video);
-    if (!source || video.mediaKeys) return;
+    var source = vlcVideoSource(video);
+    if (!source || video.mediaKeys) {
+        // Freeze an unsupported source's fullscreen decision: a later HTTP ad
+        // must not become a new capture. A recognized adapter may still be
+        // waiting for its content to return after a pre-roll advertisement.
+        if (!starlightVideoEngine(video) && !playerJSVideoBinding(video) && (video.mediaKeys || video.currentSrc || video.src || video.querySelector('source[src]')))
+            mediaVLCAttempted = true;
+        return;
+    }
     mediaVLCAttempted = true;
     mediaVLCRequests = Object.create(null);
     var id = secret + ':' + Date.now() + ':vlc:' + (++mediaVLCSerial);
-    mediaVLCRequests[id] = {video: video, url: source};
+    var playerBinding = playerJSVideoBinding(video);
+    var playlistID;
+    if (playerBinding) { try { playlistID = playerBinding.player.api('playlist_id'); } catch (error) { return; } }
+    mediaVLCRequests[id] = {video: video, url: source, engineSource:starlightVideoEngine(video) && video.engine.source,
+        player:playerBinding && playerBinding.player, hls:playerBinding && playerBinding.hls, playlistID:playlistID};
     publishVLCRequest(id, {url: source, title: document.title.slice(0, 512),
         currentTime: Number.isFinite(video.currentTime) ? video.currentTime : 0,
         volume: video.volume, muted: video.muted, documentURL: location.href,
@@ -90,12 +195,21 @@ window.__browserTVVLCRequestTime = function(id) {
     var request = mediaVLCRequests[id];
     return request && request.video && Number.isFinite(request.video.currentTime) ? request.video.currentTime : 0;
 };
+function vlcRequestSourceIsCurrent(request) {
+    if (request && request.player) {
+        try {
+            if (request.player.api('playlist_id') !== request.playlistID || request.player.api('hls') !== request.hls) return false;
+        } catch (error) { return false; }
+    }
+    return !!request && !!request.video && request.video.isConnected && !request.video.mediaKeys &&
+        (!request.engineSource || (request.video.engine && request.video.engine.source === request.engineSource)) &&
+        vlcVideoSource(request.video) === request.url;
+}
 window.__browserTVVLCRequestIsCurrent = function(id) {
     var request = mediaVLCRequests[id];
     if (request && request.frame) return mediaVLCIframeCapture && request.frame.isConnected &&
         mediaFrame() === request.frame && request.frame.contentWindow === request.source;
-    return !!request && request.video.isConnected && !request.video.mediaKeys &&
-        directVideoSource(request.video) === request.url && !!(fullscreenTarget || fullscreenFrame);
+    return vlcRequestSourceIsCurrent(request) && !!(fullscreenTarget || fullscreenFrame);
 };
 window.__browserTVVLCResponse = function(id, action, time, volume, muted) {
     var request = mediaVLCRequests[id];
@@ -108,10 +222,21 @@ window.__browserTVVLCResponse = function(id, action, time, volume, muted) {
         if (action !== 'accepted') delete mediaVLCRequests[id];
         return true;
     }
+    if (action === 'next' && request.accepted && vlcRequestSourceIsCurrent(request)) {
+        // Reuse the site's existing Media Session/recognized-control route.
+        // An explicit Next is not EOF; do not seek near the end as well.
+        if (Number.isFinite(volume)) request.video.volume = Math.max(0, Math.min(1, volume));
+        request.video.muted = !!muted;
+        if (performMediaCommand('next', 0, ++mediaRequestSerial)) {
+            delete mediaVLCRequests[id];
+            return true;
+        }
+        action = 'ended'; // No track capability: let the real video's EOF run.
+    }
     if (request.video && request.video.isConnected) {
         var video = request.video;
         if (action === 'accepted') { request.accepted = true; video.pause(); }
-        if ((action === 'closed' || action === 'ended') && directVideoSource(video) === request.url) {
+        if ((action === 'closed' || action === 'ended') && vlcRequestSourceIsCurrent(request)) {
             try {
                 // Resume the real media just before EOF so the site's own ended
                 // listener runs. Do not dispatch synthetic ended/finish messages.
@@ -124,7 +249,7 @@ window.__browserTVVLCResponse = function(id, action, time, volume, muted) {
             } catch (error) {}
         }
     }
-    if (action === 'rejected' && request.accepted && request.video.isConnected && directVideoSource(request.video) === request.url) {
+    if (action === 'rejected' && request.accepted && vlcRequestSourceIsCurrent(request)) {
         var resume = request.video.play(); if (resume && resume.catch) resume.catch(function() {});
     }
     if (action === 'accepted') {
@@ -337,8 +462,8 @@ function mediaState() {
         seekAtStart: seekable ? current <= v.seekable.start(0) : !!v && current <= 0,
         seekAtEnd: seekable ? current >= v.seekable.end(v.seekable.length - 1) : duration > 0 && current >= duration,
         canPrevious: !!mediaHandlers.previoustrack || !!starlightPredecessor() || !!playerTrackControl(true) || (current > 5 && (seekable || !!mediaHandlers.seekto)),
-        canNext: !!mediaHandlers.nexttrack || !!playerTrackControl(false),
-        routesNext: !!mediaHandlers.nexttrack || !!playerTrackControl(false),
+        canNext: !!mediaHandlers.nexttrack || !!playerTrackControl(false) || !!playerJSNextController(v),
+        routesNext: !!mediaHandlers.nexttrack || !!playerTrackControl(false) || !!playerJSNextController(v),
         routesPrevious: !!mediaHandlers.previoustrack || !!(starlightPlayer() && starlightCatalog) || !!playerTrackControl(true),
         adapterTitle: starlightSourceTitle(),
         starlightSourceID: starlightPlayer() ? starlightPlayer().source.id : '',
@@ -433,6 +558,13 @@ function performMediaCommand(command, value, request) {
     if (command === 'next' || command === 'previous') {
         var trackControl = playerTrackControl(command === 'previous');
         if (trackControl) { trackControl.click(); return true; }
+        if (command === 'next') {
+            var nextPlayer = playerJSNextController(mediaVideo());
+            if (nextPlayer) {
+                try { nextPlayer.api('next'); } catch (error) {}
+                return true; // A throwing API may already have submitted Next.
+            }
+        }
     }
     var v = mediaVideo();
     var state = mediaState();
@@ -520,7 +652,8 @@ window.__browserTVSendFullscreenMediaCommand = function(command, value, session)
     if (command === 'volume' && !mediaVolumeReady) return false;
     return performMediaCommand(command, value, ++mediaRequestSerial);
 };
-window.addEventListener('pagehide', function() {
+window.addEventListener('pagehide', function(event) {
+    if (!event.persisted) mediaVLCPlayerJSInstances = [];
     mediaVLCRequests = Object.create(null);
     clearInterval(mediaTimer); mediaTimer = null;
     mediaActive = false; publishNativeMedia();

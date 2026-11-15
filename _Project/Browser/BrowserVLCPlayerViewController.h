@@ -11,5 +11,5 @@
 - (void)activateWebVideoHandoffAtTime:(double)time;
 // Return experimental iframe EOF/End to the site's own episode lifecycle.
 @property (nonatomic) BOOL returnWebVideoOnEnd;
-@property (nonatomic, copy) void (^webVideoDidClose)(double time, double volume, BOOL muted, BOOL finished);
+@property (nonatomic, copy) void (^webVideoDidClose)(double time, double volume, BOOL muted, NSString *action);
 @end
