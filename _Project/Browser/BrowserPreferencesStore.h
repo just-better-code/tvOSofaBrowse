@@ -8,6 +8,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (NSString *)mobileUserAgent;
 + (BOOL)websiteLoggingEnabled;
 + (BOOL)debugEnabled;
++ (BOOL)iframeVLCExperimentAvailable;
++ (BOOL)iframeVLCExperimentEnabled;
 
 @property (nonatomic, copy) NSString *userAgent;
 @property (nonatomic) BOOL mobileModeEnabled;
