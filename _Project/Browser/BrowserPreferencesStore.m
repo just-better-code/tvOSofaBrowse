@@ -11,6 +11,7 @@ static NSString * const kDontShowHintsOnLaunchDefaultsKey = @"DontShowHintsOnLau
 static NSString * const kDebugEnabledDefaultsKey = @"BrowserDebugEnabled";
 static NSString * const kDebugLastLogDefaultsKey = @"BrowserDebugLastLog";
 static NSString * const kDebugRecentLogsDefaultsKey = @"BrowserDebugRecentLogs";
+static NSString * const kExitIframeFullscreenDefaultsKey = @"AutomaticallyExitIframeFullscreen";
 static NSString * const kHomepageDefaultsKey = @"homepage";
 
 static NSUInteger const kDefaultTextFontSize = 100;
@@ -43,6 +44,15 @@ NSNotificationName const BrowserDebugEnabledDidChangeNotification = @"BrowserDeb
 }
 + (BOOL)iframeVLCExperimentEnabled {
     return self.iframeVLCExperimentAvailable && [NSUserDefaults.standardUserDefaults boolForKey:@"BrowserIframeVLCExperiment"];
+}
+
+- (BOOL)automaticallyExitIframeFullscreen {
+    NSNumber *value = [[self defaults] objectForKey:kExitIframeFullscreenDefaultsKey];
+    return value == nil ? YES : value.boolValue;
+}
+
+- (void)setAutomaticallyExitIframeFullscreen:(BOOL)enabled {
+    [[self defaults] setBool:enabled forKey:kExitIframeFullscreenDefaultsKey];
 }
 
 + (BOOL)debugEnabled {

@@ -1457,3 +1457,31 @@ Read the originating BrowserWebView.title when opening shared web playback,
 falling back to its page host, instead of the iframe-supplied document title.
 Torrent file titles remain unchanged. This small local UI change was not built
 or tested; no push was performed under the current hold. Keep version 2.22.0.
+
+
+## 2026-11-15 — Contextual track icons and optional fullscreen exit
+
+The user asks whether completion must leave fullscreen, requests hiding irrelevant
+Audio/Subtitles controls, and confirms the third icon should toggle automatic exit
+rather than exit immediately. Keep all changes local under the existing push hold.
+
+Replace text track selectors with shared 68-point icon buttons. Show Audio for more
+than one nonnegative track ID; show Subtitles for at least one. Retain named menus,
+selected-track checks and accessibility labels/values. Hidden arranged views use
+collapsible width constraints. Keep transport centered and the track/toggle group
+at the right edge. Show an inward-arrow exit toggle only for experimental iframe
+return-on-end playback. Persist AutomaticallyExitIframeFullscreen globally, default
+ON. Use green/gray icon tint with accessibility ON/OFF; the user explicitly requests
+icons for all three controls rather than a visible textual toggle badge.
+
+At Next/EOF return, apply the setting to parent fullscreen cleanup. Back and failed
+startup still always clean up. The website's own fullscreen decisions are retained;
+no player-specific adapter or synthetic ended event is added.
+
+A generic decoded WebM fixture passed both exit and retain-fullscreen completion
+paths with one trusted ended event, restored audio and duplicate-completion
+rejection. Native replies and the native preference branch were modeled in the
+stand. This verifies bridge compatibility, not UIKit menus, preference persistence,
+focus, native compilation or a specific website's next episode. No native build,
+device work or push. Private evidence: WebKit run
+2026-11-15T14-35-44.494Z-8fdc6fb7, check-fullscreen-completion.mjs.

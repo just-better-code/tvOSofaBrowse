@@ -6,6 +6,7 @@ Published packages are available for [2.21.9](https://github.com/just-better-cod
 
 ### Changed
 
+- Replace VLC track labels with contextual Audio and Subtitles icons and add an icon toggle for automatic iframe fullscreen exit after Next or completion ([Playback controls](docs/USER_GUIDE.md)).
 - Show the containing page's title beside the original monochrome cone icon in the shared VLC player header, retaining file names for torrents ([Playback controls](docs/USER_GUIDE.md)).
 - Show the installed build number and available CI revision beside the application version so test updates can be identified in the menu ([Main menu](docs/USER_GUIDE.md#main-menu)).
 - Distinguish develop installations with a purple compass icon and a BETA badge ([Develop setup](docs/DEPLOYMENT.md#automatic-test-app-alongside-stable)).
@@ -16,7 +17,7 @@ Published packages are available for [2.21.9](https://github.com/just-better-cod
 
 ### Fixed
 
-- Return experimental iframe End/Next and completed playback to the website outside fullscreen so its own video-ended handling can continue, and keep website video visible during muted VLC preparation ([Playback controls](docs/USER_GUIDE.md), [Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
+- Return experimental iframe End/Next and completed playback to the website with optional fullscreen exit so its own video-ended handling can continue, and keep website video visible during muted VLC preparation ([Playback controls](docs/USER_GUIDE.md), [Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
 - Route experimental iframe capture through the main document and await the original video’s pause acknowledgement before enabling VLC audio ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
 - Restore Center capture of controlled iframe video when the VLC experiment is enabled, propagating the setting to current and newly loaded frames ([Playback controls](docs/USER_GUIDE.md)).
 - Prioritize Back dismissal of visible VLC over the underlying iframe fullscreen, restore the page layout without waiting for a child reply, and require video output before accepting experimental capture ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).

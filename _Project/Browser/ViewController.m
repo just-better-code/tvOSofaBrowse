@@ -947,8 +947,11 @@ static UIColor *kTextColor(void) {
         NSString *json = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
         if (json) [view evaluateVideoJavaScript:[NSString stringWithFormat:@"window.__browserTVVLCResponse && window.__browserTVVLCResponse.apply(null,%@)", json] frame:videoFrame
                          completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
-        if (iframeExperiment && ([action isEqual:@"closed"] || [action isEqual:@"ended"] || [action isEqual:@"rejected"])) {
-            // Restore the parent layout even if the original leaf has navigated.
+        BOOL exitFullscreen = [action isEqual:@"closed"] || [action isEqual:@"rejected"] ||
+            ([action isEqual:@"ended"] && [BrowserPreferencesStore new].automaticallyExitIframeFullscreen);
+        if (iframeExperiment && exitFullscreen) {
+            // Back/failure always restores layout. Completion follows the user's
+            // preference; the website may still exit fullscreen on its own.
             [view evaluateJavaScript:@"window.__browserTVExitFullscreen && window.__browserTVExitFullscreen()"
                 completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
         }

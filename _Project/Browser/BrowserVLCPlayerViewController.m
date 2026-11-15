@@ -38,6 +38,7 @@
 @property (nonatomic) UIButton *muteButton;
 @property (nonatomic) UIButton *audioTrackButton;
 @property (nonatomic) UIButton *subtitleTrackButton;
+@property (nonatomic) UIButton *autoExitFullscreenButton;
 @property (nonatomic, copy) NSString *audioMenuKey;
 @property (nonatomic, copy) NSString *subtitleMenuKey;
 @property (nonatomic) NSTimer *progressTimer;
@@ -194,8 +195,13 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     forward.tag = 1;
     forwardPercent.tag = 2;
     self.playButton = play;
-    UIButton *audioTrack = [self trackButtonWithTitle:@"Audio: Unavailable" action:@selector(audioTrackPressed)];
-    UIButton *subtitleTrack = [self trackButtonWithTitle:@"Subtitles: Unavailable" action:@selector(subtitleTrackPressed)];
+    UIButton *audioTrack = [self controlButtonWithSymbol:@"waveform" label:@"Audio" action:@selector(audioTrackPressed)];
+    UIButton *subtitleTrack = [self controlButtonWithSymbol:@"captions.bubble" label:@"Subtitles" action:@selector(subtitleTrackPressed)];
+    UIButton *autoExit = [self controlButtonWithSymbol:@"arrow.down.right.and.arrow.up.left"
+        label:@"Exit fullscreen after Next or completion" action:@selector(toggleAutoExitFullscreen)];
+    self.autoExitFullscreenButton = autoExit;
+    autoExit.hidden = !self.returnWebVideoOnEnd;
+    [self refreshAutoExitFullscreenControl];
     self.audioTrackButton = audioTrack;
     self.subtitleTrackButton = subtitleTrack;
     NSArray<UIButton *> *mainButtons = @[previous, backPercent, back, restart, play, end, forward, forwardPercent, volumeDown, mute, volumeUp, next];
@@ -204,8 +210,11 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
         [button.widthAnchor constraintEqualToConstant:diameter].active = YES;
         [button.heightAnchor constraintEqualToConstant:diameter].active = YES;
     }
-    for (UIButton *button in @[audioTrack, subtitleTrack]) {
-        [button.widthAnchor constraintEqualToConstant:220].active = YES;
+    for (UIButton *button in @[audioTrack, subtitleTrack, autoExit]) {
+        // A hidden arranged view needs zero width; let the stack collapse it.
+        NSLayoutConstraint *width = [button.widthAnchor constraintEqualToConstant:68];
+        width.priority = UILayoutPriorityDefaultHigh;
+        width.active = YES;
         [button.heightAnchor constraintEqualToConstant:68].active = YES;
     }
     UIStackView *buttons = [[UIStackView alloc] initWithArrangedSubviews:
@@ -220,7 +229,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     volumeButtons.spacing = 10;
     volumeButtons.alignment = UIStackViewAlignmentCenter;
     [controls addSubview:volumeButtons];
-    UIStackView *trackButtons = [[UIStackView alloc] initWithArrangedSubviews:@[audioTrack, subtitleTrack]];
+    UIStackView *trackButtons = [[UIStackView alloc] initWithArrangedSubviews:@[audioTrack, subtitleTrack, autoExit]];
     trackButtons.translatesAutoresizingMaskIntoConstraints = NO;
     trackButtons.spacing = 10;
     trackButtons.alignment = UIStackViewAlignmentCenter;
@@ -241,9 +250,10 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
         [time.topAnchor constraintEqualToAnchor:progress.bottomAnchor constant:10],
         [volumeButtons.leadingAnchor constraintEqualToAnchor:buttons.trailingAnchor constant:34],
         [volumeButtons.centerYAnchor constraintEqualToAnchor:buttons.centerYAnchor],
-        [trackButtons.leadingAnchor constraintEqualToAnchor:volumeButtons.trailingAnchor constant:34],
+        [trackButtons.leadingAnchor constraintGreaterThanOrEqualToAnchor:volumeButtons.trailingAnchor constant:34],
         [trackButtons.trailingAnchor constraintEqualToAnchor:controls.trailingAnchor constant:-80],
         [trackButtons.centerYAnchor constraintEqualToAnchor:buttons.centerYAnchor],
+        [buttons.centerXAnchor constraintEqualToAnchor:controls.centerXAnchor],
         [buttons.topAnchor constraintEqualToAnchor:time.bottomAnchor constant:15.2],
         [buttons.heightAnchor constraintEqualToConstant:81.6],
     ]];
@@ -514,30 +524,19 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     return button;
 }
 
-- (UIButton *)trackButtonWithTitle:(NSString *)title action:(SEL)action {
-    UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
-    button.backgroundColor = UIColor.clearColor;
-    button.layer.cornerRadius = 34;
-    button.clipsToBounds = YES;
-    UIVisualEffectView *backdrop = [self glassBackdrop];
-    backdrop.userInteractionEnabled = NO;
-    [button insertSubview:backdrop atIndex:0];
-    [NSLayoutConstraint activateConstraints:@[
-        [backdrop.leadingAnchor constraintEqualToAnchor:button.leadingAnchor],
-        [backdrop.trailingAnchor constraintEqualToAnchor:button.trailingAnchor],
-        [backdrop.topAnchor constraintEqualToAnchor:button.topAnchor],
-        [backdrop.bottomAnchor constraintEqualToAnchor:button.bottomAnchor],
-    ]];
-    button.titleLabel.font = [UIFont systemFontOfSize:18 weight:UIFontWeightSemibold];
-    button.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
-    button.titleLabel.adjustsFontSizeToFitWidth = YES;
-    button.titleLabel.minimumScaleFactor = 0.85;
-    [button setTitle:title forState:UIControlStateNormal];
-    [button setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-    [button setTitleColor:BrowserTVFocusedTextColor() forState:UIControlStateFocused];
-    [button addTarget:self action:action forControlEvents:UIControlEventPrimaryActionTriggered];
-    button.enabled = NO;
-    return button;
+- (void)refreshAutoExitFullscreenControl {
+    BOOL enabled = [BrowserPreferencesStore new].automaticallyExitIframeFullscreen;
+    self.autoExitFullscreenButton.selected = enabled;
+    self.autoExitFullscreenButton.accessibilityValue = enabled ? @"ON" : @"OFF";
+    UIImageView *icon = (UIImageView *)[self.autoExitFullscreenButton viewWithTag:kBrowserVLCControlIconTag];
+    icon.tintColor = BrowserTVToggleBadgeColor(enabled);
+}
+
+- (void)toggleAutoExitFullscreen {
+    BrowserPreferencesStore *preferences = [BrowserPreferencesStore new];
+    preferences.automaticallyExitIframeFullscreen = !preferences.automaticallyExitIframeFullscreen;
+    [self refreshAutoExitFullscreenControl];
+    [self showControls];
 }
 
 - (void)refreshTrackControls {
@@ -553,18 +552,21 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
                   indexes:(NSArray<NSNumber *> *)indexes names:(NSArray<NSString *> *)names
             selectedIndex:(int)selectedIndex {
     NSUInteger count = MIN(indexes.count, names.count);
-    BOOL hasTrack = NO;
+    NSUInteger realTrackCount = 0;
     NSString *selection = @"Off";
     for (NSUInteger i = 0; i < count; i++) {
         int trackIndex = indexes[i].intValue;
-        if (trackIndex >= 0) hasTrack = YES;
+        if (trackIndex >= 0) realTrackCount++;
         if (trackIndex == selectedIndex) selection = trackIndex < 0 ? @"Off" : names[i];
     }
-    button.enabled = hasTrack;
-    NSString *title = hasTrack ? [NSString stringWithFormat:@"%@: %@ ▾", prefix, selection]
-                               : [NSString stringWithFormat:@"%@: Unavailable", prefix];
-    if (![button.currentTitle isEqualToString:title]) [button setTitle:title forState:UIControlStateNormal];
-    button.accessibilityLabel = title;
+    BOOL relevant = button == self.audioTrackButton ? realTrackCount > 1 : realTrackCount > 0;
+    button.enabled = relevant;
+    if (button.hidden != !relevant) {
+        button.hidden = !relevant;
+        [self setNeedsFocusUpdate];
+    }
+    button.accessibilityLabel = prefix;
+    button.accessibilityValue = relevant ? selection : @"Unavailable";
     if (@available(tvOS 17.0, *)) {
         BOOL audio = button == self.audioTrackButton;
         NSString *menuKey = [NSString stringWithFormat:@"%@|%@|%d", indexes, names, selectedIndex];
@@ -587,8 +589,8 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
                 action.state = trackIndex == selectedIndex ? UIMenuElementStateOn : UIMenuElementStateOff;
                 [actions addObject:action];
             }
-            button.menu = hasTrack ? [UIMenu menuWithTitle:prefix children:actions] : nil;
-            button.showsMenuAsPrimaryAction = hasTrack;
+            button.menu = relevant ? [UIMenu menuWithTitle:prefix children:actions] : nil;
+            button.showsMenuAsPrimaryAction = relevant;
             if (audio) self.audioMenuKey = menuKey; else self.subtitleMenuKey = menuKey;
         }
     }
@@ -643,7 +645,9 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
         [coordinator addCoordinatedAnimations:^{
             view.backgroundColor = focused ? BrowserTVFocusedSurfaceColor() : UIColor.clearColor;
             UIImageView *icon = (UIImageView *)[view viewWithTag:kBrowserVLCControlIconTag];
-            icon.tintColor = focused ? BrowserTVFocusedTextColor() : UIColor.whiteColor;
+            icon.tintColor = view == self.autoExitFullscreenButton
+                ? BrowserTVToggleBadgeColor(self.autoExitFullscreenButton.selected)
+                : focused ? BrowserTVFocusedTextColor() : UIColor.whiteColor;
         } completion:nil];
     }
     if ([context.nextFocusedView isKindOfClass:UIButton.class] &&

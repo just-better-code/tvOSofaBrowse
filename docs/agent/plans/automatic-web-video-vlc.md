@@ -576,3 +576,29 @@ from BrowserVLCButtonIcon in 7416ee4's parent and uses the shared glyph renderer
 Build 11.1 completed successfully, including native Release compilation, packaging
 and develop source publication. This does not verify native transition timing or
 episode advancement; the local cone follow-up remains unbuilt and unpushed.
+
+
+## 2026-11-15 — Local-only contextual icons and optional fullscreen exit
+
+User confirms an automatic-exit toggle (not an immediate fullscreen action), with
+all three controls shown as icons. Implemented in the shared native VLC panel:
+- Audio waveform shown only for 2+ actual tracks; captions shown for 1+ subtitle
+  track. Off entries do not count. Keep menus with names and selected checkmarks.
+- Inward-arrow toggle appears only for experimental iframe return-on-end playback.
+  BrowserPreferencesStore.automaticallyExitIframeFullscreen uses the global
+  AutomaticallyExitIframeFullscreen preference, default YES. Center toggles it.
+  Green/gray icon state and accessibility ON/OFF follow the user's explicit
+  icon-only request instead of the usual visible ON/OFF badge.
+- ViewController's respond block applies this preference only to ended cleanup.
+  Closed/rejected still always leave fullscreen. OFF preserves the bridge's
+  fullscreen context where the website permits it; no force-reentry is attempted.
+- Center the transport independently; keep the right group trailing at 80 points,
+  with collapsible widths so hidden icons do not conflict with UIStackView hiding.
+
+Evidence: production bridge plus generic actual-decoded media fixtures passed ON
+and OFF: one trusted ended event, fullscreen exited/retained respectively, audio
+restored and repeat completion rejected. Native responses and the preference
+branch were modeled. Private run 2026-11-15T14-35-44.494Z-8fdc6fb7, helper
+.data/webkit-testbench/check-fullscreen-completion.mjs. UIKit visibility/focus,
+native persistence, compilation and real-site episode continuity remain unverified.
+No build/push requested; retain this stage locally along with the cone/title work.
