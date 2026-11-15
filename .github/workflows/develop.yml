@@ -80,6 +80,7 @@ jobs:
             -onlyUsePackageVersionsFromResolvedFile \
             CONFIGURATION_BUILD_DIR="$GITHUB_WORKSPACE/build/products" \
             PRODUCT_BUNDLE_IDENTIFIER=org.example.tvosofabrowse.test \
+            'ASSETCATALOG_COMPILER_APPICON_NAME=Beta App Icon & Top Shelf Image' \
             "CURRENT_PROJECT_VERSION=$TEST_BUILD_NUMBER" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \

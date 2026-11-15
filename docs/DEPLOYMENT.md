@@ -132,6 +132,7 @@ The separate [Deploy PR to develop workflow](../.github/workflows/develop.yml) b
 | Setting | Test app |
 | --- | --- |
 | Home-screen name | `tvOSofaBrowse Test` |
+| Home-screen icon | Original white compass on purple with an amber BETA badge |
 | Bundle identifier before signing | `org.example.tvosofabrowse.test` |
 | Marketing version | Version recorded in the source project |
 | Technical build number | Actions run number and attempt, for example `42.1` |
