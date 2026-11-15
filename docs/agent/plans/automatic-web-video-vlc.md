@@ -816,3 +816,9 @@ child-to-modal surface transfer on tvOS. Next step: CI compilation/publication,
 then record its result and update public usage/changelog; user TV observation of
 first-frame presentation and consecutive native Next remains necessary. Keep
 2.22.0 consolidated; do not change signing, workflow, master or device state.
+
+CI follow-up: commit f02cce4 passed native Release compilation and unsigned IPA
+packaging/verification in run 43738492640, Build 14.1. Public documentation now
+reflects automatic preparation and Next after dismissal. Documentation-only follow-up
+keeps MARKETING_VERSION 2.22.0 in both configurations; it does not change app code.
+Native frame transfer and repeated TV Next remain unverified until user observation.

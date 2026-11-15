@@ -1525,3 +1525,38 @@ or duplicate transition. The exact production URL decoded and sought in local
 libVLC; ads remained ineligible. Post-Next website content was still behind an ad,
 so seamless native playback of the next episode is pending. Final generic/nested
 regressions and actual UAKino fullscreen capture passed. No push or native build.
+
+## 2026-11-15 — Automatic VLC preparation and Teleportal Next after dismissal
+
+The user reports that native Build 13.1 displays white -> VLC -> website, frequently
+returns to inline/background playback and fails Next despite a visible VLC cone.
+Do not treat earlier Linux success as native verification. Implement automatic
+foreground/visible playing-video offers, a source-bound prepare/pause acknowledgement,
+and muted VLC preparation as an attached child behind the browser. Require fresh
+post-seek decoded/displayed frames, video output and advancing time, then acknowledge
+acceptance before transferring the prepared opaque surface into native fullscreen.
+Use a 2000 ms network cache; keep the 15-second preparation limit. Stop late site
+Play before its clock advances. Cancel on background/tab change; Back/failure resume
+once, while inactive pages stay paused. Website fullscreen is no longer a prerequisite.
+
+Move close/Next delivery after modal disappearance and restore foreground capture
+permission before asking the site's real track control. A new source can then offer
+VLC automatically. Actual Teleportal 92 -> 93 -> 94 played and emitted new automatic
+offers without website fullscreen in the WebKit stand, using simulated native
+prepare/accept/close and active-page permission. Nested decoded-video checks passed
+prepare/accept, held late Play, Back/no-loop, source changes, failure rollback,
+inactive playback prevention and offscreen -> visible retry. That last case exposed
+a stale visibility message consuming a source attempt; add a deferred relay reply.
+Generic main-document and iframe EOF/Next-without-track-API each produced exactly
+one real trusted ended event. The unsupported MSE/late-ad regression passed.
+Linux libVLC 3.0.20 decoded the actual Teleportal offer with 2000 ms cache, sought to
+120 s, produced fresh displayed frames and held time on pause. Logs and signed
+media context remain ignored; detailed run identifiers are in the
+[experiment checkpoint](plans/automatic-web-video-vlc.md).
+
+Commit f02cce4 was pushed to beta PR #20 under standing authorization. GitHub Actions
+run 43738492640 compiled the native Release app and packaged/verified its unsigned
+IPA as 2.22.0 Build 14.1 before these documentation updates. Keep the unreleased
+2.22.0 entry consolidated. No local native build, Simulator or physical TV work was
+performed. Linux checks plus CI do not verify UIKit child-to-modal rendering,
+first-frame latency or consecutive Next on TV; those observations remain pending.

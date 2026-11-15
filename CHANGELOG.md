@@ -18,9 +18,9 @@ Published packages are available for [2.21.9](https://github.com/just-better-cod
 ### Fixed
 
 - Reject advertisements outside the active HLS video bindings and prevent an unsupported fullscreen source from turning into a late HTTP advertisement capture ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
-- Route experimental Next through available website track controls, return completed playback to the website with optional fullscreen exit, and keep website video visible during muted VLC preparation ([Playback controls](docs/USER_GUIDE.md), [Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
+- Run experimental Next after VLC dismissal, recapture the next eligible playing source automatically, and open native fullscreen only after muted preparation produces fresh video frames ([Playback controls](docs/USER_GUIDE.md), [Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
 - Route experimental iframe capture through the main document and await the original video’s pause acknowledgement before enabling VLC audio ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
-- Restore Center capture of controlled iframe video when the VLC experiment is enabled, propagating the setting to current and newly loaded frames ([Playback controls](docs/USER_GUIDE.md)).
+- Capture eligible playing video automatically in the visible active tab, retain explicit Center/fullscreen retries, and stop hidden website playback during native VLC ([Playback controls](docs/USER_GUIDE.md)).
 - Prioritize Back dismissal of visible VLC over the underlying iframe fullscreen, restore the page layout without waiting for a child reply, and require video output before accepting experimental capture ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
 
 ## 2.21.9 - 2026-11-07
