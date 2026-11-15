@@ -24,6 +24,7 @@
 - Prefer `rg` and `rg --files` for targeted text and file discovery.
 - A local Node.js runtime, when installed, is available at `.data/tools/node/bin/node`; keep its binaries and research fixtures ignored.
 - GitHub Actions builds Apple TV Release only. Simulator delivery remains a local, explicitly requested workflow.
+- The separate develop workflow builds PRs labeled `deploy to develop` and publishes an independent test app/source; see [test-channel delivery](docs/DEPLOYMENT.md#automatic-test-app-alongside-stable). Do not hardcode a PR branch or modify the stable release workflow for develop delivery. Keep the test identity/feed separate, retain immutable test tags, and preserve manual stable releases. atvloadly setup and device observations remain user-side work unless explicitly authorized.
 - Xcode project: `_Project/Browser.xcodeproj`; scheme: `Browser`. Use `xcodebuild` for requested builds and `xcrun devicectl` for device work only with the user’s permission.
 - For simulator builds and screenshots, use the [Apple TV Simulator runbook](docs/agent/SIMULATOR_RUNBOOK.md). Keep simulator setup out of the public README.
 - For requested device builds, installation, and launch, use the [delivery scripts](scripts/README.md), or the local apple-tv-deploy skill when installed. The device helper builds the local `stable` branch through `.data/stable-worktree`, not the branch currently checked out. Preserve the ignored signing settings. Device IDs and expected app identities belong in ignored `scripts/Deployment.local.env`.

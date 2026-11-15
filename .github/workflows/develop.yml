@@ -1,0 +1,168 @@
+name: Deploy PR to develop
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: develop-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Validate labeled PR version
+    if: >-
+      contains(github.event.pull_request.labels.*.name, 'deploy to develop') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'deploy to develop')
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      build_number: ${{ steps.version.outputs.build_number }}
+      package_prefix: ${{ steps.version.outputs.package_prefix }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - id: version
+        run: |
+          set -euo pipefail
+          version=$(python3 scripts/ci-release.py version)
+          build_number="$GITHUB_RUN_NUMBER.$GITHUB_RUN_ATTEMPT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "build_number=$build_number" >> "$GITHUB_OUTPUT"
+          echo "package_prefix=tvOSofaBrowse-test-$version-$build_number" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: version
+    name: Apple TV / Develop
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          xcodebuild -showsdks
+      - name: Cache media dependencies
+        uses: actions/cache@v5
+        with:
+          path: .deps
+          key: develop-media-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/bootstrap-torrent-deps.sh', 'scripts/bootstrap-vlc-deps.sh') }}
+      - name: Install pinned media dependencies
+        run: |
+          ./scripts/bootstrap-torrent-deps.sh
+          ./scripts/bootstrap-vlc-deps.sh
+      - name: Build separate test app without signing
+        env:
+          TEST_BUILD_NUMBER: ${{ needs.version.outputs.build_number }}
+        run: |
+          set -euo pipefail
+          mkdir -p build/artifacts
+          xcodebuild build \
+            -project _Project/Browser.xcodeproj \
+            -scheme Browser \
+            -configuration Release \
+            -destination 'generic/platform=tvOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -resultBundlePath build/Build.xcresult \
+            -onlyUsePackageVersionsFromResolvedFile \
+            CONFIGURATION_BUILD_DIR="$GITHUB_WORKSPACE/build/products" \
+            PRODUCT_BUNDLE_IDENTIFIER=org.example.tvosofabrowse.test \
+            "CURRENT_PROJECT_VERSION=$TEST_BUILD_NUMBER" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY= \
+            DEVELOPMENT_TEAM= \
+            2>&1 | tee build/xcodebuild.log
+      - name: Package and verify test app
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          PACKAGE_PREFIX: ${{ needs.version.outputs.package_prefix }}
+          TEST_BUILD_NUMBER: ${{ needs.version.outputs.build_number }}
+        run: |
+          set -euo pipefail
+          test -d build/products/Browser.app
+          /usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName tvOSofaBrowse Test' \
+            build/products/Browser.app/Info.plist
+          mkdir -p build/products/Browser.app/ThirdPartyNotices
+          cp docs/THIRD_PARTY_NOTICES.md build/products/Browser.app/ThirdPartyNotices/README.md
+          cp docs/licenses/* build/products/Browser.app/ThirdPartyNotices/
+          cp .deps/TVVLCKit-LICENSE.txt build/products/Browser.app/ThirdPartyNotices/
+          cp _Project/Vendor/UBlock/LICENSE.txt build/products/Browser.app/ThirdPartyNotices/uBlock-GPL-3.0.txt
+          cp _Project/Vendor/UBlock/UAssets-LICENSE build/products/Browser.app/ThirdPartyNotices/uAssets-GPL-3.0.txt
+          cp _Project/Vendor/UBlock/src/lib/csstree/LICENSE build/products/Browser.app/ThirdPartyNotices/CSS-Tree-MIT.txt
+          cp _Project/Vendor/AdGuardConverter/LICENSE build/products/Browser.app/ThirdPartyNotices/AdGuard-GPL-3.0.txt
+          mkdir -p build/package/Payload
+          ditto build/products/Browser.app build/package/Payload/Browser.app
+          ditto -c -k --norsrc --keepParent build/package/Payload \
+            "build/artifacts/$PACKAGE_PREFIX-unsigned.ipa"
+          python3 scripts/ci-release.py verify \
+            "build/artifacts/$PACKAGE_PREFIX-unsigned.ipa" "$VERSION" --test-build "$TEST_BUILD_NUMBER"
+          tar -czf "build/artifacts/$PACKAGE_PREFIX-notices.tar.gz" \
+            -C build/products/Browser.app ThirdPartyNotices
+          (cd build/artifacts && shasum -a 256 tvOSofaBrowse-* > SHA256SUMS)
+      - name: Upload test app
+        uses: actions/upload-artifact@v4
+        with:
+          name: tvOSofaBrowse-develop-pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: build/artifacts/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload build diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: develop-diagnostics-pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: |
+            build/xcodebuild.log
+            build/Build.xcresult
+          retention-days: 7
+
+  publish:
+    name: Publish develop source
+    # Fork PRs can build with a read token; they never receive a write token.
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    concurrency:
+      group: tvosofabrowse-develop-source
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: tvOSofaBrowse-develop-pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: build/test-release
+      - name: Verify and publish develop source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+          VERSION: ${{ needs.version.outputs.version }}
+          PACKAGE_PREFIX: ${{ needs.version.outputs.package_prefix }}
+          TEST_BUILD_NUMBER: ${{ needs.version.outputs.build_number }}
+        run: |
+          set -euo pipefail
+          (cd build/test-release && sha256sum --check SHA256SUMS)
+          python3 scripts/ci-release.py verify \
+            "build/test-release/$PACKAGE_PREFIX-unsigned.ipa" "$VERSION" --test-build "$TEST_BUILD_NUMBER"
+          python3 scripts/publish-test-channel.py build/test-release
