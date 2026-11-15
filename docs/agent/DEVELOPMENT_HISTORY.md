@@ -1294,3 +1294,24 @@ BETA. A white compass is composited separately. No other text or extra borders."
 Final project assets are in the beta brand catalog above; private preview stays
 under `.data/icon-preview/`. Visual preview and JSON/Bash/diff syntax inspection
 only; no app tests, Xcode build, device action or Git remote push performed.
+
+
+## 2026-11-15 — Trial Back recovery and renderer identification
+
+User reports black fullscreen and Back not returning on the reported website, and asks
+for a way to identify VLC. Exact page and visible-control evidence were requested;
+no physical-TV access is authorized by this report. Source review found the
+browser's global Menu path could consume Back through the retained website
+fullscreen before dismissing visible VLC. Prioritize that modal, add a VLC Menu
+recognizer and restore ancestor iframe layout immediately on exit rather than
+waiting for child acknowledgement. Experimental close/fallback also exits the
+parent fullscreen. Require hasVideoOut/nonzero videoSize plus advancing time for
+handoff acceptance; keep a visible startup countdown and independent 15-second
+deadline. Label native/website headers VLC/Website, including native loading.
+
+Consolidate into unreleased 2.22.0; develop run/build metadata distinguishes this
+trial update. Validate the production bridge via the webkit-testbench extractor
+and syntax compilation, plus source/diff inspection. No app tests, native build,
+website/TV playback reproduction or Git remote push in this turn. These are
+code-path fixes and diagnostic UI, not proof the site's missing picture is fixed.
+See the trial feedback checkpoint in plans/automatic-web-video-vlc.md.

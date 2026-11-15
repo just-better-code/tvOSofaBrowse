@@ -330,3 +330,27 @@ No such observations have yet been recorded for this implementation.
 
 Next implementation work after trial evidence: correct actual startup/frame
 compatibility failures first; add persistent owner/session transitions separately.
+
+
+### Trial feedback: black fullscreen and Back, 2026-11-15
+
+The user reports black fullscreen and Back not returning on the reported website
+(uakinobest in conversation); the screen's renderer and exact page are not yet
+established. Asked whether VLC/Audio/Subtitles or website controls were visible,
+and for the exact page. No device or website reproduction evidence is available.
+
+Source inspection found host Menu routing consulted the retained website
+fullscreen before dismissing visible VLC. Fix that ordering and add a native
+Menu recognizer on VLC. JS exit restores each ancestor's iframe layout immediately
+while sending the child exit, rather than awaiting acknowledgement. Closing or
+rejecting experimental capture also exits parent fullscreen, even if the leaf
+navigated. Require hasVideoOut and nonzero videoSize as well as advancing time
+before accepting/pause; these checks do not prove actual decoded pixels were
+visible. Add a separate 15-second dispatch deadline and keep the startup header
+visible. Identify native versus website playback with VLC/Website title prefixes.
+
+Validation is source review, production-bridge extraction/JavaScript syntax and
+diff checks only. No native build, TV action or real-site test. This repairs
+specific exit/readiness gaps; it does not establish the cause of the user's black
+picture or prove playback compatibility. Next: obtain exact page/renderer report,
+then a requested build and observed Back, timeout and picture/audio checks.

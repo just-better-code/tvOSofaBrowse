@@ -8,9 +8,15 @@ Published packages are available for [2.21.9](https://github.com/just-better-cod
 
 - Distinguish develop installations with a purple compass icon and a BETA badge ([Develop setup](docs/DEPLOYMENT.md#automatic-test-app-alongside-stable)).
 
+- Identify native playback with VLC and website playback with Website in their headers ([Playback controls](docs/USER_GUIDE.md)).
+
 ### Added
 
 - Try direct HTTP(S) iframe video in shared VLC through an opt-in experiment in Debug and develop builds, with bounded startup and return to the website; keep episode selection on the site ([Playback controls](docs/USER_GUIDE.md), [Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
+
+### Fixed
+
+- Prioritize Back dismissal of visible VLC over the underlying iframe fullscreen, restore the page layout without waiting for a child reply, and require video output before accepting experimental capture ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
 
 ## 2.21.9 - 2026-11-07
 

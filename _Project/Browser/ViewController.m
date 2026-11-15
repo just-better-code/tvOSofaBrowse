@@ -699,6 +699,13 @@ static UIColor *kTextColor(void) {
 }
 
 - (void)browserRemoteInputControllerHandleMenuPress {
+    // A retained iframe fullscreen must never consume Back ahead of visible VLC.
+    UIViewController *presented = self.presentedViewController;
+    if ([presented isKindOfClass:BrowserVLCPlayerViewController.class]) {
+        UIViewController *child = presented.presentedViewController;
+        [(child ?: presented) dismissViewControllerAnimated:YES completion:nil];
+        return;
+    }
     if ([self fullscreenMediaInputActive]) { [self.fullscreenMediaControls closePlayer]; return; }
     if (self.webview == nil) {
         [self handleMenuPressOutsideFullscreen];
@@ -922,6 +929,11 @@ static UIColor *kTextColor(void) {
         NSString *json = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
         if (json) [view evaluateVideoJavaScript:[NSString stringWithFormat:@"window.__browserTVVLCResponse && window.__browserTVVLCResponse.apply(null,%@)", json] frame:videoFrame
                          completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
+        if (iframeExperiment && ([action isEqual:@"closed"] || [action isEqual:@"rejected"])) {
+            // Restore the parent layout even if the original leaf has navigated.
+            [view evaluateJavaScript:@"window.__browserTVExitFullscreen && window.__browserTVExitFullscreen()"
+                completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
+        }
     };
     NSString *script = [NSString stringWithFormat:@"window.__browserTVVLCRequestIsCurrent && window.__browserTVVLCRequestIsCurrent.apply(null,%@)", sessionJSON];
     [BrowserWebView fetchCookiesWithResult:^(NSArray<NSHTTPCookie *> *cookies, NSError *cookieError) {
