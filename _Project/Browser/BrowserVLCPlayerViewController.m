@@ -12,6 +12,9 @@
 #import <TVVLCKit/TVVLCKit.h>
 
 @interface BrowserVLCPlayerViewController () <VLCMediaPlayerDelegate, UIGestureRecognizerDelegate>
+@property (nonatomic) NSTimeInterval webHandoffStarted;
+@property (nonatomic) int64_t webHandoffLastTime;
+@property (nonatomic) BOOL webHandoffReported;
 @property (nonatomic, copy) NSString *identifier;
 @property (nonatomic) NSInteger fileIndex;
 @property (nonatomic, copy) NSURL *webVideoURL;
@@ -399,7 +402,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     self.vlcPlayer.media = media;
     if (self.webVideoURL) {
         self.vlcPlayer.audio.volume = (int)lround(self.initialWebVolume * 100);
-        self.vlcPlayer.audio.muted = self.initialWebMuted;
+        self.vlcPlayer.audio.muted = self.prepareWebVideoHandoff || self.initialWebMuted;
     }
     self.audioMenuKey = nil;
     self.subtitleMenuKey = nil;
@@ -416,6 +419,8 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
     [self becomeFirstResponder];
+    self.webHandoffStarted = NSDate.date.timeIntervalSince1970;
+    self.webHandoffLastTime = -1;
     if (self.vlcPlayer) [self.vlcPlayer play];
     self.progressTimer = [NSTimer scheduledTimerWithTimeInterval:1 target:self selector:@selector(refreshProgress) userInfo:nil repeats:YES];
     [self refreshProgress];
@@ -650,8 +655,30 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     self.lastPositionSaveTime = NSDate.date.timeIntervalSince1970;
 }
 
+- (void)activateWebVideoHandoffAtTime:(double)time {
+    if (isfinite(time) && time >= 0 && time < 1e9 && self.vlcPlayer.isSeekable)
+        self.vlcPlayer.time = [VLCTime timeWithNumber:@((int64_t)llround(time * 1000))];
+    self.prepareWebVideoHandoff = NO;
+    self.vlcPlayer.audio.volume = (int)lround(self.initialWebVolume * 100);
+    self.vlcPlayer.audio.muted = self.initialWebMuted;
+}
+
 - (void)refreshProgress {
     [self refreshTrackControls];
+    if (self.prepareWebVideoHandoff) {
+        int64_t now = self.vlcPlayer.time.value.longLongValue;
+        if (!self.webHandoffReported && self.vlcPlayer.isPlaying && self.pendingResumeMs == 0 &&
+            self.webHandoffLastTime >= 0 && now > self.webHandoffLastTime && now - self.webHandoffLastTime < 5000) {
+            self.webHandoffReported = YES;
+            if (self.webVideoDidPrepare) self.webVideoDidPrepare();
+        }
+        self.webHandoffLastTime = now;
+        if (self.vlcPlayer.state == VLCMediaPlayerStateError ||
+            NSDate.date.timeIntervalSince1970 - self.webHandoffStarted > 15) {
+            BrowserDebugLog(@"[WebVLC] preparationFailed=1");
+            [self closePressed]; return;
+        }
+    }
     if (self.pendingResumeMs > 0 && self.vlcPlayer.isPlaying && self.vlcPlayer.isSeekable) {
         int64_t target = self.pendingResumeMs;
         self.pendingResumeMs = 0;

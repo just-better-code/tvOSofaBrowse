@@ -1237,3 +1237,35 @@ PRs retain build artifacts with an explanatory publication failure. Do not add a
 personal-token workaround, which would also trigger the unchanged stable release
 workflow. Draft assets are inspected through authenticated release listing and
 published by release ID, avoiding the published-release-by-tag lookup for drafts.
+
+
+## 2026-11-15 — Implement an opt-in iframe-to-VLC trial (2.22.0)
+
+The user requested an actual automatic-capture experiment after clarifying that
+research plans and the disabled compressor gave the installed test copy no new
+web-video behavior. The user reminded us of the accidental fullscreen stream
+capture. This is new authorization to implement that bounded path, superseding
+the earlier research-only scope; it is not authorization for physical-TV work.
+
+Reuse the existing all-frame fullscreen hook for direct HTTP(S) video offers.
+Add an OFF-by-default shared-style toggle under held-Center Debug options, exposed
+in Debug and the named develop Release app. Bind child offers/replies to native
+WKFrameInfo, validate the video document URL and current source, and fail closed
+if frame-scoped WKContentWorld evaluation is unavailable. Keep cookie/UA/referrer
+handling in the existing native helpers. No parent URL relay, network interceptor
+or new native player is introduced.
+
+Prepare shared VLC muted, wait for Playing and advancing time, then accept/pause
+the exact website video, resample position, align seekable VLC and restore audio.
+Retain iframe fullscreen behind VLC. Error/15-second startup timeout returns to
+the website; Back returns position/audio and attempts website Play on the same
+live source. Reject stale source/document replies and detected DRM/Blob/MSE.
+This first trial does not provide Next/Previous, owner adapters or natural episode
+continuation. Select episodes on the website after returning from VLC.
+
+Advance both marketing versions to 2.22.0 and document the experimental feature
+and exact enable/try steps. JavaScript syntax and diff/source inspection passed.
+No app tests, Xcode/CI build, Simulator/TV interaction, installation, Git remote
+push or playback observation ran. Native frame API support, stream authentication,
+startup/audio and restoration are unverified until a built trial is observed.
+The updated plan checkpoint records implementation interfaces and next checks.

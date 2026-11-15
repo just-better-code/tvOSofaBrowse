@@ -1,8 +1,8 @@
 # Automatic website video discovery and VLC handoff
 
 Date: 2026-11-10. Branch: `research/automatic-web-video-vlc`, based on `70f74eb`.
-Status: source investigation and implementation plan; iframe takeover is not
-implemented or enabled by this work.
+Status: initial source research followed by the opt-in single-source experiment
+recorded in the 2026-11-15 checkpoint below. Default iframe playback is unchanged.
 
 ## User outcome and current decision
 
@@ -282,3 +282,51 @@ the first concrete edits belong in a new all-frame helper and session coordinato
 with bounded Debug wiring beside the current main-document VLC handler. Keep the
 already working media bridge as the fallback. Updated/live B evidence and D's
 actual leaf reply/media-source contract are the remaining source prerequisites.
+
+
+## 2026-11-15 — Authorized single-source trial implementation
+
+The user explicitly requested a version to try automatic capture and reminded us
+that the old fullscreen hook had already discovered a stream accidentally. This
+supersedes the earlier research-only scope. Implement a bounded single-source
+trial rather than presenting planning as a playback feature.
+
+Implemented in 2.22.0 development source:
+
+- An OFF-by-default native ON/OFF option under Debug options, available in Debug
+  and Release develop IPAs named `tvOSofaBrowse Test`. The name check survives
+  signing-time bundle-ID rewriting; ordinary Release keeps website iframe playback.
+- Reuse the existing all-frame fullscreen hook and directVideoSource helper.
+  Offer the selected fullscreen video's HTTP(S) source; reject Blob/MSE,
+  detected mediaKeys and credential-bearing URLs. Retry a not-yet-loaded source
+  on loadedmetadata, once per fullscreen entry. This is an explicit experimental
+  fullscreen selection, not a validated main-content/ad-classification adapter.
+- Receive child offers directly through WKScriptMessage, validate the document
+  against native WKFrameInfo.request and retain that frame for bounded evaluation
+  in WKContentWorld.pageWorld. Never redirect a failed child evaluation to top.
+  Check current source, mediaKeys, connection, fullscreen scope and top generation.
+- Prepare shared VLC muted. Require Playing plus advancing time after initial
+  seek; resample the website position when accepting, pause only that source,
+  seek VLC if supported, then restore audio. Error/15-second timeout closes VLC.
+- Keep the iframe's fullscreen scope alive. Back returns position/audio and
+  attempts website Play only on the same still-live source. Source/navigation
+  changes invalidate replies. Cookie/UA/referrer selection uses existing helpers.
+
+This deliberately does not implement session continuation, Next/Previous,
+natural-EOF forwarding, owner classification or D's unknown leaf protocol.
+Choose subsequent episodes on the site. The earlier six stages remain the full
+integration roadmap, not claims of delivered capabilities. There is no global
+fetch/XHR interception or custom diagnostic endpoint.
+
+Validation: JavaScript syntax and diff/source inspection only. No application
+tests or native build requested/executed in this implementation turn; local Linux
+has no Xcode. A future CI Release build is required before installation. A Linux
+WebKit stub cannot verify native frame evaluation, UIKit, VLC readiness or audio.
+User acceptance: enable badge; start a known iframe video; enter fullscreen;
+observe VLC playback/audio; press Back and observe the original source position;
+retry after exiting fullscreen; disable badge and confirm website behavior.
+Also observe unreachable/expired source fallback and unsupported Blob/MSE/DRM.
+No such observations have yet been recorded for this implementation.
+
+Next implementation work after trial evidence: correct actual startup/frame
+compatibility failures first; add persistent owner/session transitions separately.
