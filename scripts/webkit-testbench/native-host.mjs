@@ -3,6 +3,7 @@ import {spawn} from 'node:child_process';
 import {createInterface} from 'node:readline';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
+import {DesktopVLC} from './desktop-vlc.mjs';
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 export const hostInitScript=`(() => {
  const token=crypto.randomUUID();
@@ -53,7 +54,7 @@ export class NativeMediaHost {
   this.context=context;this.record=record;this.runDirectory=runDirectory;this.options=options;
   this.enabled=options.experiment!==false;this.active=true;this.page=null;this.presented=false;this.overview=false;this.serial=0;this.phase='idle';this.session=null;this.decoder=null;
  }
- snapshot(){return{phase:this.phase,presented:this.presented,active:this.active,experiment:this.enabled,session:this.session?.body.session,serial:this.serial,decoder:'Linux libVLC',UIKit:'modeled'}}
+ snapshot(){return{phase:this.phase,presented:this.presented,active:this.active,experiment:this.enabled,session:this.session?.body.session,serial:this.serial,decoder:this.options.transport==='desktop'?'desktop VLC CLI':'Linux libVLC',UIKit:'modeled'}}
  event(name,extra={}){this.record('native-host',{name,...this.snapshot(),...extra})}
  async bind(){
   await this.context.exposeBinding('__webkitLabTrace',({frame},documentToken,event)=>this.record('bridge-trace',{frameHost:new URL(frame.url()).hostname,documentToken,...event}));
@@ -89,33 +90,30 @@ export class NativeMediaHost {
   this.session=session;this.phase='checking';this.event('offer');
   try{
    if(!await this.evaluate(session,'window.__browserTVVLCRequestIsCurrent',[body.session]))throw Error('stale-offer');
-   if(!await this.isActive(session))throw Error('inactive-before-prepare');
-   if(!await this.response(session,'prepare'))throw Error('prepare-submission-rejected');
-   const position=await this.checkpoint(session,'prepared');session.time=position.time;
-   if(!await this.isActive(session))throw Error('inactive-after-prepare');
-   this.phase='preparing';this.event('preparing');
-   await delay(this.options.decodeStartDelayMs??0);
-   if(!await this.isActive(session)||this.session!==session)throw Error('cancelled-before-decoder');
-   if(this.options.failPreparation)throw Error('injected-preparation-failure');
+   if(!await this.isActive(session))throw Error('inactive-before-context');
    const userAgent=this.options.userAgent||await frame.evaluate(()=>navigator.userAgent);
    const media=new URL(body.url),document=new URL(body.documentURL);
    const cookies=body.crossOrigin==='anonymous'&&media.origin!==document.origin?[]:await this.context.cookies(body.url);
-   const decoder=new Decoder({url:body.url,referrer:referrer(body.documentURL,body.url,body.referrerPolicy),userAgent,cookies,currentTime:position.time,output:this.options.output??'dummy',logPath:path.join(this.runDirectory,`vlc-${session.serial}.private.log`)},(event,data)=>this.record('decoder',{serial:session.serial,decoderEvent:event,...data}));
-   session.decoder=decoder;this.decoder=decoder;
-   decoder.onEnded=()=>{if(this.session===session&&this.presented)this.close('ended').catch(error=>this.event('end-failed',{reason:error.message}))};
-   const ready=await decoder.ready;
-   if(!await this.isActive(session)||this.session!==session)throw Error('inactive-after-decoder-ready');
+   await delay(this.options.ackDelayMs??0);
+   if(!await this.isActive(session))throw Error('inactive-before-accept');
    this.phase='accepting';
    if(!await this.response(session,'accepted'))throw Error('accept-submission-rejected');
-   const accepted=await this.checkpoint(session,'accepted');
-   if(!await this.isActive(session)||Math.abs(accepted.time-position.time)>.5)throw Error('stale-accept-position');
-   this.presented=true;this.phase='presenting';await this.configure();
-   await delay(this.options.presentationDelayMs??0);
-   if(!this.active||frame.page()!==this.page)throw Error('inactive-at-presentation');
-   this.phase='playing';decoder.command('activate');this.event('activated',{decoderReady:ready});
+   const accepted=await this.checkpoint(session,'accepted');session.time=accepted.time;
+   if(!await this.isActive(session)||this.session!==session)throw Error('inactive-after-accept');
+   // The website is now paused. Presentation and playback start immediately;
+   // decoded output is telemetry, never a second preparation/acceptance gate.
+   this.presented=true;this.phase='presenting';await this.configure();this.event('presented',{time:session.time});
+   const configuration={url:body.url,referrer:referrer(body.documentURL,body.url,body.referrerPolicy),userAgent,cookies,currentTime:session.time,output:this.options.output??'dummy',pauseOnReady:false,presentImmediately:true,logPath:path.join(this.runDirectory,`vlc-${session.serial}.private.log`)};
+   const recordDecoder=(event,data)=>this.record('decoder',{serial:session.serial,decoderEvent:event,...data});
+   const decoder=this.options.transport==='desktop'?await DesktopVLC.open(configuration,recordDecoder):new Decoder(configuration,recordDecoder);
+   session.decoder=decoder;this.decoder=decoder;this.phase='buffering';this.event('playback-started');
+   decoder.onEnded=()=>{if(this.session===session&&this.presented)this.close('ended').catch(error=>this.event('end-failed',{reason:error.message}))};
+   decoder.onClosed=()=>{if(this.session===session&&this.presented)this.close('closed').catch(error=>this.event('close-failed',{reason:error.message}))};
+   decoder.ready.then(ready=>{if(this.session===session&&this.presented){this.phase='playing';this.event('decoder-ready',{decoderReady:ready})}}).catch(error=>{if(this.session===session&&this.presented){if(error.message==='desktop-closed-before-clock-advance'){this.event('closed-without-clock-advance');return}this.phase='error';this.event('playback-error',{reason:error.message})}});
   }catch(error){
    this.event('handoff-failed',{reason:error.message});
-   if(this.session===session){await this.cancel(true)}else{await session.decoder?.stop();await this.response(session,'rejected').catch(()=>{})}
+   if(this.session===session&&this.presented){this.phase='error';this.event('playback-error',{reason:error.message})}
+   else if(this.session===session){await this.cancel(true)}else{await session.decoder?.stop();await this.response(session,'rejected').catch(()=>{})}
   }
  }
  async cancel(resume=true){
@@ -125,19 +123,27 @@ export class NativeMediaHost {
  }
  async playPause(){
   if(!this.presented){if(this.session)await this.cancel(false);return}
-  const status=await this.decoder.status();this.decoder.command(status.state===3?'pause':'activate');
+  const status=await this.decoder?.status();if(!status)return;this.decoder.command(status.state===3?'pause':'activate');
   await delay(150);const current=await this.decoder.status();this.phase=current.state===4?'paused':'playing';this.event('transport-toggle',{decoderState:current.state});return current;
  }
+ async next(){
+  if(!this.presented||!this.decoder)throw Error('no-presented-player');
+  const status=await this.decoder.status();
+  if(!(status.lengthMs>0)){this.event('next-without-duration');return false}
+  this.event('seek-near-native-end',{lengthMs:status.lengthMs});
+  this.decoder.command('seek',{time:Math.max(0,status.lengthMs/1000-.1)});this.decoder.command('activate');
+ }
  async close(action='closed',{callbackPhase=this.options.callbackPhase??'completion',dismissalDelayMs=this.options.dismissalDelayMs??250}={}){
+  if(!['closed','ended'].includes(action))throw Error('unsupported-close-action: use next() to seek VLC and await its real EOF');
   const session=this.session;if(!session||!this.presented)throw Error('no-presented-player');
-  const status=await session.decoder.status();await session.decoder.stop();this.decoder=null;
+  const status=await session.decoder?.status()??{timeMs:session.time*1000};await session.decoder?.stop();this.decoder=null;
   this.phase='dismissing';this.event('dismiss-start',{action,callbackPhase});
   const deliver=async()=>{
    // The app restores JS permission then submits the close command. Native modal
    // state may still be occupied if the callback incorrectly runs too early.
    await session.frame.page().evaluate(enabled=>{window.__browserTVSetFullscreenMediaSuspended?.(false);window.__browserTVSetIframeVLCExperiment?.(enabled,true)},this.enabled);
    await this.response(session,action,(status.timeMs||0)/1000,session.body.volume,session.body.muted);
-   if(this.options.autoExit!==false&&(action==='next'||action==='ended')||action==='closed')await session.frame.page().evaluate(()=>window.__browserTVExitFullscreen?.());
+   if(this.options.autoExit!==false&&action==='ended'||action==='closed')await session.frame.page().evaluate(()=>window.__browserTVExitFullscreen?.());
    this.event('close-delivered',{action});
   };
   if(callbackPhase==='viewDidDisappear')await deliver();

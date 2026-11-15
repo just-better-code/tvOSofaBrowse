@@ -53,11 +53,12 @@ export async function launchLab(options = {}) {
     if(options.app)options={bridge:true,adblock:true,nativeVLC:true,...options};
     const profile = options.profile ?? 'default';
     if (!/^[a-zA-Z0-9_-]+$/.test(profile)) throw new Error('Profile must contain only letters, digits, underscores or hyphens.');
-    const nativeOptions=options.nativeVLC??options['native-vlc'];
+    const desktop=options.desktopVLC??options['desktop-vlc'];
+    const nativeOptions=desktop?{transport:'desktop',output:'window',...(typeof desktop==='object'?desktop:{})}:options.nativeVLC??options['native-vlc'];
     if(nativeOptions&&!options.bridge)throw Error('Native VLC host requires the production bridge');
     const preferences=await readFile(path.join(projectRoot,'_Project/Browser/BrowserPreferencesStore.m'),'utf8');
     const defaultUA=preferences.match(/\+ \(NSString \*\)desktopUserAgent \{\s*return @"([^"]+)"/);
-    const userAgent=options.userAgent??(nativeOptions?defaultUA?.[1]:undefined);
+    const userAgent=options.userAgent??(desktop?'Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0':nativeOptions?defaultUA?.[1]:undefined);
     if(nativeOptions&&!userAgent)throw Error('App desktop user-agent source changed; update the extractor');
     const sourceFingerprints={};
     for(const name of ['BrowserWebView.m','BrowserFullscreenMediaBridge.js','ViewController.m','BrowserVLCPlayerViewController.m','BrowserPreferencesStore.m'])sourceFingerprints[name]=createHash('sha256').update(await readFile(path.join(projectRoot,'_Project/Browser',name))).digest('hex');
@@ -145,7 +146,7 @@ export async function launchLab(options = {}) {
             viewport: launchOptions.viewport, ephemeral: !!options.ephemeral,
             bridge: !!bridge, bridgeSourceSHA256: bridge?.sha256,
             initScripts: (options.init ?? []).map(filename => path.basename(filename)),
-            trace: !!options.trace, sourceFingerprints, adblock, userAgent, nativeHost:native?{decoder:'Linux libVLC (actual)',modal:'modeled',cookieReferrer:'app-policy model',configuration:native.options}:null, serviceWorkers:launchOptions.serviceWorkers, injectionOrder:['native-handler-stub',...(protection?['app-adblock']:[]),...(bridge?['production-media-bridge']:[]),...(native?['bridge-trace']:[]),'extra-init-scripts'],
+            trace: !!options.trace, sourceFingerprints, adblock, userAgent, nativeHost:native?{decoder:desktop?'desktop VLC CLI (actual)':'Linux libVLC (actual)',modal:'modeled',cookieReferrer:'app-policy model',configuration:native.options}:null, serviceWorkers:launchOptions.serviceWorkers, injectionOrder:['native-handler-stub',...(protection?['app-adblock']:[]),...(bridge?['production-media-bridge']:[]),...(native?['bridge-trace']:[]),'extra-init-scripts'],
         }, null, 2));
         const initialPages = context.pages();
         const page = await context.newPage();
@@ -172,6 +173,7 @@ export async function launchLab(options = {}) {
             if (outputError) throw outputError;
         };
         const remote={
+            next:()=>native?.next(),
             center:(x,y)=>{if(native?.presented)throw Error('UIKit focus is not emulated; use explicit native host transport commands');return page.evaluate(({x,y})=>window.__browserTVFrameClick?.(x,y,Date.now()),{x,y})},
             playPause:()=>native?.presented||native?.session?native.playPause():page.evaluate(()=>window.__browserTVToggleVideo?.()),
             back:async()=>{if(native?.presented)return native.close('closed');if(native?.session)return native.cancel(true);return page.evaluate(()=>window.__browserTVExitFullscreen?.())},

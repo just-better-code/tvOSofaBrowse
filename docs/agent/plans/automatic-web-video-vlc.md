@@ -876,3 +876,74 @@ badge to the main Settings tile occupied by Magnifier, label it VLC, and remove 
 Debug entry entirely. Retain the magnifier's existing remote shortcut and automatic
 timeout. Debug/develop retain experiment availability; ordinary stable builds keep
 the existing Magnifier tile while that experiment is unavailable. No new submenu.
+
+## 2026-11-15 — User-approved simple baseline for the app
+
+The user manually validates the simplified stand on UAKino (called Юафільм in
+conversation), UASerials and Teleportal, then explicitly requests push and build.
+They explicitly have not tested this simplified scheme on TV. Preserve the working
+stand session and do not automate their UI. Current private checkpoint/helpers are
+under ignored `.data/webkit-testbench/`; promote reusable coverage into the tracked
+stand rather than leaving the only implementation private.
+
+Acceptance:
+1. After an eligible website video advances for 0.1 s, pause that exact source and
+   present shared VLC immediately. Buffer visibly. Remove hidden child preparation,
+   alpha/readiness gates and decoder-based presentation delays.
+2. Arm short 50 ms media-state sampling from media/network/playing events; stop at
+   capture, inactivity, source loss, pause or an already handled ending source.
+3. Mid-video close transfers the VLC position to the website and leaves it paused;
+   the next real Play of that source can capture again. Start VLC at the site's time.
+4. Close within the last two seconds, natural EOF or explicit VLC Next transfers
+   to website duration minus 0.1 and Play, allowing the real ended lifecycle. Do not
+   capture the same final 0.1 again; a new website source is eligible normally.
+5. Preserve source/leaf/foreground/document guards, HTTP context, stable identity,
+   existing controls and cookie handling. Do not import Linux-specific UA workarounds
+   into tvOS, which has native HLS.
+6. Run meaningful production-bridge/actual-libVLC stand checks, then push beta PR #20,
+   complete CI native build/publication and report its actual build number. Native
+   TV first-frame/focus/episode behavior remains a separate user observation.
+
+Contract simplification: one `accepted` message pauses the bound leaf and returns
+its current position. Native awaits only this source acknowledgement, constructs
+VLC with that frozen time and presents immediately; no prepare/decoder-ready phase.
+Return runs after dismissal completion. Failed/cancelled handoff leaves a paused
+source available for a new Play rather than silently starting hidden audio.
+
+Known stand investigations are evidence, not new app features: Safari UA caused
+PlayerJS to force native HLS unavailable in Linux WebKit; same-stream A/B proved
+MSE playback. Desktop global --http-user-agent was ignored by adaptive requests,
+causing403; per-media :http-user-agent fixed actual decoding. Native TV code already
+uses per-media options. Do not claim these stand fixes diagnose TV failures.
+
+Latest user clarification supersedes direct close/Next actions: VLC Next must seek
+VLC itself to duration minus 0.1 and Play. Its real EOF then follows the exact same
+close/website-return path as ordinary completion. Remove the separate experimental
+JS next action; website track APIs remain available only for ordinary website
+controls. The user explicitly wants this single mechanism for extension and tests.
+A fixture exposed delayed `playing` after seek in WebKit; arm sampling on `play`
+as well, while still requiring actual 0.1 s clock advancement before capture.
+
+Implementation checkpoint before CI:
+- Remove all native background-child/preparation/readiness APIs and delayed reveal.
+  Accepted leaf pause acknowledgement supplies the input start time; then native
+  fullscreen is presented and playback starts visibly. Native media options retain
+  correct UA/referrer/cookies and now include start-time without a duplicate flush.
+- Native Next seeks its own VLC input to duration minus100ms and Play. Only the actual
+  VLC ended callback closes it; no separate JS next action or website track shortcut.
+- Current production bridge uses play/playing/metadata/network-resource events to
+  arm50ms sampling, requires100ms actual advance, and stops sampling on capture,
+  pause, inactivity or source loss. Mid-close pauses/rearms; EOF/last2s returns to
+  website duration minus100ms and lets its actual end handler run.
+- Final canonical run2026-11-15T19-45-54.475Z-9f3d4018 passes actual WebKit/libVLC
+  position roundtrip, mid-close paused, same-source replay, shared actual-VLC EOF
+  mechanism and trusted HTML completion/next-source capture. Fullscreen/metadata
+  entry also respects100ms gate:19-45-58.466Z-c30cc55d. Earlier cancellation and stalled
+  HTTP checks pass; the stand's15s decoder watchdog is telemetry, not an app timeout.
+- Controlled real Teleportal leaf, run19-47-56.540Z-cbd55c07: initial capture, actual
+  libVLC decode, mid-close12s and manual recapture pass. Actual VLC EOF returns real
+  HTML to its end (paused/ended true, no media error); that isolated leaf did not
+  start episode93 within35s. Full host integration/TV auto-advance is not established.
+  Preserve the requested one-EOF baseline and report this boundary, not a Next fix.
+- The user's three-site confirmations apply to the manually driven stand only.
+  No physical TV/Simulator verification has been performed or implied.

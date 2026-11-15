@@ -1,37 +1,62 @@
 # Linux WebKit media testbench
 
-The reusable implementation lives in `scripts/webkit-testbench/`. It reads current
-application source on each launch. The local `webkit-testbench` skill delegates to
-this implementation; private scenarios must not carry another copy of the bridge.
+The reusable stand lives in `scripts/webkit-testbench/`. The local
+`webkit-testbench` skill delegates to it. It reads the current application bridge
+on each launch; do not maintain another copy in private scenarios.
 
-## Start
+## User-confirmed simple baseline
 
 ```sh
-scripts/webkit-testbench/webkit-lab.sh --app --ephemeral https://example.org
+scripts/webkit-testbench/webkit-lab.sh --app --desktop-vlc --ephemeral https://example.org
 ```
 
-`--app` enables the production click/media/fullscreen bridge, adblock and an
-explicit native host model backed by actual Linux libVLC. It selects the current
-application's desktop User-Agent. A 1920×1080 CSS viewport and zoom 1 are defaults;
-these are declared test settings, not an emulated Apple TV display. Use a named
-`--profile investigation` instead of `--ephemeral` to retain website storage.
-Profiles contain personal state and stay ignored. Never reuse a personal profile
-for a clean-state test or delete it to fix a failing scenario.
+This opens actual Linux WebKit with adblock and uses actual desktop VLC for playback.
+The user confirmed this simple scheme on the stand for UAKino, UASerials and
+Teleportal. This is **stand evidence, not TV verification**.
 
-Add `--vlc-window` to request an actual Linux video window, with fullscreen enabled
-after readiness. This optional output mode is experimental and has not been
-visually verified; default `dummy` output verifies decoding and displayed-picture
-statistics without showing video. Audio uses dummy output in either mode. UIKit
-presentation, focus, remote control widgets and compositor readiness remain outside
-the Linux stand.
+The production bridge arms a short 50 ms clock watch from media events/resources.
+After at least 0.1 seconds of actual advancing HTML playback, the host validates the
+foreground source and sends one `accepted` response. The leaf pauses the exact
+video and acknowledges its frozen position. The host then presents/starts VLC
+immediately. Buffering is visible in VLC; decoded-frame readiness never gates
+presentation. There is no hidden preparation or `prepare` round trip.
 
-For a controlled comparison, use `--bridge --native-vlc` without `--adblock`, or
-plain WebKit without these flags. `--bridge` alone retains the observational native
-stub; it never silently accepts offers. Do not claim a playback fix from that mode.
+VLC starts at the acknowledged website position. Closing mid-video seeks the same
+website video to VLC's position and leaves it **paused**. A later manual Play
+rearms capture of that same source. Closing within two seconds of the end returns
+the website video to `duration - 0.1` and plays it so its genuine ended lifecycle
+can select the next item. Native Next also seeks **VLC** to `duration - 0.1` and
+plays; VLC's real EOF closes it and uses the same website completion path. There
+is no separate `close('next')` shortcut, synthetic ended event or forced website
+Next API in this experimental return path.
 
-## Dependencies
+The desktop transport uses RC `get_time`/`get_length`; position precision is one
+second. It passes `:start-time`, `:http-user-agent` and `:http-referrer` as input
+options **after the media URL**. A loopback request capture proved global
+`--http-user-agent` left VLC's default UA on master, rendition and segment requests;
+the server returned 403 for that UA and 200 for Firefox. Per-input options fixed
+all three request classes. No command HTTP server or media relay is introduced.
 
-Use the pinned dependency versions; do not upgrade to make a failing site pass.
+`--desktop-vlc` defaults to the user-selected Firefox 128 UA. This is an explicit
+Linux adaptation: Safari UA made the actual PlayerJS choose native HLS although
+Linux WebKit reported no native HLS support. A controlled same-iframe A/B proved
+HLS.js/MSE played the main episode (810 s, advancing clock), whereas native HLS
+failed with media error 4. Do not copy this UA or PlayerJS setting into the tvOS app
+as a workaround: its native HLS capabilities differ. `--user-agent TEXT` overrides
+the stand UA explicitly and is recorded in metadata.
+
+## Other modes and dependencies
+
+`--app` alone enables the production bridge, adblock and the native-host contract
+model backed by a Python ctypes Linux libVLC worker. That mode reads the current
+application desktop UA and uses dummy audio/video output by default. Actual
+readiness statistics are telemetry, not a handoff gate. Add `--vlc-window` to
+request a Linux libVLC window; this optional output is not UIKit and has not been
+visually verified. Use `--app --desktop-vlc` for the confirmed visible baseline.
+
+For controlled comparisons, use `--bridge --native-vlc` without `--adblock`, or
+plain WebKit without these flags. `--bridge` alone is observational and never
+silently accepts VLC offers.
 
 ```sh
 npm ci --prefix scripts/webkit-testbench --ignore-scripts --no-audit --no-fund
@@ -40,115 +65,112 @@ PLAYWRIGHT_BROWSERS_PATH="$PWD/.data/webkit-testbench/browsers" \
 python3 -c 'import ctypes.util; print(ctypes.util.find_library("vlc"))'
 ```
 
-The launcher prefers the ignored local Node installation and can reuse the local
-skill's existing Playwright installation. Python uses standard-library ctypes;
-no Python VLC package is required. Linux libVLC and WebKit's OS libraries must be
-installed separately. Follow the skill's graphical administrative-authorization
-workflow if installation is needed. Do not request passwords in chat.
+The launcher prefers the ignored local Node installation and can reuse an existing
+local skill installation of the pinned Playwright package. Desktop mode requires
+`vlc`; the worker requires Linux libVLC and Python's standard library. Follow the
+skill's graphical administrative-authorization workflow for missing OS packages.
+Do not request passwords in chat or upgrade dependencies to obtain a green test.
+
+Defaults are a 1920×1080 CSS viewport and zoom 1, not an emulated TV display. Use
+`--profile investigation` instead of `--ephemeral` to preserve website storage.
+Profiles are private; do not delete or reuse a personal profile for clean-state tests.
 
 ## Actual components and modeled boundaries
 
 | Component | What runs | Remaining difference |
 | --- | --- | --- |
-| Web engine | Pinned Playwright WebKit, actual website DOM, iframe tree, events and media | Linux media backend and patched WebKit build differ from tvOS |
-| Page bridge | Extracted `BrowserFrameClickBridgeScript` plus current `BrowserFullscreenMediaBridge.js` | Native WK message delivery and WKFrameInfo are represented by bindings and per-document tokens |
-| Pointer Center | `lab.remote.center(x,y)` invokes the production `__browserTVFrameClick` | UIKit pointer motion, gesture timing and native focus are not emulated |
-| Adblock core | Pinned app uBO network/parser, scriptlet library, domain buckets, cosmetics and procedural engine | Playwright routes all request classes through the full matcher; the app uses converted WKContentRuleLists plus fetch/XHR/worker adapters |
-| Adblock content worlds | MAIN and ISOLATED record selection and dependency-complete app bundles | Both bundles execute in separate lexical scopes in page world; named WKContentWorld isolation is unavailable |
-| Filter sources | Bundled uBO plus the six default AdGuard lists from the app's source URLs | TV cache dates, disabled lists, My Filters and trusted-site/dynamic personal preferences are unknown and are not copied |
-| Handoff | Model follows check → prepare → leaf acknowledgement → decoder preparation → accepted acknowledgement → suspend → presentation → activation | Objective-C is not executed; modal occupancy, application lifecycle and animation completion are modeled |
-| Decoder | Actual Linux libVLC, 2000 ms cache, initial seek, fresh decoded/displayed frames, video dimensions and advancing clock | Different libVLC build/platform output; dummy output is not evidence of a visible tvOS frame |
-| HTTP context | App-policy model for exact document referrer policy, actual app UA, matching website cookies and anonymous cross-origin suppression | Linux libVLC may lack TVVLCKit's cookie-store API; required cookies then fail closed rather than being omitted |
-| Storage/settings | Actual browser profile storage and explicit model options | No copied app database, NSUserDefaults, tab coordinator, history migration or device state |
-| Workers | Page workers observed through available Playwright routing; service workers blocked in adblock mode | Native HTTP-worker WK rule fallback and page/Blob-worker host adapters are not reproduced |
+| Engine | Pinned Playwright WebKit, actual DOM, frames, events and website media | Linux backend differs from tvOS; Safari UA alone does not grant native HLS |
+| Bridge | Extracted `BrowserFrameClickBridgeScript` and current `BrowserFullscreenMediaBridge.js` | WK messages/frames are represented by bindings and document tokens |
+| Center | `lab.remote.center(x,y)` calls actual `__browserTVFrameClick` | UIKit pointer motion, gestures and native focus are not emulated |
+| Adblock | Pinned app uBO core, parser, scriptlets, domain buckets, cosmetics and procedural engine | Full matcher on Playwright routes differs from converted WK rules plus page API adapters |
+| Content worlds | App MAIN/ISOLATED record selection and dependencies | Both lexical bundles execute in page world; named WKContentWorld isolation is unavailable |
+| Lists | Bundled uBO and six default AdGuard lists with per-run hashes | TV cache dates, personal filters, disabled lists and trusted/dynamic policies are not copied |
+| Handoff | Current single-accepted pause acknowledgement, immediate presentation/start and close ordering | Objective-C/UIKit are modeled; visual TV output and focus need native verification |
+| Desktop VLC | Actual CLI window, visible buffering, per-input headers, start position and RC return | Desktop UI is not the app UI; RC has integer-second precision |
+| Worker VLC | Actual Linux decoding, HTTP context, 2000 ms cache and frame/clock telemetry | Dummy output is not visible TV evidence; its 15 s readiness watchdog is a stand diagnostic, not an app deadline |
+| Cookies | Matching-cookie selection and anonymous cross-origin policy | Installed Linux/desktop APIs can lack TVVLCKit's cookie store; required cookies fail clearly rather than being omitted |
+| Storage | Actual browser profile storage, explicit model settings | No app database, NSUserDefaults, history migration or native tab coordinator |
+| Workers | Available Playwright routing; service workers blocked with adblock | Native HTTP-worker WK fallback and page/Blob-worker host adapters are not reproduced |
 
-A full matcher on every routed resource can block requests that the app's converted
-native rule subset would not block. This is a material difference, not proof that
-the app's blocker is broken. A future parity stage can import a sanitized artifact
-of the app's native converted rules and evaluate those rules for native resource
-classes, while retaining the full matcher for the app's page API paths. Do not
-invent a replacement converter, add a whitelist to obtain a green test, or call
-this stand equivalent to WKContentRuleList.
+Known host differences are facts, not automatic explanations for failures. When
+blocking changes website behavior, identify the exact rule/request or scriptlet
+before attributing it to the app or stand. Do not add persistent exceptions merely
+to make a test pass. Future native-rule parity can import sanitized output from the
+app's real converter; do not invent a replacement converter.
 
-## Reproducible lifecycle checks
-
-Generate an ignored, decoded WebM fixture (requires ffmpeg), then run the scenarios:
+## Repeatable checks
 
 ```sh
 scripts/webkit-testbench/generate-fixture.sh
 scripts/webkit-testbench/webkit-lab.sh --bridge --native-vlc --headless --ephemeral \
-  --script scripts/webkit-testbench/scenarios/lifecycle.mjs
+  --script scripts/webkit-testbench/scenarios/simple-takeover.mjs
 scripts/webkit-testbench/webkit-lab.sh --bridge --native-vlc --headless --ephemeral \
   --script scripts/webkit-testbench/scenarios/interruption.mjs
+scripts/webkit-testbench/webkit-lab.sh --bridge --native-vlc --headless --ephemeral \
+  --script scripts/webkit-testbench/scenarios/timeout.mjs
 ```
 
-The fixture server binds only to loopback, implements HTTP byte ranges, and closes
-on scenario exit. It serves media/HTML, not commands. Decoder control uses private
-stdin/stdout JSON; no diagnostic HTTP endpoint or debugger port is exposed.
+Fixture generation requires ffmpeg and writes only ignored media. The fixture HTTP
+server binds loopback, implements ranges and serves media/HTML, never commands.
 
-`lifecycle.mjs` checks a cross-origin iframe pause acknowledgement, actual libVLC
-readiness, accepted-session inactive/active survival and Next recapture after
-modeled dismissal completion. It deliberately replays the old early-callback
-ordering while `presented=true` and checks the resulting lost recapture. That
-negative result demonstrates the host-contract race, not UIKit callback timing.
+The canonical simple scenario checks 0.1 s real advancement, one accepted ack,
+presentation before actual decoder readiness, position return, paused mid-close,
+manual same-source rearm, Next through actual VLC EOF, and trusted HTML ended events.
+`lifecycle.mjs` is a compatibility alias. The interruption scenario uses an explicit
+400 ms pre-acceptance delay to check cancellation/new Play and changed-source
+rejection. The timeout scenario stalls the worker's actual HTTP media request and
+checks immediate visible model state and paused return after closing the error.
+Its diagnostic timeout is not a native-app timeout claim.
 
-`interruption.mjs` checks cancelled preparation followed by new Play of the same
-source, Back without a recapture loop, one preparation-failure rollback and a
-changed source rejected before acceptance. Its 400 ms startup delay and explicit
-failure are fault injections, labeled in results; other decoder starts use libVLC.
+A resumed WebKit video can emit `play` and advancing `timeupdate` without promptly
+emitting `playing`. The production watch therefore arms from `play` as well. Test
+button actions should fire `video.play().catch(...)` without awaiting that promise;
+its completion can be delayed until EOF on this backend. Still require real clock
+advance and decoded main-video identity; never substitute synthetic media events.
 
-The runtime API also supports `lab.native.setPage(page)` for tab changes,
-`setActive(false/true)` for foreground changes and `close('closed'|'next'|'ended')`.
-Use `nativeVLC:{callbackPhase:'viewDidDisappear'}` or
-`invalidateAcceptedOnResign:true` only to replay known old contract behavior.
-The current default is completion delivery and preservation of accepted sessions.
-The model must be reviewed when the Objective-C contract changes; stored source
-fingerprints identify the implementation against which a run was performed.
+## Actual-site workflow and controls
 
-## Actual-site checks
+Open the actual URL and let offers reach the host binding immediately. Autoplay
+can occur before the first click; a late click can pause it and invalidate an old
+offer. Scroll lazy player sections into view and use their real Play control.
+`readyState=0` before Play may simply mean `preload=none`.
 
-Open the actual URL in `--app --ephemeral` mode. Let automatic offers reach the host
-binding immediately; do not click then accept the last entry in the capped message
-array. Sites can autoplay before the first click. A late click may pause an already
-playing video and make that old offer invalid.
-
-Scroll lazy player sections into view and activate the actual website Play control.
-`readyState=0` before Play can be normal for `preload=none`; it is not decoder failure.
-Wait for `native-host: activated` with actual decoder-ready statistics. Keep it
-playing long enough to catch source changes before Next. Submit Next through the
-host, then require the website's real new item/source and a new actual decoder-ready
-record. A returned top-document boolean or changed playlist index alone is not enough.
+Verify main-content identity and duration. A valid MP4 and a VLC picture alone can
+be a preroll. Earlier UAKino adblock-OFF trials captured a second video without
+establishing main identity; those are not main-video success evidence. Prefer the
+actual episode's duration/title/source binding and an advancing clock.
 
 Useful terminal commands:
 
-- `center X Y`, `play-pause`: invoke production page bridge functions.
-- `next`, `player-back`: close the modeled native player using the relevant action.
-- `inactive`, `active`, `native-status`: exercise and inspect the host lifecycle.
-- `open URL`, `back`, `reload`, `status`, `screenshot`, `inspect`, `quit`: browser controls.
+- `center X Y` uses the production website click path. It refuses to click a hidden
+  website while the modeled native player is presented; UIKit focus is unsupported.
+- `play-pause` targets VLC when presented, otherwise the website bridge.
+- `next` seeks VLC near its actual end and waits for EOF; `player-back` closes it.
+- `inactive`, `active`, `native-status` exercise/inspect the modeled lifecycle.
+- `open URL`, `back`, `reload`, `status`, `screenshot`, `inspect`, `quit` control browsing.
 
-Mouse clicks in the visible browser are real Linux WebKit input. Use `center X Y`
-when testing the application's synthetic Center path; do not call them interchangeable.
-Native transport commands in this stand are host API calls, not UIKit focus tests.
+The scenario API supports `lab.native.setPage(page)`, `setActive(false/true)`,
+`next()` and `close('closed'|'ended')`. Modal occupancy remains modeled. Source
+fingerprints identify the code against which a run was performed; review the model
+whenever the Objective-C contract changes.
 
 ## Evidence and cleanup
 
-All runs live under ignored `.data/webkit-testbench/runs/<run>/`:
+Runs stay under ignored `.data/webkit-testbench/runs/<run>/`:
 
-- `environment.json`: browser/Playwright versions, actual UA, viewport, source
-  fingerprints, injection order, filter content hashes and explicit capabilities.
-- `events.jsonl`: real requests/errors, adblock decisions, frame lifecycle, native
-  offers, per-frame request checks/responses/acks, modeled lifecycle and numeric
-  decoder state/readiness. The binding observes every offer; the page array is
-  capped and may have lost old entries.
-- `vlc-*.private.log`: raw libVLC stderr, potentially containing signed media URLs.
-  Keep it ignored. Do not paste it into tracked docs or public issue/PR comments.
+- `environment.json`: versions, actual UA, viewport, source hashes, injection order,
+  filter hashes, transport options and explicit capabilities.
+- `events.jsonl`: requests/errors, winning blocker rules, frames, every native offer,
+  leaf checks/acks, modeled lifecycle, actual decoder/RC timing.
+- `vlc-*.private.log`: raw decoder stderr/stdout, potentially containing signed URLs.
+  Keep it private; never paste it into tracked docs or public issue/PR comments.
 
-The decoder process is stopped on close, and ephemeral context cleanup has a bounded
-wait before closing its own browser. Do not terminate a user's unrelated browser or
-reuse an ineffective path without changed conditions. Missing IPC permission is an
-execution failure; retry only with the appropriate authorized sandbox permission.
+The binding observes every offer; the page message array is capped and may have
+lost old entries. Required-cookie failures and execution/IPC failures must be
+reported distinctly from successful playback. Stop ineffective paths and retry
+only after changed conditions.
 
-Filters download only when absent under ignored `.data/webkit-testbench/filters/`.
-Each run records content hashes; it does not silently refresh existing snapshots.
-Refresh a research snapshot deliberately and record the changed hashes. There is no
-claim that downloaded lists match a particular physical TV's cache.
+Owned decoder processes stop on close; ephemeral context cleanup is bounded before
+closing its own browser. Never close, click or navigate the user's live stand during
+an independent investigation. Filters download only when absent in ignored cache;
+refresh deliberately and compare hashes rather than claiming they match a TV cache.

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { launchLab } from './runtime.mjs';
 
 const { values, positionals } = parseArgs({ options: {
-    help: { type: 'boolean', short: 'h' }, app:{type:'boolean'}, bridge: { type: 'boolean' }, adblock: { type: 'boolean' }, 'native-vlc':{type:'boolean'}, 'vlc-window':{type:'boolean'},
+    help: { type: 'boolean', short: 'h' }, app:{type:'boolean'}, bridge: { type: 'boolean' }, adblock: { type: 'boolean' }, 'native-vlc':{type:'boolean'}, 'vlc-window':{type:'boolean'}, 'desktop-vlc':{type:'boolean'}, 'user-agent':{type:'string'},
     headless: { type: 'boolean' }, ephemeral: { type: 'boolean' },
     profile: { type: 'string', default: 'default' }, viewport: { type: 'string', default: '1920x1080' },
     init: { type: 'string', multiple: true }, trace: { type: 'boolean' },
@@ -14,6 +14,8 @@ const { values, positionals } = parseArgs({ options: {
 if (values.help) {
     console.log(`WebKit testbench for tvOSofaBrowse
 Usage: webkit-lab [options] [URL or local HTML file]
+  --desktop-vlc      Immediate visible desktop VLC + RC return (use with --app); Firefox UA by default
+  --user-agent TEXT  Explicit browser/media UA override, recorded in metadata
   --app              Closest available Linux mode: --bridge --adblock --native-vlc
   --vlc-window       Show an actual Linux VLC video window (requires --native-vlc)
   --native-vlc       Use modeled native handoff with actual Linux libVLC decoding (requires --bridge)
@@ -49,7 +51,7 @@ async function main() {
     if (values.headless && values.inspector) throw new Error('Inspector requires a graphical session.');
     const target = targetURL(positionals[0]);
     if(values['vlc-window']&&!values['native-vlc'])throw Error('--vlc-window requires --native-vlc');
-    const lab = await launchLab({ ...values,...(values['native-vlc']?{nativeVLC:{output:values['vlc-window']?'window':'dummy'}}:{}), viewport: { width: Number(dimensions[1]), height: Number(dimensions[2]) } });
+    const lab = await launchLab({ ...values,...(values['user-agent']?{userAgent:values['user-agent']}:{}),...(values['native-vlc']?{nativeVLC:{output:values['vlc-window']?'window':'dummy'}}:{}), viewport: { width: Number(dimensions[1]), height: Number(dimensions[2]) } });
     let terminal;
     const stop = async () => { terminal?.close(); await lab.close(); };
     process.once('SIGINT', () => { stop().catch(console.error); });
@@ -89,7 +91,7 @@ async function main() {
                 if (input.startsWith('open ')) await page.goto(targetURL(input.slice(5).trim()), { waitUntil: 'domcontentloaded' });
                 else if (input === 'back') await page.goBack();
                 else if (input === 'reload') await page.reload({ waitUntil: 'domcontentloaded' });
-                else if(input==='next')await lab.native?.close('next');
+                else if(input==='next')await lab.native?.next();
                 else if(input==='player-back')await lab.remote.back();
                 else if(input==='inactive'||input==='active')await lab.native?.setActive(input==='active');
                 else if(input==='native-status')console.log(lab.native?.snapshot()??{nativeHost:false});

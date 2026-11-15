@@ -47,6 +47,7 @@ player_new = fn('libvlc_media_player_new_from_media', ptr, [ptr])
 play = fn('libvlc_media_player_play', c.c_int, [ptr])
 stop = fn('libvlc_media_player_stop', None, [ptr])
 get_time = fn('libvlc_media_player_get_time', c.c_longlong, [ptr])
+get_length = fn('libvlc_media_player_get_length',c.c_longlong,[ptr])
 set_time = fn('libvlc_media_player_set_time', None, [ptr,c.c_longlong])
 pause = fn('libvlc_media_player_set_pause', None, [ptr,c.c_int])
 seekable = fn('libvlc_media_player_is_seekable', c.c_int, [ptr])
@@ -62,7 +63,7 @@ release = fn('libvlc_release', None, [ptr])
 arguments = [b'--intf=dummy', *([] if configuration.get('output')=='window' else [b'--vout=dummy']), b'--aout=dummy', b'--no-video-title-show', b'--no-osd', b'--stats', b'--avcodec-hw=none']
 instance = new(len(arguments), (c.c_char_p * len(arguments))(*arguments))
 media = media_new(instance, configuration['url'].encode())
-for value in [':network-caching=2000', ':http-forward-cookies=1',
+for value in [':network-caching=2000', ':http-forward-cookies=1', ':start-time='+str(max(0,configuration.get('currentTime',0))),
               ':http-referrer='+configuration['referrer'], ':http-user-agent='+configuration['userAgent']]:
     option(media, value.encode())
 stored = 0
@@ -95,6 +96,7 @@ def read_commands():
     commands.put(None)
 threading.Thread(target=read_commands,daemon=True).start()
 try:
+    if configuration.get('presentImmediately') and configuration.get('output')=='window': fullscreen(player,1)
     if play(player) != 0:
         emit('failure', reason='play-failed')
         sys.exit(1)
@@ -115,7 +117,7 @@ try:
             elif action == 'seek': set_time(player, int(command['time']*1000))
             elif action == 'status':
                 stats_fn(media, c.byref(stats))
-                emit('status', timeMs=get_time(player), state=state(player), decodedVideo=stats.i_decoded_video,
+                emit('status', timeMs=get_time(player), lengthMs=get_length(player), state=state(player), decodedVideo=stats.i_decoded_video,
                      displayedPictures=stats.i_displayed_pictures, decodedAudio=stats.i_decoded_audio, ready=ready)
         current_state = state(player)
         if current_state != last_state:
@@ -130,16 +132,17 @@ try:
                 emit('failure', reason='preparation-timeout'); break
             if pending_seek and current_state == 3 and seekable(player):
                 baseline_decoded, baseline_shown = stats.i_decoded_video, stats.i_displayed_pictures
-                set_time(player, pending_seek)
-                emit('seek', timeMs=pending_seek)
+                if abs(now-pending_seek)>1000:
+                    set_time(player, pending_seek)
+                    emit('seek', timeMs=pending_seek)
                 pending_seek = 0
                 last_time = -1
                 continue
             get_size(player, 0, c.byref(width), c.byref(height))
             if not pending_seek and current_state == 3 and stats.i_decoded_video >= baseline_decoded+3 and stats.i_displayed_pictures > baseline_shown and has_vout(player) and width.value and height.value and last_time >= 0 and 0 < now-last_time < 5000:
                 ready = True
-                pause(player, 1)
-                emit('ready', timeMs=now, width=width.value, height=height.value,
+                if configuration.get('pauseOnReady',False): pause(player, 1)
+                emit('ready', timeMs=now, lengthMs=get_length(player), width=width.value, height=height.value,
                      decodedVideo=stats.i_decoded_video, displayedPictures=stats.i_displayed_pictures,
                      decodedAudio=stats.i_decoded_audio, elapsedMs=round((time.monotonic()-started)*1000))
             last_time = now

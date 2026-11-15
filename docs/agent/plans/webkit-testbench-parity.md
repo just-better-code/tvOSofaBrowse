@@ -86,3 +86,67 @@ Evidence (raw runs remain ignored):
 
 Parent owns app capture fixes and final commit/push. This stand stage alone does not
 establish that the user's installed TV failures are resolved.
+
+## User-confirmed simple baseline, 2026-11-15
+
+The user confirms the simplified scheme on the visible stand for UAKino, UASerials
+and Teleportal, explicitly not TV. Promote it without copying the private capture
+implementation: the tracked production bridge owns source association, event-armed
+50 ms watches and the 0.1 s actual-advance threshold. The host uses one accepted
+pause acknowledgement, immediately presents/starts VLC and observes decoder readiness
+as telemetry only. There is no hidden preparation.
+
+The actual desktop transport is tracked in `desktop-vlc.mjs`, with per-input UA,
+referrer/start-time options and private RC position/length output. Closing mid-video
+returns position paused and rearms manual Play; near-end completion returns HTML
+near EOF. Native Next first seeks VLC itself near EOF; real VLC EOF is the single
+return path. No `close('next')` or explicit website Next API shortcut is accepted.
+
+Important corrections to earlier evidence:
+- UAKino adblock-OFF MP4 capture did not establish main-content identity and may
+  have captured preroll. Do not treat those old OFF results as main-video success.
+- A controlled actual PlayerJS iframe (same top origin/lists) proved Safari UA forced
+  unsupported native HLS on Linux; HLS.js with the same Safari UA and only the native
+  preference disabled played the 810 s main video with advancing time. Firefox UA
+  is the user's selected stand adaptation; it is not a tvOS app change.
+- Actual desktop HTTP capture proved global --http-user-agent did not set Firefox
+  headers, while per-input :http-user-agent did. Same media endpoint returned 403
+  for VLC UA and 200 for Firefox, with matching cookies/referrer/range controls.
+- A resumed WebKit fixture emitted real play/timeupdate while delaying playing until
+  EOF. The production bridge now arms on play as well; sampling still rejects seeks
+  and requires actual advancement.
+
+Current simple-contract evidence:
+- `19-42-22.902Z-52f6bdaf`: canonical production bridge + actual libVLC passes real
+  advancement, single acknowledgement, presentation-before-readiness, start/return
+  position, paused close, same-source manual replay, actual VLC EOF Next and two
+  trusted HTML completions.
+- `19-36-26.773Z-0ddbf1ea`: cancellation/new Play and changed-source rejection pass
+  with explicit 400 ms pre-acceptance delay.
+- `19-36-25.290Z-bab088ce`: actual stalled HTTP worker shows presentation immediately,
+  hits the stand diagnostic readiness watchdog after 15.1 s and leaves HTML paused
+  after manual close. This is not an app timeout claim.
+
+Final app build/TV observation belongs to the parent stage. Native UIKit behavior
+is still unverified here. The private manually controlled stand remains owned by
+the user and must not be disturbed by automated regression tests.
+
+Final simple-contract checkpoint:
+- `19-45-54.475Z-9f3d4018` repeats the canonical scenario on the final production JS,
+  including the fullscreen/metadata gate follow-up; all simple-flow assertions pass.
+- `19-45-58.466Z-c30cc55d` verifies an existing website fullscreen plus reloaded
+  metadata cannot bypass the real-play threshold (accepted time 0.148 s).
+- Actual desktop CLI transport in dummy output also passes start-time/RC return
+  after adding RC length handling; no additional VLC window was opened.
+- `19-47-56.540Z-cbd55c07` uses the actual Teleportal leaf player in a controlled
+  same-origin embed, avoiding the intermittent full-page loader. Initial capture,
+  actual libVLC decode, paused return at 12 s and manual same-source recapture pass.
+  Next seeks actual VLC near its end; actual VLC EOF returns action `ended` and the
+  HTML video reaches its real end: time=duration=2547.96, ended=true, paused=true,
+  no media error. The website remains episode 92 and does not start 93 within the
+  observation window. Automatic episode advance is therefore not verified by this
+  controlled embed; do not report it as a Teleportal Next fix or native-TV success.
+
+No automated test touched the user's manually controlled visible stand. Parent owns
+atomic app/stand contract commit and native CI build; all above observations are
+Linux engine/decoder evidence plus explicitly modeled UIKit state.
