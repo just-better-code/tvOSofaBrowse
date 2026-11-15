@@ -1066,3 +1066,51 @@ The extended production three-frame DOM harness passes known-episode 91 URL sync
 ### 2.21.9 release and user confirmation
 
 Publish immutable v2.21.9 on f1843dc from feature/teleportal-player. GitHub run 42387463543 completed successfully with Apple TV Release only; confirm the unsigned IPA, notices and SHA256SUMS are attached to the public release. The user subsequently reported “все чудово працює”. Record this as successful user confirmation of the reported playback workflow on TV; no agent-controlled device interaction, exhaustive other-player checks or separately enumerated restart/EOF cases were observed. This supersedes the earlier unreleased status and pending user confirmation for the reported workflow. The user then requested merging the branch into master. Keep the published tag unchanged.
+
+## 2026-11-15 — Label-gated develop delivery beside stable
+
+The user wants two independent TV installations and authorized repository-side
+automation while retaining user-side atvloadly setup. After reviewing the initial
+proposal, the user required a separate workflow for any PR, gated by the exact
+label `deploy to develop`. Leave `.github/workflows/build.yml` unchanged; add
+`develop.yml` for label application, commits to labeled PRs, opening and reopening.
+No branch name or PR number is hardcoded. Build the GitHub PR merge revision and
+record both merge and head commits; this includes base-side tooling without
+requiring every PR to rebase just to acquire the scripts.
+
+Build an unsigned Apple TV Release with fixed test identity
+`org.example.tvosofabrowse.test`, display name `tvOSofaBrowse Test` and numeric
+Actions run/attempt build number. Extend the existing package verifier with an
+optional test-identity/build check; standard packaging behavior is preserved.
+Publish immutable `test-pr-NUMBER-RUN_ID-ATTEMPT` prereleases without changing
+Latest. Upload/inspect draft assets before publication, then advance one shared
+AltStore-compatible feed on the isolated `develop-channel` data branch using the
+repository token. atvloadly v0.8.2 reads its build-number metadata, allowing updates
+with the same marketing version. The feed URL and one-time setup are documented
+in `docs/DEPLOYMENT.md`; no separate hosting or Apple secrets are required in CI.
+
+Serialize publication and recheck current PR head, open state and deployment label
+before release upload and before feed advancement. Reject superseded revisions
+and older artifact builds, preserve the embedded build number on publisher-only
+reruns, and keep the last feed on failures. Repository PRs may publish; fork PRs
+receive read-only build jobs and artifacts, without a write-token publisher.
+Stable and test app data remain separate. Removing the label stops new publication
+without uninstalling or rolling back the previous working test build.
+
+Validation: source review, Python AST parsing, YAML parsing, embedded Bash syntax
+checks and `git diff --check`. actionlint is not installed. No application tests,
+Xcode build, Actions run, remote publication, Git remote push, atvloadly changes or
+TV operations ran. No app-version/changelog increment: this changes CI delivery,
+not the native app's default behavior or signing settings. The next user steps
+are to push the commit and create/apply `deploy to develop`; first publication,
+two-app coexistence, later automatic updating and renewal remain unobserved.
+Resumption details and acceptance criteria are in `plans/test-channel.md`.
+
+Source research found a concrete GitHub bootstrap limitation: release targets
+changing `.github/workflows/` relative to default require Workflows:write, which
+GITHUB_TOKEN cannot obtain. Add an explicit publisher preflight and document that
+CI configuration must enter default before automatic publication; workflow-changing
+PRs retain build artifacts with an explanatory publication failure. Do not add a
+personal-token workaround, which would also trigger the unchanged stable release
+workflow. Draft assets are inspected through authenticated release listing and
+published by release ID, avoiding the published-release-by-tag lookup for drafts.

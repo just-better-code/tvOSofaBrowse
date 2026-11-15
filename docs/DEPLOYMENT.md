@@ -1,6 +1,6 @@
 # Install and renew tvOSofaBrowse from Linux
 
-GitHub Actions builds an **unsigned Apple TV IPA** after manual workflow dispatch or when a maintainer manually publishes a GitHub Release. Manual runs keep packages in Actions artifacts; release runs also attach them to the release. A Linux machine at home runs [atvloadly](https://github.com/bitxeno/atvloadly), signs the IPA with your Apple Account, installs it over the local network, and renews its provisioning before it expires. The Linux machine does not need Xcode or a paid Apple Developer membership.
+GitHub Actions builds an **unsigned Apple TV IPA** after manual workflow dispatch or when a maintainer manually publishes a GitHub Release. A separate workflow builds PRs labeled `deploy to develop` and publishes an independent develop channel, described below. Manual runs keep packages in Actions artifacts; release runs also attach them to the release. A Linux machine at home runs [atvloadly](https://github.com/bitxeno/atvloadly), signs the IPA with your Apple Account, installs it over the local network, and renews its provisioning before it expires. The Linux machine does not need Xcode or a paid Apple Developer membership.
 
 ## Requirements
 
@@ -125,9 +125,52 @@ gh run download RUN_ID --name tvOSofaBrowse-device-Release-COMMIT_SHA
 
 The selected revision must contain this workflow and the optional-tag version helper. The existing build workflow is already registered in this repository; branch dispatch was verified without modifying master. A newly introduced workflow may first need registration on the default branch. Manual builds validate that Debug and Release share a semantic marketing version, without requiring a release tag. The IPA still requires local signing before installation. Workflow completion does not prove Simulator interaction, TV behavior or filter preparation timing.
 
+## Automatic test app alongside stable
+
+The separate [Deploy PR to develop workflow](../.github/workflows/develop.yml) builds **Apple TV Release** when a PR has the exact label `deploy to develop`. Adding that label starts a build; subsequent commits, opening or reopening a labeled PR also build it. Adding unrelated labels does not start a build. No branch name or PR number is configured in the workflow. It builds the PR's merge revision, including the current base, with a separate identity:
+
+| Setting | Test app |
+| --- | --- |
+| Home-screen name | `tvOSofaBrowse Test` |
+| Bundle identifier before signing | `org.example.tvosofabrowse.test` |
+| Marketing version | Version recorded in the source project |
+| Technical build number | Actions run number and attempt, for example `42.1` |
+
+The workflow verifies the test identity, packages the unsigned IPA, dependency notices and checksums, uploads them to a draft, and publishes a unique `test-pr-NUMBER-RUN_ID-ATTEMPT` prerelease. It never marks test releases **Latest**. Only then does it advance an AltStore-compatible source on the separate `develop-channel` data branch:
+
+```text
+https://raw.githubusercontent.com/just-better-code/tvOSofaBrowse/develop-channel/source.json
+```
+
+This URL becomes available after the first successful test publication. All labeled PRs share this one develop source and test app; the newest successfully published run wins. The data branch is created automatically using the repository's `GITHUB_TOKEN`; no GitHub Pages setup, extra service, personal token or Apple credentials are needed. **AltStore** is the source format in atvloadly; no AltStore app is needed on the TV.
+
+### One-time setup in atvloadly
+
+1. Keep the current stable app and its signing identity. To freeze its current version, disable its **source automatic updates**, leaving Apple Account signature renewal enabled.
+2. Add an **AltStore source** using the URL above and select **tvOSofaBrowse Test**. Do not use the ordinary GitHub source with prereleases enabled for the test channel: that selection also considers stable releases.
+3. Install as a separate app with Apple Account signing. The IPA already contains the test name and identifier; leave custom overrides empty. If a test copy was already installed with a custom identifier, retain that exact identifier for its updates instead of creating another copy.
+4. Enable automatic updates for the test source and the scheduled Apple Account refresh task. Leave the signing host running and TV reachable. Updates install during atvloadly's refresh window, not immediately after Git push.
+
+After this setup, add `deploy to develop` to the intended PR and push changes to its branch. There is no manual ZIP download or IPA upload. Both app entries need ongoing signature renewal. Their histories, tabs, cookies and downloaded payloads are separate; the test app does not copy stable data.
+
+The Actions run summary contains direct IPA/prerelease links and the source URL. A failed build leaves the previous source untouched. Publication is serialized; superseded PR commits and older build reruns do not replace the advertised build. Before uploading and before advancing the feed, the publisher confirms that the PR is still open, still labeled and still at the same head revision. Removing the label or closing the PR stops future publication; it does not uninstall or roll back the last working test app. If release upload succeeds but source publication fails, the previous feed remains valid and the new prerelease is available for diagnosis. Raw-source caching may delay discovery. No automatic release cleanup deletes older downloadable builds.
+
+Create the repository label once if it does not exist, then apply it to any intended PR:
+
+```sh
+gh label create 'deploy to develop' --color 0E8A16 --description 'Publish this PR to the Apple TV develop channel'
+gh pr edit PR_NUMBER --add-label 'deploy to develop'
+```
+
+PRs from the repository can publish automatically. Fork PRs can build artifacts with a read-only token, but cannot publish: their code never receives a repository-write token. The workflow must be present in the PR's merge revision; once merged into the default branch it applies to other PRs without copying the tooling into their head branches. Merge conflicts prevent ordinary `pull_request` runs until resolved. Existing stable builds and local Mac delivery retain their current identities and behavior. Published test tags are never moved. Stable release publication remains a separate manual process in `build.yml`.
+
+**Initial activation:** merge the CI configuration into the default branch before expecting automatic prerelease publication. GitHub [requires Workflows write permission](https://docs.github.com/en/rest/releases/releases#create-a-release) to create/update releases when their target changes `.github/workflows/` relative to the default branch; `GITHUB_TOKEN` cannot obtain that permission. PRs that change workflows still produce Actions artifacts, but the publisher stops with an explanation and retains the previous feed. No personal token workaround or stable-workflow change is configured.
+
+Confirm coexistence and independent data by opening both apps on the TV. Then confirm a later test build arrives and signature expiry advances after renewal. A successful CI run establishes package publication, not those device outcomes.
+
 ## Maintainers: publish a release manually
 
-Release publication uses **`release: published`**; manual branch builds use **`workflow_dispatch`**. Pushes, tags alone, pull requests and release edits do not start builds. The release workflow uses GitHub-hosted macOS with Xcode; everyday editing and release creation can happen from Linux.
+Stable release publication uses **`release: published`**; manual branch builds use **`workflow_dispatch`**. Pushes, tags alone, pull requests and release edits do not start this workflow. The separate `develop.yml` workflow handles labeled PRs. Its `GITHUB_TOKEN` publications do not trigger recursive release runs; do not manually republish its test prereleases as stable releases. The release workflow uses GitHub-hosted macOS with Xcode; everyday editing and release creation can happen from Linux.
 
 1. Set the same `MARKETING_VERSION` in Debug and Release, and maintain the corresponding changelog entry.
 2. Commit and push the intended source. Create a `vMAJOR.MINOR.PATCH` tag on that exact commit and push the tag.
@@ -151,6 +194,6 @@ Release publication uses **`release: published`**; manual branch builds use **`w
 
 The workflow validates the tag, builds Apple TV Release without signing, checks the IPA, and attaches the IPA, notices archive and `SHA256SUMS` only after the device build and package checks pass. App artifacts last 14 days and build diagnostics last 7 days; release assets remain until removed.
 
-An unchanged failed run can be retried with `gh run rerun RUN_ID --failed`; no new release is needed. A source fix belongs in a new commit and a new version/tag, rather than moving an existing published tag. There is no workflow that creates releases automatically.
+An unchanged failed run can be retried with `gh run rerun RUN_ID --failed`; no new stable release is needed. A source fix belongs in a new commit and a new version/tag, rather than moving an existing published tag. Stable releases are created manually; only the separate test channel creates prereleases automatically.
 
 See [third-party notices](THIRD_PARTY_NOTICES.md) for dependency licenses and source references. The app uses private tvOS/WebKit APIs and is intended for personal sideloading outside the App Store.

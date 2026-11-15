@@ -25,7 +25,7 @@ def version(tag=None):
     print(versions[0])
 
 
-def verify(path, expected):
+def verify(path, expected, test_build=None):
     with zipfile.ZipFile(path) as ipa:
         bad = ipa.testzip()
         if bad:
@@ -44,6 +44,13 @@ def verify(path, expected):
             raise ValueError("IPA must target AppleTVOS, not the Simulator")
         if info.get("CFBundlePackageType") != "APPL" or not info.get("CFBundleIdentifier"):
             raise ValueError("Invalid app identity")
+        if test_build is not None:
+            if not re.fullmatch(r"\d+\.\d+", test_build):
+                raise ValueError("Test build must use run-number.attempt")
+            if (info.get("CFBundleIdentifier") != "org.example.tvosofabrowse.test"
+                    or info.get("CFBundleDisplayName") != "tvOSofaBrowse Test"
+                    or info.get("CFBundleVersion") != test_build):
+                raise ValueError("Test IPA must have the separate test identity, name and build number")
         executable = info["CFBundleExecutable"]
         if pathlib.PurePosixPath(executable).name != executable:
             raise ValueError("Invalid executable name")
@@ -81,12 +88,13 @@ def main():
     package = commands.add_parser("verify")
     package.add_argument("ipa", type=pathlib.Path)
     package.add_argument("version")
+    package.add_argument("--test-build", help="Require the isolated test identity and this build number")
     args = parser.parse_args()
     try:
         if args.command == "version":
             version(args.tag)
         else:
-            verify(args.ipa, args.version)
+            verify(args.ipa, args.version, args.test_build)
     except (ValueError, KeyError, OSError, zipfile.BadZipFile, plistlib.InvalidFileException) as error:
         parser.exit(1, f"Release validation failed: {error}\n")
 

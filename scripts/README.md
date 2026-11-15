@@ -1,6 +1,8 @@
 # Build and delivery scripts
 
-For **automatic signing from Linux**, follow [the atvloadly deployment guide](../docs/DEPLOYMENT.md). GitHub builds an unsigned IPA after manual workflow dispatch or release publication; atvloadly runs at home and handles signing, installation and renewal. No Apple credentials are needed in GitHub Actions.
+For **automatic signing from Linux**, follow [the atvloadly deployment guide](../docs/DEPLOYMENT.md). GitHub builds an unsigned IPA after manual workflow dispatch or release publication; a separate workflow builds PRs labeled `deploy to develop` and publishes an [independent test update source](../docs/DEPLOYMENT.md#automatic-test-app-alongside-stable). atvloadly runs at home and handles signing, installation and renewal. No Apple credentials are needed in GitHub Actions.
+
+`ci-release.py` validates versions and unsigned IPA contents; `verify --test-build RUN.ATTEMPT` additionally requires the separate test identity, display name and build number. `publish-test-channel.py` runs only in the verified develop publication job: it checks current PR label/head state, uploads immutable prereleases and advances `develop-channel/source.json` through the GitHub API. It does not access a TV or the local atvloadly service.
 
 ## Local macOS delivery
 
