@@ -38,8 +38,8 @@
 @property (nonatomic) UIButton *muteButton;
 @property (nonatomic) UIButton *audioTrackButton;
 @property (nonatomic) UIButton *subtitleTrackButton;
-@property (nonatomic) UIButton *autoExitFullscreenButton;
-@property (nonatomic) UILabel *autoExitFullscreenBadge;
+@property (nonatomic) UIButton *keepFullscreenButton;
+@property (nonatomic) UILabel *keepFullscreenBadge;
 @property (nonatomic, copy) NSString *audioMenuKey;
 @property (nonatomic, copy) NSString *subtitleMenuKey;
 @property (nonatomic) NSTimer *progressTimer;
@@ -196,22 +196,22 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     self.playButton = play;
     UIButton *audioTrack = [self controlButtonWithSymbol:@"waveform" label:@"Audio" action:@selector(audioTrackPressed)];
     UIButton *subtitleTrack = [self controlButtonWithSymbol:@"captions.bubble" label:@"Subtitles" action:@selector(subtitleTrackPressed)];
-    UIButton *autoExit = [self controlButtonWithSymbol:@"arrow.down.right.and.arrow.up.left"
-        label:@"Exit fullscreen after Next or completion" action:@selector(toggleAutoExitFullscreen)];
-    self.autoExitFullscreenButton = autoExit;
-    UILabel *autoExitBadge = [UILabel new];
-    autoExitBadge.translatesAutoresizingMaskIntoConstraints = NO;
-    autoExitBadge.isAccessibilityElement = NO;
-    [autoExit addSubview:autoExitBadge];
+    UIButton *keepFullscreen = [self controlButtonWithSymbol:@"arrow.up.left.and.arrow.down.right"
+        label:@"Keep fullscreen" action:@selector(toggleKeepFullscreen)];
+    self.keepFullscreenButton = keepFullscreen;
+    UILabel *keepFullscreenBadge = [UILabel new];
+    keepFullscreenBadge.translatesAutoresizingMaskIntoConstraints = NO;
+    keepFullscreenBadge.isAccessibilityElement = NO;
+    [keepFullscreen addSubview:keepFullscreenBadge];
     [NSLayoutConstraint activateConstraints:@[
-        [autoExitBadge.centerXAnchor constraintEqualToAnchor:autoExit.centerXAnchor],
-        [autoExitBadge.bottomAnchor constraintEqualToAnchor:autoExit.bottomAnchor constant:-5],
-        [autoExitBadge.widthAnchor constraintEqualToConstant:42],
-        [autoExitBadge.heightAnchor constraintEqualToConstant:22],
+        [keepFullscreenBadge.centerXAnchor constraintEqualToAnchor:keepFullscreen.centerXAnchor],
+        [keepFullscreenBadge.bottomAnchor constraintEqualToAnchor:keepFullscreen.bottomAnchor constant:-5],
+        [keepFullscreenBadge.widthAnchor constraintEqualToConstant:42],
+        [keepFullscreenBadge.heightAnchor constraintEqualToConstant:22],
     ]];
-    self.autoExitFullscreenBadge = autoExitBadge;
-    autoExit.hidden = !self.returnWebVideoOnEnd;
-    [self refreshAutoExitFullscreenControl];
+    self.keepFullscreenBadge = keepFullscreenBadge;
+    keepFullscreen.hidden = !self.returnWebVideoOnEnd;
+    [self refreshKeepFullscreenControl];
     self.audioTrackButton = audioTrack;
     self.subtitleTrackButton = subtitleTrack;
     NSArray<UIButton *> *mainButtons = @[previous, backPercent, back, restart, play, end, forward, forwardPercent, volumeDown, mute, volumeUp, next];
@@ -220,7 +220,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
         [button.widthAnchor constraintEqualToConstant:diameter].active = YES;
         [button.heightAnchor constraintEqualToConstant:diameter].active = YES;
     }
-    for (UIButton *button in @[audioTrack, subtitleTrack, autoExit]) {
+    for (UIButton *button in @[audioTrack, subtitleTrack, keepFullscreen]) {
         // A hidden arranged view needs zero width; let the stack collapse it.
         NSLayoutConstraint *width = [button.widthAnchor constraintEqualToConstant:68];
         width.priority = UILayoutPriorityDefaultHigh;
@@ -239,7 +239,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     volumeButtons.spacing = 10;
     volumeButtons.alignment = UIStackViewAlignmentCenter;
     [controls addSubview:volumeButtons];
-    UIStackView *trackButtons = [[UIStackView alloc] initWithArrangedSubviews:@[audioTrack, subtitleTrack, autoExit]];
+    UIStackView *trackButtons = [[UIStackView alloc] initWithArrangedSubviews:@[audioTrack, subtitleTrack, keepFullscreen]];
     trackButtons.translatesAutoresizingMaskIntoConstraints = NO;
     trackButtons.spacing = 10;
     trackButtons.alignment = UIStackViewAlignmentCenter;
@@ -541,7 +541,7 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     icon.tintColor = UIColor.whiteColor;
     icon.userInteractionEnabled = NO;
     [button addSubview:icon];
-    BOOL fullscreenToggle = [symbol isEqualToString:@"arrow.down.right.and.arrow.up.left"];
+    BOOL fullscreenToggle = [symbol isEqualToString:@"arrow.up.left.and.arrow.down.right"];
     CGFloat iconSize = fullscreenToggle ? 30 : 38 * scale;
     [NSLayoutConstraint activateConstraints:@[
         [icon.centerXAnchor constraintEqualToAnchor:button.centerXAnchor],
@@ -553,18 +553,20 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     return button;
 }
 
-- (void)refreshAutoExitFullscreenControl {
-    BOOL enabled = [[BrowserPreferencesStore new] automaticallyExitIframeFullscreenForURL:self.webPageURL];
-    self.autoExitFullscreenButton.selected = enabled;
-    self.autoExitFullscreenButton.accessibilityValue = enabled ? @"ON" : @"OFF";
-    BrowserTVConfigureToggleBadge(self.autoExitFullscreenBadge, enabled);
+- (void)refreshKeepFullscreenControl {
+    // Preserve existing site preferences: keeping fullscreen is the inverse
+    // presentation of the stored exit setting, not a change to playback.
+    BOOL enabled = ![[BrowserPreferencesStore new] automaticallyExitIframeFullscreenForURL:self.webPageURL];
+    self.keepFullscreenButton.selected = enabled;
+    self.keepFullscreenButton.accessibilityValue = enabled ? @"ON" : @"OFF";
+    BrowserTVConfigureToggleBadge(self.keepFullscreenBadge, enabled);
 }
 
-- (void)toggleAutoExitFullscreen {
+- (void)toggleKeepFullscreen {
     BrowserPreferencesStore *preferences = [BrowserPreferencesStore new];
     [preferences setAutomaticallyExitIframeFullscreen:![preferences automaticallyExitIframeFullscreenForURL:self.webPageURL]
                                               forURL:self.webPageURL];
-    [self refreshAutoExitFullscreenControl];
+    [self refreshKeepFullscreenControl];
     [self showControls];
 }
 
@@ -674,8 +676,8 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
         [coordinator addCoordinatedAnimations:^{
             view.backgroundColor = focused ? BrowserTVFocusedSurfaceColor() : UIColor.clearColor;
             UIImageView *icon = (UIImageView *)[view viewWithTag:kBrowserVLCControlIconTag];
-            icon.tintColor = view == self.autoExitFullscreenButton
-                ? BrowserTVToggleBadgeColor(self.autoExitFullscreenButton.selected)
+            icon.tintColor = view == self.keepFullscreenButton
+                ? BrowserTVToggleBadgeColor(self.keepFullscreenButton.selected)
                 : focused ? BrowserTVFocusedTextColor() : UIColor.whiteColor;
         } completion:nil];
     }

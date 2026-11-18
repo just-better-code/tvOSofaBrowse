@@ -1844,3 +1844,14 @@ observation too late; the successful runs kept the experiment enabled at documen
 start and deferred only active capture until fullscreen was established.
 The user's visible stand was not touched. tvOS/UIKit and native per-host
 preference persistence are not established by these Linux observations.
+
+### Present fullscreen retention as a positive feature
+
+The user requests **Keep fullscreen** rather than an exit-fullscreen control.
+Invert the displayed selection, badge and accessibility value: ON keeps website
+fullscreen after Next/completion, OFF exits it. Use outward arrows. Keep the
+existing per-host exit preference and invert only its UI presentation, preserving
+every saved site's playback behavior without migration. Default Keep fullscreen
+is OFF, equivalent to the existing default exit behavior. No capture, navigation
+or completion-path change. Consolidate in unreleased 2.22.0; no tests or native
+build were requested for this UI inversion.
