@@ -14,6 +14,23 @@ static inline UIColor *BrowserTVFocusedTextColor(void) {
     return [UIColor colorWithRed:0.29 green:0.25 blue:0.37 alpha:1.0];
 }
 
+// UIButtonTypeSystem owns its capsule/focus surface on modern tvOS. These
+// helpers are for system buttons, not custom UIControls, cards or ON/OFF badges.
+static inline BOOL BrowserTVUsesNativeButtonSurface(void) {
+    return NSClassFromString(@"UIGlassEffect") != Nil;
+}
+
+static inline UIColor *BrowserTVSystemButtonSurfaceColor(UIColor *legacyColor) {
+    return BrowserTVUsesNativeButtonSurface() ? UIColor.clearColor : legacyColor;
+}
+
+static inline void BrowserTVConfigureSystemButtonSurface(UIButton *button, UIColor *legacyColor, CGFloat legacyRadius) {
+    BOOL native = BrowserTVUsesNativeButtonSurface();
+    button.backgroundColor = native ? UIColor.clearColor : legacyColor;
+    button.layer.cornerRadius = native ? 0 : legacyRadius;
+    if (native) button.clipsToBounds = NO;
+}
+
 static inline UIColor *BrowserTVToggleBadgeColor(BOOL enabled) {
     return enabled ? [UIColor colorWithRed:0.20 green:0.72 blue:0.42 alpha:0.95]
                    : [UIColor colorWithWhite:0.42 alpha:0.65];
