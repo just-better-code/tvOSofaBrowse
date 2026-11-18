@@ -54,8 +54,12 @@ FOUNDATION_EXPORT NSString * const BrowserAdBlockSourceStatusDidChangeNotificati
 @property (nonatomic, readonly) NSUInteger javaScriptGeneration;
 - (void)invalidatePendingJavaScript;
 @property (nonatomic, readonly) BOOL pageFullscreenActive;
+@property (nonatomic, readonly) BOOL fullscreenMediaSuspended;
 - (void)evaluateJavaScript:(NSString *)script
         completionHandler:(void (^ _Nullable)(NSString * _Nullable result, NSError * _Nullable error))completion;
+// Evaluate only in the WKFrameInfo that supplied the video offer; never fall back to top.
+- (void)evaluateVideoJavaScript:(NSString *)script frame:(nullable id)frame
+    completionHandler:(void (^)(NSString * _Nullable result, NSError * _Nullable error))completion;
 - (NSString * _Nonnull)runtimeMediaPreferenceReport;
 - (void)setUserAgent:(NSString * _Nullable)userAgent;
 - (void)pauseAllMediaPlayback;
@@ -63,6 +67,9 @@ FOUNDATION_EXPORT NSString * const BrowserAdBlockSourceStatusDidChangeNotificati
 - (void)resetSitePlaybackPreferences;
 // YES means the system route was attempted, not that the player switched tracks.
 - (BOOL)sendSystemMediaTrackCommand:(BOOL)nextTrack;
+// YES means no command was submitted or the system reported no actionable item.
+- (void)sendSystemMediaTrackCommand:(BOOL)nextTrack
+              unavailableCompletion:(void (^)(BOOL unavailable))completion;
 - (void)captureSnapshotWithCompletion:(void (^)(UIImage * _Nullable snapshot))completion;
 - (void)captureSnapshotInRect:(CGRect)rect
                        width:(CGFloat)width
