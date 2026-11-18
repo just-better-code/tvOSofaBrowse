@@ -1119,3 +1119,23 @@ adapter. Resolve the control inside the accepted video's own engine placement
 and recheck the original Starlight source. The upstream button preserves
 `fetch_next`; `engine.next()` alone is not equivalent for an unloaded neighbor.
 Do not add a VLC Previous adapter or call the Teleportal season catalog.
+
+### Open: Keep fullscreen across UAKino iframe navigation
+
+The UAKino completion check initially failed before playback because its current
+playlist loader only activates when `.playlists-ajax` intersects the viewport.
+Scrolling a surrounding `.players-section` is insufficient. The live host loader
+then uses `ukClsSetFrame` to change the existing `#playerfr` source; the parent
+page consumes the player's genuine `finish` message, clicks the adjacent episode
+in the same playlist group and schedules its own play command.
+
+Actual "Cunk on Cinema" and "Naruto" first-to-second episode transitions succeed
+with real Linux VLC EOF, production bridge/adblock and both completion-exit preferences.
+With Keep fullscreen ON, the next episode still decodes, but fullscreen is lost:
+the outgoing leaf's `pagehide` sends the ordinary fullscreen exit up the frame
+chain. Thus auto-advance is not blocked, but retention across a leaf-document
+replacement remains a real defect. Do not treat the UASerials in-document
+playlist success as coverage of this case. A fix must preserve the bound visible
+frame's fullscreen shell only for the intended transition, without globally
+disabling pagehide cleanup, retaining stale requests, or auto-expanding unrelated
+navigation. No retention fix is included in this diagnostic stage.

@@ -1855,3 +1855,38 @@ every saved site's playback behavior without migration. Default Keep fullscreen
 is OFF, equivalent to the existing default exit behavior. No capture, navigation
 or completion-path change. Consolidate in unreleased 2.22.0; no tests or native
 build were requested for this UI inversion.
+
+### Complete the actual UAKino fullscreen/EOF check
+
+The user rejects the earlier load-stage failure as insufficient investigation
+and requests an actual UAKino test. Inspect the live host loader: its
+IntersectionObserver activates `.playlists-ajax` with a 50 px root margin and
+only then creates `#playerfr`. Scroll that precise block, not a surrounding
+section. The current outer page's `finish` consumer selects the next LI in the
+same group and schedules the site's own play command after three seconds;
+it does not require leaving fullscreen.
+
+With production scripts, adblock, ephemeral Linux WebKit and actual Linux
+libVLC, "Cunk on Cinema" advances episode 1 (810.16 s) to 2 (950.52 s)
+with both exit modes (`17-42-49.438Z-47f5e15b`,
+`17-42-49.451Z-30fd9aec`). "Naruto" advances episode 1 (1417.05 s) to
+2 (1410.04 s) after starting normal playback before entering fullscreen
+(`17-44-17.070Z-4acb17f2`, `17-44-17.085Z-d51cf74e`). The previous Naruto
+driver's fullscreen-before-start sequence stalled at 0.1 s; no app playback
+change was needed to complete the check.
+
+Both Naruto controls observed actual VLC EOF, a trusted HTML ended event and
+the website's `finish` message, then active episode index 0 → 1, a changed source
+and displayed output from the new Linux VLC input. Host responses were
+`accepted, ended, accepted` only: no manual Next command was submitted.
+Keeping fullscreen therefore does not prevent website auto-advance.
+
+However, **Keep fullscreen ON is not retained across the UAKino iframe
+navigation**. In that control, ended and finish occur while fullscreen is true,
+but the replacement episode starts with it false. The production bridge's
+pagehide handler sends fullscreen exit up the parent chain when the outgoing
+leaf navigates. The same retention failure occurred on both tested series.
+Record this as an open app defect, not a passing fullscreen test; see the
+[transition checkpoint](plans/automatic-web-video-vlc.md#open-keep-fullscreen-across-uakino-iframe-navigation).
+No application code changed, no native build or physical TV verification was
+performed, and the user's visible stand was not touched.
