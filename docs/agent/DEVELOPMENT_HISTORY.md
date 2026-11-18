@@ -2070,3 +2070,47 @@ ordinary-PlayerJS adapter follow-up, and keep capture fixes separate. No blind
 rollback, site-specific workaround, new capture timing or device action has
 been performed. Resume capture diagnosis from the concrete checkpoint in the
 [unification plan](plans/unified-playback.md#open-native-capture-regression-and-next-task).
+
+### Reproduce the existing-tab PlayerJS capture gap before requesting TV logs
+
+The user asks to exhaust the stand first, then suggests that the failing video
+was already loaded and paused in an existing tab. Pin detached source worktrees
+for pre-unification `90003cb` and Build 31 `7e7f0ed`. Confirm that published Build
+31's merge target `33cbdc23a6ac54267a7030ebd191cde9ae302072` has identical app and
+stand source files to the tested head. Use each pinned bridge/model and record
+hashes with real website playback, production adblock and Linux libVLC.
+
+The fresh-page TV symptom was not reproduced: Teleportal captures on both
+revisions and Build 31 passes inline, fullscreen and modeled Home/manual-Play
+recovery. UAKino has an intermittent HTML-clock stall at 0.1 s, including in
+plain WebKit with no app media bridge; do not mislabel it as the user's advancing
+website/no-VLC symptom. The visible desktop CLI launch succeeded, but its
+unlabeled RC replies misassociated time and duration, so rely on worker decoder
+stats rather than that run's clock for playback evidence.
+
+The **warm tab with capture enabled after player creation** does reproduce the
+reported behavior on actual UAKino: the same paused video/document survives the
+tab switch, then Play advances 0.334 → 18.325 s with zero offers and no VLC
+(`19-17-39.150Z-131b3130`). Pre-unification code also reproduces it
+(`19-20-23.024Z-9eab4ade`). Current `97fb98d` captures the same retained video
+without reload and Linux VLC displays output (`19-17-57.234Z-c39ef28d`).
+
+The constructor registry used to ignore private PlayerJS instances while
+experimental capture was OFF. Enabling it later wrapped only future
+constructors, leaving the already-playing Blob video unbound. The independent
+registration added in the unification follow-up already fixes this case;
+capture permissions, source validation and the website's own player remain
+unchanged. Add `scenarios/warm-playerjs.mjs`: actual Blob/HTTP media and real
+Linux libVLC with a controlled PlayerJS capability and modeled tab ownership.
+It fails against Build 31 after OFF-time construction, passes the Build-31
+always-ON control, and passes current OFF → ON without source/video replacement.
+Exact run IDs and scope limitations are in the
+[plan checkpoint](plans/unified-playback.md#reproduced-previously-created-playerjs-instance-missing-after-opt-in).
+
+Actual Teleportal existing-tab controls capture with initial VLC ON and OFF;
+this specific PlayerJS diagnosis does not establish the cause of every native
+TV failure. No TV logs or physical-device work were required for this
+reproduction. Build 33.1 compiled and passed IPA verification, but publication
+failed because GitHub's comparison API returned HTTP500. The later read-only
+comparison succeeded with HTTP200; do not confuse that infrastructure failure
+with an application build failure.

@@ -45,6 +45,63 @@ The user then directs completion of the unification before capture fixes.
 Finish and commit the adapter opt-out follow-up, then stop architecture work
 and handle the capture report as a separate fix stage.
 
+### Exact-revision stand comparison
+
+At the user's request, exhaust stand reproduction before requesting TV logs.
+Private detached source worktrees pin pre-unification `90003cb` and Build 31
+`7e7f0ed`; each run uses that revision's production bridge, host model and
+recorded source hashes, with the same adblock lists and explicit Firefox Linux
+UA. Do not call this Objective-C/TVVLCKit execution.
+
+Actual Teleportal inline capture passes on both revisions; Build 31 also passes
+fullscreen and modeled Home/Back/manual-Play recovery with decoded Linux VLC
+frames. UAKino passes on the earlier revision and on current source. Build 31
+has one no-offer failure with the HTML clock stuck at 0.1 s, but succeeds on
+initial capture and Home replay in another control. Plain WebKit with adblock
+and no media bridge also gets stuck at 0.1 s. That is not the reported TV
+symptom of continuing website playback without capture, and is not proof of
+a Build-31 bridge regression.
+
+Private driver: `.data/webkit-testbench/differential-capture.mjs`. Revisions,
+hashes, real media state, offers, replies and decoder stats are saved per run.
+The visible desktop CLI run confirms submission/launch but its unlabeled RC
+time/length replies were misassociated; do not use that run as clock/decode
+proof. Worker-libVLC runs provide the actual decoded/displayed-frame evidence.
+No app-source changes or speculative fix are included in this comparison.
+
+### Reproduced: previously created PlayerJS instance missing after opt-in
+
+The user supplies the missing precondition: returning to a tab that already
+contained paused video. On actual UAKino with Build 31, load/create the player
+while capture is OFF, pause the main episode, switch tabs, enable VLC and return.
+Manual Play advances the same video from 0.334 to 18.325 s without an offer
+(`19-17-39.150Z-131b3130`). Pre-unification source reproduces the same defect
+(`19-20-23.024Z-9eab4ade`); it is not evidence that the refactor introduced it.
+On source `97fb98d`, the identical no-reload scenario captures the same loaded
+video and Linux VLC displays decoded output (`19-17-57.234Z-c39ef28d`).
+
+The bounded PlayerJS constructor registry must observe instances independently
+of opt-in; actual capture and Blob/HLS extraction remain opt-in. This fix is
+already part of `97fb98d`, not another change to capture timing or website
+playback. The controlled Blob/real-libVLC regression fails on Build 31 when the
+instance was created with capture OFF (`19-23-05.078Z-aa5d0522`), passes its ON
+control (`19-28-43.205Z-15b16810`), and passes the OFF → ON case on current source
+(`19-28-43.146Z-9e180c62`). An initial current fixture failed only its assertion
+that localhost and 127.0.0.1 were equal; correct that expected leaf origin, not
+the application code.
+
+Teleportal's paused existing-video case captures on Build 31 with either
+initial toggle state (`19-17-39.149Z-77b624f7`,
+`19-17-39.148Z-7fcb3046`). Do not claim this PlayerJS fix explains every reported
+TV failure. UAKino always-ON actual-site controls that stalled at HTML 0.1 s
+never reached the warm-tab test and remain separate from the reproduced gap.
+
+Build 33.1 compiled/verified successfully, but its publisher failed on GitHub's
+comparison API HTTP 500; it was not advertised as a successful delivery. The
+same comparison endpoint subsequently returns HTTP 200. Deliver the verified
+source with the regression/evidence checkpoint; native confirmation of the
+reported TV scenario remains user-side.
+
 Compare stage-1 `7e7f0ed` with pre-unification `90003cb`, especially native
 offer validation, evaluator callbacks, playback versus generic generations,
 configuration/foreground permission and accepted metadata URL updates. These

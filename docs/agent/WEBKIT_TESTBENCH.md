@@ -167,6 +167,12 @@ unavailable Previous with no second action, and covers fullscreen keep/exit.
 player boundary or thrown action, source replacement and iframe detachment,
 ambiguous modeled system submission, and loss of foreground during track
 acknowledgement. MediaRemote results and foreground transitions remain modeled.
+`scenarios/warm-playerjs.mjs` constructs a controlled private PlayerJS capability
+while capture is OFF, plays real Blob-backed video, pauses it, switches the
+modeled active tab and enables capture before returning to the same document.
+It requires actual Linux VLC output without replacing the video or reloading.
+`WARM_CAPTURE_START=on` runs the constructor-observed control. This fixture
+isolates instance registration; use actual-site evidence for website behavior.
 `lifecycle.mjs` is a compatibility alias. The interruption scenario uses an explicit
 400 ms pre-acceptance delay to check cancellation/new Play and changed-source
 rejection. The timeout scenario stalls the worker's actual HTTP media request and
