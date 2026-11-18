@@ -2,6 +2,33 @@
 
 Published packages are available for [2.21.9](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.9), [2.21.8](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.8), [2.21.6](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.6), [2.21.5](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.5), [2.21.4](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.4), [2.21.3](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.3), [2.21.2](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.2), [2.21.1](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.21.1) and [2.20.4](https://github.com/just-better-code/tvOSofaBrowse/releases/tag/v2.20.4); other entries reconstruct development history and do not represent separately published releases or tags.
 
+## 2.22.0 - 2026-11-15
+
+### Changed
+
+- Switch experimental VLC web episodes through PlayerJS or Starlight's Next control, then system media controls, with real website completion as a Next-only fallback ([Playback controls](docs/USER_GUIDE.md)).
+- Move the experimental web VLC toggle directly into the main Settings tile formerly used by Magnifier, retaining the magnifier remote shortcut ([Main menu](docs/USER_GUIDE.md#main-menu)).
+- Replace VLC track labels with contextual Audio and Subtitles icons and add a per-site Keep fullscreen toggle for episode transitions ([Playback controls](docs/USER_GUIDE.md)).
+- Show the containing page's title beside the original monochrome cone icon in the shared VLC player header, retaining file names for torrents ([Playback controls](docs/USER_GUIDE.md)).
+- Show the installed build number and available CI revision beside the application version so test updates can be identified in the menu ([Main menu](docs/USER_GUIDE.md#main-menu)).
+- Distinguish develop installations with a purple compass icon and a BETA badge ([Develop setup](docs/DEPLOYMENT.md#automatic-test-app-alongside-stable)).
+
+### Added
+
+- Open eligible web video in shared VLC after 0.1 seconds of website playback through an opt-in Debug/develop toggle, supporting direct HTTP(S) and bound Starlight/PlayerJS HLS sources with visible buffering ([Playback controls](docs/USER_GUIDE.md), [Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
+- Provide a reusable WebKit stand with production scripts, adblock, actual Linux libVLC and replayable capture/return checks ([Stand runbook](docs/agent/WEBKIT_TESTBENCH.md)).
+
+### Fixed
+
+- Let visible website video keep playing when experimental VLC capture is temporarily inactive ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
+- Resume the same foreground web video on the site if VLC cannot confirm the handoff after pausing it, without immediately retrying the transfer ([Playback controls](docs/USER_GUIDE.md)).
+- Retry unanswered automatic VLC offers after returning from Home so a new Play of the same video can capture again ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
+- Start web playback at the website position once, avoiding a second seek based on VLC's initially unset time ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
+- Keep failed VLC starts visible for Back/retry instead of treating zero decoded output as episode completion ([Playback controls](docs/USER_GUIDE.md)).
+- Pause the bound website source before opening VLC, return mid-video closes to its position paused, and allow a new Play to capture that same source again ([Playback controls](docs/USER_GUIDE.md)).
+- Restrict automatic capture to foreground visible video with real playback progress, preserve iframe source acknowledgements and HTTP context, and reject unrelated or unsupported sources ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
+- Prioritize Back dismissal of visible VLC over website fullscreen and retain accepted playback across temporary system interruptions ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
+
 ## 2.21.9 - 2026-11-07
 
 ### Changed
