@@ -1812,3 +1812,35 @@ The prior navigation revision `ed40974` failed Apple TV CI run 44356855134
 (Build 24.1): a block invocation in ViewController ended with `}];` instead of
 `});`. Commit `d4ab217` corrects that syntax independently. Build 24.1 was not
 published. This does not change the unconfirmed Build 23.1 capture report.
+
+### Natural EOF with website fullscreen retained
+
+The user asks whether keeping fullscreen interferes with website-owned automatic
+episode changes, and whether the app explicitly sends Next at completion.
+The production `ended` response is distinct from manual Next: return the bound
+HTML video to duration minus 0.1 s and play it, without a player track API call.
+The OFF preference omits our own fullscreen exit; it does not block website
+calls to exit fullscreen.
+
+Separate ephemeral WebKit/app/adblock/Linux-libVLC sessions on actual UASerials
+confirmed actual VLC EOF, a trusted HTML ended event, website playlist selection
+`1-1 → 1-2`, a changed media source and displayed output from the new VLC input.
+OFF retained fullscreen through the website ended event and new capture
+(`17-33-16.676Z-1ddcd6a5`); ON exited it before website completion
+(`17-33-16.658Z-6e7dba23`). Native response order in both cases was only
+`accepted, ended, accepted`; no manual Next/Previous response was sent.
+The website's reported PlayerJS `autonext` value was 0 in both successful runs:
+that one setting is not sufficient to infer the entire site's completion
+behavior.
+An additional OFF control explicitly setting the site's own documented
+`autonext` option to 1 also passed the same genuine EOF, retained-fullscreen,
+next-source decode path (`17-34-00.105Z-7f4120f3`).
+
+UAKino did not reach this acceptance gate: the current page did not expose the
+expected visible `#playerfr` in the stand. Do not infer either interference or
+working fullscreen auto-advance from those load-stage failures. Initial
+UASerials drivers also failed before EOF because they enabled constructor
+observation too late; the successful runs kept the experiment enabled at document
+start and deferred only active capture until fullscreen was established.
+The user's visible stand was not touched. tvOS/UIKit and native per-host
+preference persistence are not established by these Linux observations.
