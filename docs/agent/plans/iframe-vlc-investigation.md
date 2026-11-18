@@ -2,6 +2,14 @@
 
 Date: 2026-10-11. Final user decision: keep iframe playback in the website player and stop repeat playback tests. The iframe-to-VLC experiment is disabled in 2.21.3. Do not resume it without a new request.
 
+Follow-up request, 2026-11-10: investigate automatic stream discovery as the
+primary feature, with working episode transitions on the other saved examples.
+The selected deliverable is a detailed integration plan plus an isolated Debug
+compressor prototype, not re-enabling iframe takeover now. See
+[the new investigation](automatic-web-video-vlc.md) for A/C/D owner protocols,
+new-document reattachment, fallback and pending evidence. The failed runtime
+results and unbuilt-draft status below remain unchanged.
+
 ## Confirmed observations
 
 - An all-frame WKUserScript can read a direct HTTP(S) URL from HTMLVideoElement.currentSrc/src or a source child inside its own cross-origin iframe. Its parent does not need direct DOM access. This is element-based discovery, not a universal stream extractor; Blob/MSE/DRM remain outside this path.

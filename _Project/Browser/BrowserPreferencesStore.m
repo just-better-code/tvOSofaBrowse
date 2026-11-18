@@ -11,6 +11,7 @@ static NSString * const kDontShowHintsOnLaunchDefaultsKey = @"DontShowHintsOnLau
 static NSString * const kDebugEnabledDefaultsKey = @"BrowserDebugEnabled";
 static NSString * const kDebugLastLogDefaultsKey = @"BrowserDebugLastLog";
 static NSString * const kDebugRecentLogsDefaultsKey = @"BrowserDebugRecentLogs";
+static NSString * const kExitIframeFullscreenByHostDefaultsKey = @"AutomaticallyExitIframeFullscreenByHost";
 static NSString * const kHomepageDefaultsKey = @"homepage";
 
 static NSUInteger const kDefaultTextFontSize = 100;
@@ -31,6 +32,18 @@ NSNotificationName const BrowserDebugEnabledDidChangeNotification = @"BrowserDeb
 
 + (BOOL)websiteLoggingEnabled {
     return self.debugEnabled;
+}
+
+// The Release develop IPA has a separate identity; ordinary signed builds stay unchanged.
++ (BOOL)iframeVLCExperimentAvailable {
+#if DEBUG
+    return YES;
+#else
+    return [NSBundle.mainBundle.infoDictionary[@"CFBundleDisplayName"] isEqual:@"tvOSofaBrowse Test"];
+#endif
+}
++ (BOOL)iframeVLCExperimentEnabled {
+    return self.iframeVLCExperimentAvailable && [NSUserDefaults.standardUserDefaults boolForKey:@"BrowserIframeVLCExperiment"];
 }
 
 + (BOOL)debugEnabled {
@@ -150,10 +163,26 @@ NSNotificationName const BrowserDebugEnabledDidChangeNotification = @"BrowserDeb
     [[self defaults] setObject:values forKey:@"PlayerVolumeByHost"];
 }
 
+- (BOOL)automaticallyExitIframeFullscreenForURL:(NSURL *)URL {
+    NSString *host = [self pageZoomHostForURL:URL];
+    id value = host ? [[self defaults] dictionaryForKey:kExitIframeFullscreenByHostDefaultsKey][host] : nil;
+    return ![value isKindOfClass:NSNumber.class] || [value boolValue];
+}
+
+- (void)setAutomaticallyExitIframeFullscreen:(BOOL)enabled forURL:(NSURL *)URL {
+    NSString *host = [self pageZoomHostForURL:URL];
+    if (!host) return;
+    NSMutableDictionary *values = [[[self defaults] dictionaryForKey:kExitIframeFullscreenByHostDefaultsKey] mutableCopy]
+        ?: [NSMutableDictionary dictionary];
+    if (enabled) [values removeObjectForKey:host];
+    else values[host] = @NO;
+    [[self defaults] setObject:values forKey:kExitIframeFullscreenByHostDefaultsKey];
+}
+
 - (void)clearSitePreferencesForURL:(NSURL *)URL {
     NSString *host = URL ? [self pageZoomHostForURL:URL] : nil;
     if (URL && !host) return;
-    for (NSString *key in @[kPageZoomByHostDefaultsKey, @"PlayerVolumeByHost"]) {
+    for (NSString *key in @[kPageZoomByHostDefaultsKey, @"PlayerVolumeByHost", kExitIframeFullscreenByHostDefaultsKey]) {
         if (!URL) { [[self defaults] removeObjectForKey:key]; continue; }
         NSMutableDictionary *values = [[[self defaults] dictionaryForKey:key] mutableCopy];
         for (NSString *savedHost in values.allKeys) {
@@ -211,7 +240,7 @@ void BrowserDebugLog(NSString *format, ...) {
     va_end(arguments);
     if (![message hasPrefix:@"[TorrentState]"] && ![message hasPrefix:@"[TorrentVLC]"] &&
         ![message hasPrefix:@"[TorrentHTTP]"] && ![message hasPrefix:@"[BackgroundTask]"] &&
-        ![message hasPrefix:@"[BackgroundProbe]"]) return;
+        ![message hasPrefix:@"[BackgroundProbe]"] && ![message hasPrefix:@"[WebVLC]"]) return;
     if ([message hasPrefix:@"[TorrentState] tick "]) {
         NSLog(@"%@", message);
         return;
