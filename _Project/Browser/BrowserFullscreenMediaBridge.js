@@ -405,7 +405,21 @@ function playerJSTrackRoute(request, direction) {
             player.api('play');
     }};
 }
-var mediaVLCTrackAdapters = [playerJSTrackRoute];
+function starlightNextTrackRoute(request, direction) {
+    if (direction !== 'next' || !request.engineSource) return null;
+    var engine = starlightVideoEngine(request.video);
+    if (!engine || engine.source !== request.engineSource) return null;
+    var container = engine.placement && engine.placement.container;
+    if (!container || !container.contains(request.video)) return null;
+    // The site's SkipNext control uses its resolved fetch_next source.
+    // Calling engine.next() directly would skip that step at the end of the loaded list.
+    var button = Array.prototype.find.call(container.querySelectorAll('.adt-kCdJnjy'), function(item) {
+        return item.isConnected && !item.hidden && !item.disabled &&
+            item.getAttribute('aria-disabled') !== 'true' && getComputedStyle(item).display !== 'none';
+    });
+    return button ? {run:function() { button.click(); }} : null;
+}
+var mediaVLCTrackAdapters = [starlightNextTrackRoute, playerJSTrackRoute];
 function routeVLCTrackCommand(request, direction) {
     for (var i = 0; i < mediaVLCTrackAdapters.length; i++) {
         var route = mediaVLCTrackAdapters[i](request, direction);

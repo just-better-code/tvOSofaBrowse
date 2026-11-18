@@ -1111,3 +1111,11 @@ not to rush to revert it. Leave the capture changes in place; this navigation
 stage does not change capture eligibility, startup timing, or its original
 visibility rule. Do not conflate a successful Linux navigation check with a
 fix for the 23.1 report.
+
+### Starlight Next only
+
+At the user's request, register Starlight's existing SkipNext control as a Next
+adapter. Resolve the control inside the accepted video's own engine placement
+and recheck the original Starlight source. The upstream button preserves
+`fetch_next`; `engine.next()` alone is not equivalent for an unloaded neighbor.
+Do not add a VLC Previous adapter or call the Teleportal season catalog.

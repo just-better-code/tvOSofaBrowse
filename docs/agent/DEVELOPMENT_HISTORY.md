@@ -1790,3 +1790,25 @@ requested rollback. Retain `c30aef7`; this stage does not change capture eligibi
 or claim that regression fixed. UIKit, actual tvOS MediaRemote routing, and
 native persistence/focus are not verified by the Linux stand. Keep the
 consolidated development version 2.22.0.
+
+### Starlight Next adapter only
+
+At the user's request, connect Starlight Next to the same ordered VLC adapter
+registry without implementing Previous. Reuse the recognized SkipNext button,
+bound to the accepted video's `engine.placement.container` and original source.
+The retained upstream core's SkipNext control inserts its `fetch_next` result
+before calling next; calling the lower-level engine method alone bypasses that.
+Do not add catalog fetching or source rewriting.
+
+Actual public Teleportal passed `92 → 93 → 94` with production scripts, adblock,
+fresh offers and displayed Linux libVLC output for all three episodes
+(`17-23-17.363Z-5469ea04`). Both track acknowledgements were `submitted`; zero
+modeled system media commands were used. An earlier driver failed on a transient
+empty frame URL before checking playback; correct that driver rather than
+changing app recognition. A separate actual-page close/replay/Next run passed
+(`17-21-57.690Z-485d685c`). No UIKit or physical TV interaction was performed.
+
+The prior navigation revision `ed40974` failed Apple TV CI run 44356855134
+(Build 24.1): a block invocation in ViewController ended with `}];` instead of
+`});`. Commit `d4ab217` corrects that syntax independently. Build 24.1 was not
+published. This does not change the unconfirmed Build 23.1 capture report.
