@@ -19,6 +19,7 @@ Published packages are available for [2.21.9](https://github.com/just-better-cod
 
 ### Fixed
 
+- Resume the same foreground web video on the site if VLC cannot confirm the handoff after pausing it, without immediately retrying the transfer ([Playback controls](docs/USER_GUIDE.md)).
 - Retry unanswered automatic VLC offers after returning from Home so a new Play of the same video can capture again ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
 - Start web playback at the website position once, avoiding a second seek based on VLC's initially unset time ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
 - Keep failed VLC starts visible for Back/retry instead of treating zero decoded output as episode completion ([Playback controls](docs/USER_GUIDE.md)).

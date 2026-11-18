@@ -113,13 +113,16 @@ export class NativeMediaHost {
   }catch(error){
    this.event('handoff-failed',{reason:error.message});
    if(this.session===session&&this.presented){this.phase='error';this.event('playback-error',{reason:error.message})}
-   else if(this.session===session){await this.cancel(true)}else{await session.decoder?.stop();await this.response(session,'rejected').catch(()=>{})}
+   else if(this.session===session){
+    const action=await this.isActive(session)?(this.phase==='accepting'?'aborted':'rejected'):'cancelled';
+    await this.cancel(false,action);
+   }else{await session.decoder?.stop();await this.response(session,'rejected').catch(()=>{})}
   }
  }
- async cancel(resume=true){
+ async cancel(resume=true,action=resume?'rejected':'cancelled'){
   const session=this.session;if(!session||this.presented)return;
   this.session=null;this.decoder=null;this.phase='idle';await session.decoder?.stop();
-  await this.response(session,resume?'rejected':'cancelled').catch(()=>{});this.event('preparation-cancelled',{resume});
+  await this.response(session,action).catch(()=>{});this.event('preparation-cancelled',{resume:action==='aborted',action});
  }
  async playPause(){
   if(!this.presented){if(this.session)await this.cancel(false);return}

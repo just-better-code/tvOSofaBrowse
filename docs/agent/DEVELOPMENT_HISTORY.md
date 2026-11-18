@@ -1694,3 +1694,26 @@ clock updates also occur without shaping and do not establish the TV cause.
 The user explicitly ends work for today. Save the resumable checkpoint in
 [the experiment plan](plans/automatic-web-video-vlc.md) and stop further work.
 This is a progress-only update; application code and version are unchanged.
+
+## 2026-11-18 — UASerials pauses before VLC opens
+
+The user clarifies that UASerials briefly plays on the site, then pauses and no
+VLC appears. This is a startup failure, not the separate tenth-second VLC hiccup.
+The earlier orphan-offer fix handled missing replies before an accepted pause.
+Here, discard a real leaf pause acknowledgement in the modeled host before
+presentation: production WebKit leaves the 1429.36 s UASerials episode paused at
+0.194 s (`16-35-53.147Z-c7f800b5`). The unmodified healthy control opens LibVLC
+and decodes the episode (`16-36-04.339Z-ecb495f9`).
+
+Separate active handoff abort from inactive/stale cancellation. On abort, release
+the paused leaf and resume only the same visible, still-current source, once;
+suppress immediate recapture while it plays. Manual pause/Play can retry. The
+same fault after the change resumes website playback (0.262 to 1.749 s, just one
+offer), then manual pause/Play opens actual Linux libVLC with decoded and displayed
+frames (`16-36-37.062Z-df05a1f6`). Keep the physical TV cause unconfirmed; the
+lost host acknowledgement was injected, and UIKit is modeled. Native debug
+markers distinguish submit failure, missing acknowledgement, cancellation and
+UIKit presentation. Keep both marketing versions at the consolidated 2.22.0.
+The stand's Home interruption (`16-36-45.595Z-805dd30d`) and canonical capture,
+paused close, replay and real Next/EOF checks (`16-36-47.217Z-6fcf5e39`) also
+passed with actual Linux libVLC.

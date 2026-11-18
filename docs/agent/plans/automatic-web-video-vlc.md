@@ -1026,3 +1026,21 @@ Preserve immediate fullscreen with visible buffering, the0.1s eligibility thresh
 source/HTTP context and the single real-EOF mechanism. No additional buffering gate
 or loader stop/restart behavior has been implemented. Do not resume investigations,
 tests, builds or delivery until the user resumes work.
+
+## 2026-11-18 — Resume work on startup, separately from the tenth-second hiccup
+
+The latest UASerials report specifies a brief website playback, then pause with
+no visible VLC. Prioritize this earlier failure. The release-before-presentation
+path had no website rollback after a successful leaf pause: discard the pause
+acknowledgement in the stand host to reproduce it on actual UASerials.
+
+For an active failed handoff, deliver an explicit `aborted` response. The leaf
+releases its request and tries to resume only the previously playing, still-current
+visible source, without immediately offering it again. A later manual pause/Play
+can retry. Foreground loss, navigation and native player close retain their
+existing distinct behavior. See the [development history](../DEVELOPMENT_HISTORY.md#2026-11-18--uaserials-pauses-before-vlc-opens)
+for live before/after evidence. If the symptom persists in a build with this
+change, distinguish `acceptSubmissionFailed`, `pauseAckMissing`, `handoffCancelled`
+and `presenting` without `presented` before changing another part of the flow.
+The stand does not confirm which path the TV took; the tenth-second VLC hiccup
+remains separate and unresolved.

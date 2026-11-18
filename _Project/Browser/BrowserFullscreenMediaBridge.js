@@ -352,7 +352,7 @@ document.addEventListener('pause', function(event) {
     var video = event.target;
     if (!video || video.tagName !== 'VIDEO') return;
     stopVLCWatch(video);
-    if (!ownsVLCVideo(video)) mediaVLCAutoAttempts.delete(video);
+    if (video.paused && !ownsVLCVideo(video)) mediaVLCAutoAttempts.delete(video);
 }, true);
 document.addEventListener('ended', function(event) { if (event.target && event.target.tagName === 'VIDEO') stopVLCWatch(event.target); }, true);
 document.addEventListener('visibilitychange', function() {
@@ -384,7 +384,7 @@ window.__browserTVVLCRequestIsCurrent = function(id) {
 };
 window.__browserTVVLCResponse = function(id, action, time, volume, muted) {
     var request = mediaVLCRequests[id];
-    if (!request || ['accepted','closed','ended','rejected','cancelled','deferred'].indexOf(action) < 0) return false;
+    if (!request || ['accepted','closed','ended','rejected','cancelled','deferred','aborted'].indexOf(action) < 0) return false;
     if (action === 'accepted' && !window.__browserTVVLCRequestIsCurrent(id)) return false;
     if (request.frame) {
         if (action === 'accepted') request.handoff = {pending:true};
@@ -397,10 +397,28 @@ window.__browserTVVLCResponse = function(id, action, time, volume, muted) {
     if (action === 'deferred') mediaVLCAutoAttempts.delete(video);
     if (action === 'accepted') {
         request.accepted = true;
+        request.resumeOnAbort = request.automatic && !video.paused;
         stopVLCWatch(video);
         video.pause();
         request.handoff = {accepted:true, time:window.__browserTVVLCRequestTime(id)};
         if (window === window.top && !request.automatic) window.__browserTVExitFullscreen();
+        return true;
+    }
+    if (action === 'aborted') {
+        delete mediaVLCRequests[id];
+        if (request.resumeOnAbort && video.paused && canResumeAbortedVLCRequest(request)) {
+            // Keep this attempt suppressed while the site plays. A later manual
+            // pause/Play may retry VLC without bouncing straight into another handoff.
+            var attempt = {url:request.url, engineSource:request.engineSource, playlistID:request.playlistID};
+            mediaVLCAutoAttempts.set(video, attempt);
+            var allowRetry = function() {
+                if (mediaVLCAutoAttempts.get(video) === attempt) mediaVLCAutoAttempts.delete(video);
+            };
+            try {
+                var playback = video.play();
+                if (playback && playback.catch) playback.catch(allowRetry);
+            } catch (error) { allowRetry(); }
+        } else if (video.paused && !ownsVLCVideo(video)) mediaVLCAutoAttempts.delete(video);
         return true;
     }
     if ((action === 'closed' || action === 'ended') && request.accepted && vlcRequestSourceIsCurrent(request)) {
@@ -425,6 +443,12 @@ window.__browserTVVLCResponse = function(id, action, time, volume, muted) {
     delete mediaVLCRequests[id];
     return true;
 };
+function canResumeAbortedVLCRequest(request) {
+    var video = request.video;
+    return mediaVLCIframeCapture && mediaVLCCaptureActive && mediaVLCFrameVisible &&
+        document.visibilityState !== 'hidden' && !video.ended && !video.error &&
+        visibleVLCCandidate(video) && vlcRequestSourceIsCurrent(request) && !ownsVLCVideo(video);
+}
 // Native always talks to the main document. Replies follow the selected frame
 // chain and acceptance is acknowledged only after the original video is paused.
 window.__browserTVVLCHandoffResult = function(id) {

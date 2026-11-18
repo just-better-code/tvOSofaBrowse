@@ -1021,18 +1021,28 @@ static UIColor *kTextColor(void) {
             BOOL (^stillActive)(void) = ^BOOL {
                 typeof(self) host = weakSelf;
                 BrowserWebView *target = weakWebView;
-                return host && target && target == host.webview && target.documentGeneration == generation &&
+                return host && target && target.window && host.viewIfLoaded.window &&
+                    target == host.webview && target.documentGeneration == generation &&
                     offer == host.webVideoOfferSerial && !host.presentedViewController && !host.tabOverviewController.visible &&
                     UIApplication.sharedApplication.applicationState == UIApplicationStateActive && BrowserPreferencesStore.iframeVLCExperimentEnabled;
             };
             // Pause the bound source once; buffer visibly in the presented player.
+            if (!stillActive()) { respond(@"cancelled", 0, 0, NO); return; }
             NSString *acceptScript = [NSString stringWithFormat:@"window.__browserTVVLCResponse && window.__browserTVVLCResponse(%@[0],'accepted',0,0,false)", sessionJSON];
             [view evaluateJavaScript:acceptScript completionHandler:^(NSString *submitted, NSError *submitError) {
-                if (submitError || ![submitted boolValue]) { respond(@"rejected", 0, 0, NO); return; }
+                if (submitError || ![submitted boolValue]) {
+                    BrowserDebugLog(@"[WebVLC] acceptSubmissionFailed=1 error=%d", submitError != nil);
+                    respond(stillActive() ? @"aborted" : @"cancelled", 0, 0, NO); return;
+                }
                 [owner finishWebVideoHandoff:view sessionJSON:sessionJSON generation:generation deadline:[NSDate timeIntervalSinceReferenceDate] + 2 completion:^(NSString *checkpoint, NSError *checkpointError) {
                     NSDictionary *reply = [checkpoint isKindOfClass:NSString.class] ? [NSJSONSerialization JSONObjectWithData:[checkpoint dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil] : nil;
-                    if (!stillActive() || checkpointError || ![reply isKindOfClass:NSDictionary.class] || ![reply[@"accepted"] boolValue]) {
+                    if (!stillActive()) {
+                        BrowserDebugLog(@"[WebVLC] handoffCancelled=1");
                         respond(@"cancelled", 0, 0, NO); return;
+                    }
+                    if (checkpointError || ![reply isKindOfClass:NSDictionary.class] || ![reply[@"accepted"] boolValue]) {
+                        BrowserDebugLog(@"[WebVLC] pauseAckMissing=1 error=%d", checkpointError != nil);
+                        respond(@"aborted", 0, 0, NO); return;
                     }
                     BrowserVLCPlayerViewController *player = makePlayer([reply[@"time"] doubleValue]);
                     player.returnWebVideoOnEnd = YES;
@@ -1046,7 +1056,10 @@ static UIColor *kTextColor(void) {
                     };
                     [view setFullscreenMediaControlsSuspended:YES];
                     [owner removeFullscreenMediaControls];
-                    [owner presentViewController:player animated:NO completion:nil];
+                    BrowserDebugLog(@"[WebVLC] presenting=1");
+                    [owner presentViewController:player animated:NO completion:^{
+                        BrowserDebugLog(@"[WebVLC] presented=1");
+                    }];
                 }];
             }];
         }];
