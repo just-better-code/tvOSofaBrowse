@@ -10,7 +10,7 @@ export default async function(lab){
  try{
   await lab.page.goto(media.origin+'/top');const leaf=lab.page.frames().find(f=>f.url().endsWith('/leaf'));
   await leaf.waitForFunction(()=>document.querySelector('video').readyState>=2);
-  await leaf.evaluate(()=>{window.ends=[];const v=document.querySelector('video');v.addEventListener('ended',event=>{window.ends.push(event.isTrusted);if(window.ends.length===1){v.src='/two.webm';v.play()}});v.currentTime=2;v.play().catch(()=>{})});
+   await leaf.evaluate(()=>{navigator.mediaSession.setActionHandler('nexttrack',null);window.ends=[];const v=document.querySelector('video');v.addEventListener('ended',event=>{window.ends.push(event.isTrusted);if(window.ends.length===1){v.src='/two.webm';v.play()}});v.currentTime=2;v.play().catch(()=>{})});
   await waitFor(()=>lab.native.presented,{describe:()=>JSON.stringify(lab.native.snapshot())});
   assert(await leaf.evaluate(()=>document.querySelector('video').paused));
   assert(lab.native.session.time>=2.09,'Capture requires at least 0.1 s actual HTML advance');

@@ -8,7 +8,7 @@ export default async function(lab) {
   let system = [];
   const results = [];
   try {
-    for (const mode of ['adapter-keep-fullscreen', 'adapter-exit-fullscreen', 'system', 'previous-unavailable']) {
+    for (const mode of ['adapter-keep-fullscreen', 'adapter-exit-fullscreen', 'media-session', 'system', 'previous-unavailable']) {
       system = [];
       host.enabled = false;
       host.options.autoExit = mode !== 'adapter-keep-fullscreen';
@@ -17,8 +17,9 @@ export default async function(lab) {
       await leaf.waitForFunction(() => document.querySelector('video').readyState >= 2);
       await leaf.evaluate(() => document.querySelector('video').requestFullscreen());
       await lab.page.waitForFunction(() => !!document.fullscreenElement);
-      await leaf.evaluate(adapter => {
+      await leaf.evaluate(mode => {
         const video = document.querySelector('video');
+        navigator.mediaSession.setActionHandler('nexttrack', null);
         video.id = 'player';
         window.episodes = {calls: [], ends: 0, index: 1};
         video.addEventListener('ended', () => episodes.ends++);
@@ -27,7 +28,11 @@ export default async function(lab) {
           video.src = index === 1 ? '/one.webm' : '/two.webm';
           if (play) video.play().catch(() => {});
         };
-        if (adapter) {
+        if (mode === 'media-session') {
+          navigator.mediaSession.setActionHandler('nexttrack', () => { episodes.calls.push('next'); playEpisode(2); });
+          navigator.mediaSession.setActionHandler('previoustrack', () => { episodes.calls.push('prev'); playEpisode(1); });
+        }
+        if (mode.startsWith('adapter')) {
           window.Playerjs = function() {
             this.api = command => {
               if (command === 'id') return 'player';
@@ -42,7 +47,7 @@ export default async function(lab) {
             };
           };
         }
-      }, mode.startsWith('adapter'));
+      }, mode);
       host.enabled = true;
       await host.configure();
       await leaf.waitForFunction(() => !!document.fullscreenElement);
@@ -74,7 +79,7 @@ export default async function(lab) {
           assert.equal(await lab.page.evaluate(() => !!document.fullscreenElement), mode === 'adapter-keep-fullscreen');
           await host.previous();
           await waitFor(() => host.phase === 'playing' && host.session?.body.url.endsWith('/one.webm'));
-          assert.deepEqual(await leaf.evaluate(() => episodes), {calls: ['next','prev','play'], ends: 0, index: 1});
+          assert.deepEqual(await leaf.evaluate(() => episodes), {calls: mode === 'media-session' ? ['next','prev'] : ['next','prev','play'], ends: 0, index: 1});
           assert.deepEqual(system, []);
         }
         await host.close('closed');

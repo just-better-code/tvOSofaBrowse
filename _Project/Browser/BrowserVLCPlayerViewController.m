@@ -809,6 +809,12 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
 
 - (void)closePlayer { [self closePressed]; }
 
+- (void)updateWebVideoTitle:(NSString *)title {
+    if (!self.webVideoURL || ![title isKindOfClass:NSString.class] || !title.length || title.length > 512) return;
+    self.mediaTitle = title;
+    if (self.isViewLoaded) self.titleLabel.text = title;
+}
+
 - (void)closePressed {
     if (!self.isBeingDismissed && self.presentingViewController) {
         self.webVideoDismissalInProgress = YES;

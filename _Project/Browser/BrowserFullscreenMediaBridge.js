@@ -26,6 +26,7 @@ var mediaVLCResourceObserver = null;
 var mediaVLCUnsupportedVideos = new WeakSet();
 var mediaVLCPlayerJSInstances = [];
 var mediaVLCPlayerJSFactories = new WeakSet();
+var mediaAcceptedEpisode = null;
 // PlayerJS documents api('hls'), api('id') and playlist commands. Keep the
 // constructed API objects without probing unrelated globals or network traffic.
 function observePlayerJSFactory() {
@@ -419,13 +420,45 @@ function starlightNextTrackRoute(request, direction) {
     });
     return button ? {run:function() { button.click(); }} : null;
 }
-var mediaVLCTrackAdapters = [starlightNextTrackRoute, playerJSTrackRoute];
-function routeVLCTrackCommand(request, direction) {
-    for (var i = 0; i < mediaVLCTrackAdapters.length; i++) {
-        var route = mediaVLCTrackAdapters[i](request, direction);
+function webStarlightPreviousRoute(request, direction) {
+    if (direction !== 'previous' || request.renderer !== 'webkit') return null;
+    var engine = starlightPlayer();
+    if (!engine || engine.video !== request.video || engine.source !== request.engineSource) return null;
+    var previous = starlightPredecessor();
+    if (starlightCatalog && !previous) return {boundary:true};
+    if (previous) {
+        var loaded = engine.group.playlist.some(function(item) { return item.id === previous.hash; });
+        if (loaded || (window.starlight && typeof starlight.fetchVideo === 'function'))
+            return {run:function() { requestStarlightPrevious(); }};
+    }
+    var button = playerTrackControl(true);
+    return button ? {run:function() { button.click(); }} : null;
+}
+function mediaSessionTrackRoute(request, direction) {
+    var action = direction === 'previous' ? 'previoustrack' : 'nexttrack';
+    var handler = mediaHandlers[action];
+    return handler ? {run:function() { handler({action:action}); }} : null;
+}
+var mediaEpisodeAdapters = [starlightNextTrackRoute, webStarlightPreviousRoute, playerJSTrackRoute, mediaSessionTrackRoute];
+function episodeBinding(video, renderer) {
+    var binding = playerJSVideoBinding(video), engine = video && video.engine, playlistID;
+    try { if (binding) playlistID = binding.player.api('playlist_id'); } catch (error) {}
+    return {video:video, renderer:renderer, engineSource:engine && engine.source,
+        player:binding && binding.player, playlistID:playlistID};
+}
+function episodeTrackRoute(request, direction) {
+    for (var i = 0; i < mediaEpisodeAdapters.length; i++) {
+        var route = mediaEpisodeAdapters[i](request, direction);
         if (route) return route;
     }
     return null;
+}
+function submitEpisodeRoute(route, beforeSubmit) {
+    if (!route) return 'unavailable';
+    if (route.boundary) return 'boundary';
+    if (beforeSubmit) beforeSubmit();
+    try { route.run(); } catch (error) {} // A throwing action may already have dispatched.
+    return 'submitted';
 }
 function exitVLCWebsiteFullscreen(video) {
     if (!window.__browserTVExitFullscreen()) sendFullscreenToParent('vlcExit');
@@ -492,15 +525,15 @@ window.__browserTVVLCResponse = function(id, action, time, volume, muted, exitFu
             return true;
         }
         mediaVLCAutoAttempts.delete(video);
-        var route = routeVLCTrackCommand(request, action);
+        request.renderer = 'vlc';
+        var route = episodeTrackRoute(request, action);
         if (route && route.run) {
             try {
                 if (Number.isFinite(volume)) video.volume = Math.max(0, Math.min(1, volume));
                 video.muted = !!muted;
             } catch (error) {}
             if (exitFullscreen === true) exitVLCWebsiteFullscreen(video);
-            request.handoff = {track:'submitted'};
-            try { route.run(); } catch (error) {} // May already have dispatched.
+            request.handoff = {track:submitEpisodeRoute(route)};
         } else {
             restoreVLCVideo(request, time, volume, muted);
             request.handoff = {track:route && route.boundary ? 'boundary' : 'unavailable'};
@@ -525,7 +558,8 @@ window.__browserTVVLCResponse = function(id, action, time, volume, muted, exitFu
         request.resumeOnAbort = request.automatic && !video.paused;
         stopVLCWatch(video);
         video.pause();
-        request.handoff = {accepted:true, time:window.__browserTVVLCRequestTime(id)};
+        request.handoff = {accepted:true, time:window.__browserTVVLCRequestTime(id), episode:episodeMetadata(video)};
+        if (window === window.top) acceptEpisodeMetadata(id, request.handoff.episode);
         if (window === window.top && !request.automatic) window.__browserTVExitFullscreen();
         return true;
     }
@@ -617,7 +651,10 @@ window.addEventListener('message', function(event) {
             pending.handoff = {track:status};
         } else {
             if (!window.__browserTVVLCRequestIsCurrent(data.id)) return;
-            pending.handoff = {accepted:!!(data.result && data.result.accepted), time:data.result && Number.isFinite(data.result.time) ? data.result.time : 0};
+            pending.handoff = {accepted:!!(data.result && data.result.accepted),
+                time:data.result && Number.isFinite(data.result.time) ? data.result.time : 0,
+                episode:validatedEpisodeMetadata(data.result && data.result.episode)};
+            if (window === window.top && pending.handoff.accepted) acceptEpisodeMetadata(data.id, pending.handoff.episode);
         }
         if (window !== window.top) window.parent.postMessage({browserTVVLCAcknowledgement:secret,
             id:data.id, result:pending.handoff}, '*');
@@ -693,6 +730,35 @@ function starlightSourceTitle() {
     var parsed = new DOMParser().parseFromString(p.source.title.slice(0, 4096), 'text/html');
     return (parsed.body.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 512);
 }
+function episodeMetadata(video) {
+    var engine = starlightVideoEngine(video);
+    if (!engine) return null;
+    var parsed = new DOMParser().parseFromString(String(engine.source.title || '').slice(0,4096), 'text/html');
+    return validatedEpisodeMetadata({starlightSourceID:engine.source.id,
+        adapterTitle:(parsed.body.textContent || '').replace(/\s+/g,' ').trim().slice(0,512)});
+}
+function validatedEpisodeMetadata(state) {
+    return state && typeof state.starlightSourceID === 'string' && /^[a-f0-9]{64}$/.test(state.starlightSourceID) &&
+        typeof state.adapterTitle === 'string' && state.adapterTitle.length <= 512
+        ? {starlightSourceID:state.starlightSourceID, adapterTitle:state.adapterTitle} : null;
+}
+function acceptedEpisodeIsCurrent(id) {
+    var request = mediaVLCRequests[id];
+    if (!request || request.trackCommand) return false;
+    return request.frame ? request.frame.isConnected && request.frame.contentWindow === request.source &&
+        !!(request.handoff && request.handoff.accepted) : request.accepted && vlcRequestSourceIsCurrent(request);
+}
+function acceptEpisodeMetadata(id, state) {
+    state = validatedEpisodeMetadata(state);
+    if (window !== window.top || !state || !acceptedEpisodeIsCurrent(id)) return;
+    mediaAcceptedEpisode = {session:id, state:state};
+    prepareStarlightCatalog();
+    synchronizeStarlightPage(state, id);
+    // Metadata has no playback clock. Native must not recreate WebKit controls
+    // or copy paused HTML transport state over the VLC transport.
+    try { window.webkit.messageHandlers.browserFullscreenMedia.postMessage(
+        {token:nativeToken,session:id,episodeMetadata:true,pageTitle:state.adapterTitle}); } catch (error) {}
+}
 function starlightPredecessor() {
     var p = starlightPlayer();
     if (!p) return null;
@@ -756,19 +822,24 @@ function prepareStarlightCatalog() {
             return {hash:hash,pagePath:pagePath};
         });
         starlightCatalog = {scope:path,episodes:episodes};
+        if (mediaAcceptedEpisode && acceptedEpisodeIsCurrent(mediaAcceptedEpisode.session))
+            synchronizeStarlightPage(mediaAcceptedEpisode.state, mediaAcceptedEpisode.session);
+        else if (mediaActive && mediaFrameState) synchronizeStarlightPage(mediaFrameState);
     }).catch(function() {});
 }
-function synchronizeStarlightPage(state) {
-    if (window !== window.top || location.hostname !== 'teleportal.ua' || !mediaActive || !starlightCatalog ||
+function synchronizeStarlightPage(state, captureSession) {
+    if (window !== window.top || location.hostname !== 'teleportal.ua' ||
+        !(captureSession ? acceptedEpisodeIsCurrent(captureSession) : mediaActive) || !starlightCatalog ||
         starlightCatalog.scope !== location.pathname.replace(/\/[^/]+\/?$/, '') ||
         !state || typeof state.starlightSourceID !== 'string' || !/^[a-f0-9]{64}$/.test(state.starlightSourceID)) return;
     // Resolve only against host metadata, never against a child-supplied URL.
     var entry = starlightCatalog.episodes.find(function(item) { return item.hash === state.starlightSourceID; });
     if (!entry || !entry.pagePath || !entry.pagePath.startsWith(starlightCatalog.scope + '/')) return;
     var target = new URL(entry.pagePath, location.origin);
-    if (target.origin !== location.origin || target.pathname === location.pathname) return;
+    if (target.origin !== location.origin) return;
     try {
-        history.replaceState(history.state, '', target.pathname + location.search + location.hash);
+        if (target.pathname !== location.pathname)
+            history.replaceState(history.state, '', target.pathname + location.search + location.hash);
         if (typeof state.adapterTitle === 'string' && state.adapterTitle) document.title = state.adapterTitle.slice(0, 512);
     } catch (error) {}
 }
@@ -861,11 +932,10 @@ function performMediaCommand(command, value, request) {
         performMediaCommand('end', 0, request);
         return performMediaCommand('next', 0, request);
     }
-    // Hardware media actions may belong to the embedding page, not the video frame.
     var trackAction = command === 'previous' ? 'previoustrack' : command === 'next' ? 'nexttrack' : null;
-    if (trackAction && mediaHandlers[trackAction]) {
-        try { mediaHandlers[trackAction]({action: trackAction}); } catch (error) {}
-        return true; // A throwing handler may already have submitted the action.
+    if (trackAction) {
+        var route = episodeTrackRoute(episodeBinding(mediaVideo(), 'webkit'), command);
+        if (submitEpisodeRoute(route) !== 'unavailable') return true;
     }
     var frame = mediaFrame();
     if (trackAction && window === window.top && frame && (!mediaFrameState ||
@@ -873,22 +943,6 @@ function performMediaCommand(command, value, request) {
     if (frame && frame.isConnected && frame.contentWindow) {
         frame.contentWindow.postMessage({browserTVFullscreenCommand: secret, action: 'media', command: command, value: value, request: request}, '*');
         return true;
-    }
-    if (command === 'previous' && starlightPlayer() && starlightCatalog) {
-        requestStarlightPrevious();
-        return true; // No predecessor means stop, never wrap through the site's control.
-    }
-    if (command === 'previous' && requestStarlightPrevious()) return true;
-    if (command === 'next' || command === 'previous') {
-        var trackControl = playerTrackControl(command === 'previous');
-        if (trackControl) { trackControl.click(); return true; }
-        if (command === 'next') {
-            var nextPlayer = playerJSNextController(mediaVideo());
-            if (nextPlayer) {
-                try { nextPlayer.api('next'); } catch (error) {}
-                return true; // A throwing API may already have submitted Next.
-            }
-        }
     }
     var v = mediaVideo();
     var state = mediaState();
@@ -982,6 +1036,7 @@ window.addEventListener('pagehide', function(event) {
     mediaVLCResourceObserver = null;
     if (!event.persisted) mediaVLCPlayerJSInstances = [];
     mediaVLCRequests = Object.create(null);
+    mediaAcceptedEpisode = null;
     clearInterval(mediaTimer); mediaTimer = null;
     mediaActive = false; publishNativeMedia();
     if (fullscreenTarget || fullscreenFrame) sendFullscreenToParent('exit');

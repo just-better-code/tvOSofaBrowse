@@ -11,6 +11,7 @@ FOUNDATION_EXPORT NSString * const BrowserAdBlockSourceStatusDidChangeNotificati
 - (BOOL)webView:(id _Nonnull)webView shouldCreateNewTabWithRequest:(NSURLRequest * _Nullable)request navigationType:(NSInteger)navigationType;
 - (BOOL)webView:(id _Nonnull)webView shouldImportTorrentResponse:(NSURLResponse * _Nonnull)response request:(NSURLRequest * _Nullable)request;
 - (void)webView:(id)webView didUpdateFullscreenMediaState:(NSDictionary *)state;
+- (void)webView:(id)webView didUpdateEpisodeMetadata:(NSDictionary *)state;
 - (void)webView:(id)webView didRequestVLCPlayback:(NSDictionary *)info;
 - (void)webView:(id)webView didBlockNavigationToURL:(NSURL *)URL rule:(nullable NSString *)rule;
 - (void)webViewDidStartLoad:(id _Nonnull)webView;
@@ -27,6 +28,8 @@ FOUNDATION_EXPORT NSString * const BrowserAdBlockSourceStatusDidChangeNotificati
 @property (nullable, nonatomic, readonly, strong) NSURLRequest *request;
 @property (nullable, nonatomic, readonly, strong) UIScrollView *scrollView;
 @property (nullable, nonatomic, readonly, copy) NSString *title;
+// A media session survives same-document history/title synchronization, not navigation.
+@property (nonatomic, readonly) NSUInteger playbackDocumentGeneration;
 @property (nonatomic, readonly, getter=canGoBack) BOOL canGoBack;
 @property (nonatomic, readonly, getter=canGoForward) BOOL canGoForward;
 @property (nullable, nonatomic, readonly, copy) NSString *backURLString;

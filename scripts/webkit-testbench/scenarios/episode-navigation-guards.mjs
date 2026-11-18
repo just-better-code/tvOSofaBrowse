@@ -16,6 +16,7 @@ export default async function(lab) {
       const adapter = mode === 'adapter-boundary' || mode === 'adapter-throws';
       await leaf.evaluate(adapter => {
         const video = document.querySelector('video');
+        navigator.mediaSession.setActionHandler('nexttrack', null);
         video.id = 'player';
         window.guardCalls = 0;
         window.guardEnds = 0;

@@ -1950,3 +1950,53 @@ CI for the previous application revision successfully published 2.22.0 Build
 MediaRemote destination/status delivery, native preference persistence or
 physical-device interruptions. The reported Build 23.1 capture regression and
 early playback hiccup remain unconfirmed at the device boundary.
+
+## 2026-11-18 — Unified playback, stage 1: shared episode routes and metadata
+
+The user approves the staged unification plan: shared website episode routing
+and metadata first, then a shared playback-session interface and native panel.
+Keep WebKit and VLC separate engines and leave website playlist/fullscreen
+decisions alone. Store implementation checkpoints in
+[the tracked plan](plans/unified-playback.md).
+
+Both existing control paths now use one capability-based episode adapter
+registry. Preserve WebKit's existing catalog-backed Teleportal Previous without
+enabling it for VLC. Registered Media Session track handlers are shared too,
+after recognized player actions and before native system fallback. Submitted
+or boundary results never cause a second action.
+
+Carry verified Starlight episode metadata in the accepted leaf pause reply
+through the existing frame chain. Apply its title independently of WebKit panel
+visibility; resolve canonical Teleportal URLs only against the host catalog,
+including a catalog response arriving after capture. Unknown entries do not
+invent a page URL. Native title-only updates are bound to the accepted source
+session and cannot create a WebKit panel or overwrite VLC's transport clock.
+
+Source inspection also exposed a native integration constraint: the generic
+document generation intentionally changes on every same-document URL update.
+Keep that generic DOM/input safety rule, but give media calls a separate
+playback-document generation. Explicit load/reload/back/forward, navigation
+start/commit, process loss and tab invalidation still expire media operations;
+replaceState alone must not orphan the accepted capture or its close callback.
+Linux can exercise the JS contract, not WK's KVO/callback ordering.
+
+Actual public Teleportal passed 92 → 93 → 94 in WebKit
+(`18-33-23.095Z-5d664205`) and Linux libVLC
+(`18-33-23.075Z-54d9b7f1`). Both paths updated page title and canonical path,
+kept history length and top-document token, and retained the same video node.
+Actual UASerials passed 1 → 2 → 1 with Linux libVLC
+(`18-36-45.630Z-746b9899`). The delayed-catalog fixture passed unchanged
+history state/query/fragment, title delivery with the panel suspended and no URL
+guess for an unknown source (`18-36-45.679Z-32bff80f`).
+
+Shared adapter/Media Session/system-model navigation passes
+(`18-36-45.625Z-ae0c318b`), as do duplicate/stale/boundary/throw guards
+(`18-36-45.694Z-1cc48f3d`). An initial guard run expected a system submission
+despite its fixture already registering a Media Session handler. Isolate the
+fallback cases by removing that fixture handler and add an explicit shared
+Media Session case instead; do not remove the working handler route from app
+code to preserve the old test expectation.
+
+Both marketing settings remain at the consolidated unreleased 2.22.0. Shared
+native session and panel extraction remain subsequent stages. No physical TV
+or Simulator interaction has been performed.

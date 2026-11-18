@@ -867,13 +867,21 @@ static UIColor *kTextColor(void) {
 
 - (BOOL)fullscreenMediaInputActive {
     if (self.fullscreenMediaControls && (self.fullscreenMediaWebView != self.webview ||
-        self.fullscreenMediaGeneration != self.webview.documentGeneration)) [self removeFullscreenMediaControls];
+        self.fullscreenMediaGeneration != self.webview.playbackDocumentGeneration)) [self removeFullscreenMediaControls];
     return self.fullscreenMediaControls && !self.presentedViewController && !self.tabOverviewController.visible;
 }
 
 - (NSArray<id<UIFocusEnvironment>> *)preferredFocusEnvironments {
     if ([self fullscreenMediaInputActive] && self.fullscreenMediaControls.controlsVisible) return @[self.fullscreenMediaControls];
     return [super preferredFocusEnvironments];
+}
+
+- (void)webView:(id)webView didUpdateEpisodeMetadata:(NSDictionary *)state {
+    if (webView != self.webview) return;
+    if (![self.presentedViewController isKindOfClass:BrowserVLCPlayerViewController.class]) return;
+    BrowserVLCPlayerViewController *player = (BrowserVLCPlayerViewController *)self.presentedViewController;
+    if (![player.webVideoSourceSession isEqual:state[@"session"]]) return;
+    [player updateWebVideoTitle:state[@"pageTitle"]];
 }
 
 - (void)webView:(id)webView didUpdateFullscreenMediaState:(NSDictionary *)state {
@@ -890,11 +898,11 @@ static UIColor *kTextColor(void) {
     }
     NSString *session = state[@"session"];
     if (self.fullscreenMediaControls && (![session isEqual:self.fullscreenMediaSession] ||
-        self.fullscreenMediaWebView != webView || self.fullscreenMediaGeneration != self.webview.documentGeneration)) [self removeFullscreenMediaControls];
+        self.fullscreenMediaWebView != webView || self.fullscreenMediaGeneration != self.webview.playbackDocumentGeneration)) [self removeFullscreenMediaControls];
     if (!self.fullscreenMediaControls) {
         BrowserFullscreenMediaControlsController *controls = [BrowserFullscreenMediaControlsController new];
         self.fullscreenMediaControls = controls; self.fullscreenMediaWebView = webView;
-        self.fullscreenMediaSession = session; self.fullscreenMediaGeneration = self.webview.documentGeneration;
+        self.fullscreenMediaSession = session; self.fullscreenMediaGeneration = self.webview.playbackDocumentGeneration;
         __weak typeof(self) weakSelf = self;
         controls.sendCommand = ^(NSString *command, double value) {
             typeof(self) owner = weakSelf;
@@ -906,7 +914,7 @@ static UIColor *kTextColor(void) {
             if (!json) return;
             NSString *script = [NSString stringWithFormat:@"window.__browserTVSendFullscreenMediaCommand ? window.__browserTVSendFullscreenMediaCommand.apply(null,%@) : false", json];
             NSString *session = owner.fullscreenMediaSession;
-            [owner.fullscreenMediaWebView evaluateJavaScript:script completionHandler:^(NSString *result, NSError *error) {
+            [owner.fullscreenMediaWebView evaluateVideoJavaScript:script frame:nil completionHandler:^(NSString *result, NSError *error) {
                 if (error || ![owner fullscreenMediaInputActive] || ![session isEqual:owner.fullscreenMediaSession]) return;
                 if ([result isEqualToString:@"false"] && ([command isEqualToString:@"previous"] || [command isEqualToString:@"endNext"]))
                     [owner.fullscreenMediaWebView sendSystemMediaTrackCommand:[command isEqualToString:@"endNext"]];
@@ -930,9 +938,9 @@ static UIColor *kTextColor(void) {
 - (void)finishWebVideoHandoff:(BrowserWebView *)view sessionJSON:(NSString *)sessionJSON
                   generation:(NSUInteger)generation deadline:(NSTimeInterval)deadline
                   completion:(void (^)(NSString *, NSError *))completion {
-    if (view.documentGeneration != generation) { completion(nil, nil); return; }
+    if (view.playbackDocumentGeneration != generation) { completion(nil, nil); return; }
     NSString *script = [NSString stringWithFormat:@"window.__browserTVVLCHandoffResult && window.__browserTVVLCHandoffResult.apply(null,%@)", sessionJSON];
-    [view evaluateJavaScript:script completionHandler:^(NSString *result, NSError *error) {
+    [view evaluateVideoJavaScript:script frame:nil completionHandler:^(NSString *result, NSError *error) {
         NSDictionary *reply = [result isKindOfClass:NSString.class] ? [NSJSONSerialization JSONObjectWithData:[result dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil] : nil;
         if (error || ![reply isKindOfClass:NSDictionary.class] || ![reply[@"pending"] boolValue] || [NSDate timeIntervalSinceReferenceDate] >= deadline) {
             completion(result, error); return;
@@ -947,7 +955,7 @@ static UIColor *kTextColor(void) {
     NSString *session = info[@"session"];
     id videoFrame = info[@"frame"];
     BOOL iframeExperiment = [info[@"iframeExperiment"] boolValue];
-    NSUInteger generation = webView.documentGeneration;
+    NSUInteger generation = webView.playbackDocumentGeneration;
     NSURL *pageURL = webView.request.URL;
     __block NSUInteger offer = 0;
     NSData *sessionData = [NSJSONSerialization dataWithJSONObject:@[session] options:0 error:nil];
@@ -958,7 +966,7 @@ static UIColor *kTextColor(void) {
     void (^sendResponse)(NSString *, double, double, BOOL, BOOL, void (^)(NSString *, NSError *)) =
         ^(NSString *action, double time, double volume, BOOL muted, BOOL exitFullscreen, void (^completion)(NSString *, NSError *)) {
         BrowserWebView *view = weakWebView;
-        if (!view || view.documentGeneration != generation) { if (completion) completion(nil, nil); return; }
+        if (!view || view.playbackDocumentGeneration != generation) { if (completion) completion(nil, nil); return; }
         typeof(self) host = weakSelf;
         if (!host || view != host.webview || UIApplication.sharedApplication.applicationState != UIApplicationStateActive ||
             (offer && offer != host.webVideoOfferSerial)) action = @"cancelled";
@@ -985,11 +993,11 @@ static UIColor *kTextColor(void) {
     [BrowserWebView fetchCookiesWithResult:^(NSArray<NSHTTPCookie *> *cookies, NSError *cookieError) {
         if (cookieError) { respond(@"rejected", 0, 0, NO); return; }
         BrowserWebView *currentView = weakWebView;
-        if (!currentView || currentView.documentGeneration != generation) return;
+        if (!currentView || currentView.playbackDocumentGeneration != generation) return;
         [currentView evaluateVideoJavaScript:script frame:videoFrame completionHandler:^(NSString *result, NSError *error) {
             typeof(self) owner = weakSelf;
             BrowserWebView *view = weakWebView;
-            if (!owner || !view || view.documentGeneration != generation || view != owner.webview ||
+            if (!owner || !view || view.playbackDocumentGeneration != generation || view != owner.webview ||
                 owner.presentedViewController || owner.tabOverviewController.visible || error ||
                 offer != owner.webVideoOfferSerial || UIApplication.sharedApplication.applicationState != UIApplicationStateActive || ![result boolValue]) {
                 respond(@"rejected", 0, 0, NO); return;
@@ -1025,14 +1033,14 @@ static UIColor *kTextColor(void) {
                 typeof(self) host = weakSelf;
                 BrowserWebView *target = weakWebView;
                 return host && target && target.window && host.viewIfLoaded.window &&
-                    target == host.webview && target.documentGeneration == generation &&
+                    target == host.webview && target.playbackDocumentGeneration == generation &&
                     offer == host.webVideoOfferSerial && !host.presentedViewController && !host.tabOverviewController.visible &&
                     UIApplication.sharedApplication.applicationState == UIApplicationStateActive && BrowserPreferencesStore.iframeVLCExperimentEnabled;
             };
             // Pause the bound source once; buffer visibly in the presented player.
             if (!stillActive()) { respond(@"cancelled", 0, 0, NO); return; }
             NSString *acceptScript = [NSString stringWithFormat:@"window.__browserTVVLCResponse && window.__browserTVVLCResponse(%@[0],'accepted',0,0,false)", sessionJSON];
-            [view evaluateJavaScript:acceptScript completionHandler:^(NSString *submitted, NSError *submitError) {
+            [view evaluateVideoJavaScript:acceptScript frame:nil completionHandler:^(NSString *submitted, NSError *submitError) {
                 if (submitError || ![submitted boolValue]) {
                     BrowserDebugLog(@"[WebVLC] acceptSubmissionFailed=1 error=%d", submitError != nil);
                     respond(stillActive() ? @"aborted" : @"cancelled", 0, 0, NO); return;
@@ -1049,10 +1057,13 @@ static UIColor *kTextColor(void) {
                     }
                     BrowserVLCPlayerViewController *player = makePlayer([reply[@"time"] doubleValue]);
                     player.returnWebVideoOnEnd = YES;
+                    player.webVideoSourceSession = session;
+                    NSDictionary *episode = [reply[@"episode"] isKindOfClass:NSDictionary.class] ? reply[@"episode"] : nil;
+                    [player updateWebVideoTitle:episode[@"adapterTitle"]];
                     player.webVideoDidClose = ^(double time, double volume, BOOL muted, NSString *action) {
                         typeof(self) closingHost = weakSelf;
                         BrowserWebView *page = weakWebView;
-                        if (page == closingHost.webview && page.documentGeneration == generation &&
+                        if (page == closingHost.webview && page.playbackDocumentGeneration == generation &&
                             UIApplication.sharedApplication.applicationState == UIApplicationStateActive)
                             [page setFullscreenMediaControlsSuspended:NO];
                         BOOL next = [action isEqual:@"next"];

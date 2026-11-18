@@ -817,6 +817,16 @@ static id BrowserPersistentWebsiteDataStore(void) {
     id body = [message valueForKey:@"body"];
     if (![body isKindOfClass:NSDictionary.class] || ![body[@"token"] isEqual:self.token]) return;
     if (![body[@"session"] isKindOfClass:NSString.class] || [body[@"session"] length] > 128) return;
+    if (mainFrame && [body[@"episodeMetadata"] boolValue]) {
+        // Same-document replaceState may race the URL observation. Bind this
+        // title-only update to the accepted capture session instead of a URL.
+        NSString *title = body[@"pageTitle"];
+        if (owner.loading || !owner.window || UIApplication.sharedApplication.applicationState != UIApplicationStateActive ||
+            ![title isKindOfClass:NSString.class] || title.length > 512) return;
+        if ([owner.delegate respondsToSelector:@selector(webView:didUpdateEpisodeMetadata:)])
+            [owner.delegate webView:owner didUpdateEpisodeMetadata:@{@"session":body[@"session"], @"pageTitle":title}];
+        return;
+    }
     // Configuration only returns a boolean; it may arrive during redirect/commit.
     // Playback and media-state messages retain exact document URL validation.
     if (mainFrame && ![body[@"vlcConfigRequest"] boolValue] && ![request.URL isEqual:owner.request.URL]) return;
@@ -968,6 +978,7 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 
 @property (nullable, nonatomic, strong) id runtimeWebView;
 @property (nonatomic, readwrite) NSUInteger documentGeneration;
+@property (nonatomic, readwrite) NSUInteger playbackDocumentGeneration;
 @property (nonatomic, readwrite) NSUInteger javaScriptGeneration;
 @property (nonatomic, readwrite) BOOL pageFullscreenActive;
 @property (nullable, nonatomic, strong) NSURLRequest *lastRequest;
@@ -1118,6 +1129,11 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 @end
 
 @implementation BrowserWebView
+
+- (void)setDocumentGeneration:(NSUInteger)generation {
+    _documentGeneration = generation;
+    _playbackDocumentGeneration += 1;
+}
 
 - (void)updatePageFullscreenActive:(BOOL)active {
     BOOL exited = self.pageFullscreenActive && !active;
@@ -1922,7 +1938,11 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
     }
     // Same-document history can leave and return to the same URL without a
     // provisional navigation. Invalidate before queued JS replies are delivered.
-    if ([keyPath isEqualToString:@"URL"] && object == self.runtimeWebView) self.documentGeneration += 1;
+    if ([keyPath isEqualToString:@"URL"] && object == self.runtimeWebView) {
+        // Generic DOM/UI replies still expire on every history change. Playback
+        // is bound to the document/source, so a replaceState must not orphan VLC.
+        _documentGeneration += 1;
+    }
     __weak typeof(self) weakSelf = self;
     dispatch_async(dispatch_get_main_queue(), ^{
         BrowserWebView *webView = weakSelf;
@@ -2123,28 +2143,29 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 
 - (void)evaluateVideoJavaScript:(NSString *)script frame:(id)frame
     completionHandler:(void (^)(NSString *, NSError *))completion {
-    if (!frame) { [self evaluateJavaScript:script completionHandler:completion]; return; }
     id runtime = self.runtimeWebView;
-    SEL selector = NSSelectorFromString(@"evaluateJavaScript:inFrame:inContentWorld:completionHandler:");
+    SEL selector = NSSelectorFromString(frame ? @"evaluateJavaScript:inFrame:inContentWorld:completionHandler:" : @"evaluateJavaScript:completionHandler:");
     Class worldClass = NSClassFromString(@"WKContentWorld");
     id world = [worldClass respondsToSelector:NSSelectorFromString(@"pageWorld")]
         ? ((id (*)(id, SEL))objc_msgSend)(worldClass, NSSelectorFromString(@"pageWorld")) : nil;
-    if (!world || ![runtime respondsToSelector:selector]) {
+    if ((frame && !world) || ![runtime respondsToSelector:selector]) {
         completion(nil, [NSError errorWithDomain:@"BrowserVideoFrame" code:1 userInfo:nil]); return;
     }
-    NSUInteger generation = self.documentGeneration;
+    NSUInteger generation = self.playbackDocumentGeneration, javaScriptGeneration = self.javaScriptGeneration;
     __weak typeof(self) weakSelf = self;
     __block BOOL finished = NO;
     void (^finish)(id, NSError *) = ^(id result, NSError *error) {
         if (finished) return;
         finished = YES;
         BrowserWebView *view = weakSelf;
-        if (!view || view.runtimeWebView != runtime || view.documentGeneration != generation)
+        if (!view || view.runtimeWebView != runtime || view.playbackDocumentGeneration != generation ||
+            view.javaScriptGeneration != javaScriptGeneration)
             error = [NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorCancelled userInfo:nil];
         completion(error ? nil : BrowserStringFromJavaScriptResult(result), error);
     };
-    ((void (*)(id, SEL, id, id, id, id))objc_msgSend)(runtime, selector, script, frame, world,
-        ^(id result, NSError *error) { dispatch_async(dispatch_get_main_queue(), ^{ finish(result, error); }); });
+    void (^reply)(id, NSError *) = ^(id result, NSError *error) { dispatch_async(dispatch_get_main_queue(), ^{ finish(result, error); }); };
+    if (frame) ((void (*)(id, SEL, id, id, id, id))objc_msgSend)(runtime, selector, script, frame, world, reply);
+    else ((void (*)(id, SEL, id, id))objc_msgSend)(runtime, selector, script, reply);
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
         finish(nil, [NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorTimedOut userInfo:nil]);
     });
