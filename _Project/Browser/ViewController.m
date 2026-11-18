@@ -1079,7 +1079,7 @@ static UIColor *kTextColor(void) {
                                     sendResponse(@"trackDone", 0, 0, NO, NO, nil);
                                 }
                             }];
-                        }];
+                        });
                     };
                     [view setFullscreenMediaControlsSuspended:YES];
                     [owner removeFullscreenMediaControls];
