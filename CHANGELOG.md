@@ -21,6 +21,7 @@ Published packages are available for [2.21.9](https://github.com/just-better-cod
 
 ### Fixed
 
+- Avoid duplicate backgrounds and clipped system-button shapes in the startup guide, Favorites, History, Torrents, settings and playback controls while retaining older-tvOS styling ([Quick start](docs/USER_GUIDE.md#quick-start), [Interface style](docs/agent/TVOS_STYLE_GUIDE.md)).
 - Capture an already-loaded PlayerJS video after enabling VLC without reloading its page ([Playback controls](docs/USER_GUIDE.md)).
 - Keep recognized episode titles and catalogued Teleportal addresses synchronized during VLC playback without reloading the website or adding history entries ([Playback controls](docs/USER_GUIDE.md), [Unified playback](docs/agent/plans/unified-playback.md)).
 - Let visible website video keep playing when experimental VLC capture is temporarily inactive ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).

@@ -2114,3 +2114,35 @@ reproduction. Build 33.1 compiled and passed IPA verification, but publication
 failed because GitHub's comparison API returned HTTP500. The later read-only
 comparison succeeded with HTTP200; do not confuse that infrastructure failure
 with an application build failure.
+
+## 2026-11-18 — Extend the native system-button surface fix to secondary screens
+
+Before this cosmetic delivery, Actions 44381819743 successfully compiled,
+packaged and published `b7b15b4` as 2.22.0 Build 34.1, including the verified
+PlayerJS registration fix. Build 34.1 does not include the surface changes below.
+
+The user sees the earlier duplicate button-surface defect in the startup guide
+and requests a source audit of analogous app-owned UI. Reuse the established
+native-glass detection from the accepted browser-menu fix, rather than changing
+the main menu or introducing a new theme.
+
+Add shared system-button surface helpers in BrowserTVAppearance.h: when UIKit
+owns the glass capsule, leave the button's own backing clear, remove the manual
+root corner radius and avoid clipping its system focus surface. Preserve the
+existing color/radius fallback on older tvOS. Apply the same conditional rule
+during custom focus transitions so focusing cannot repaint the extra rectangle.
+
+Apply this to Start Browsing in the guide, action buttons in Favorites editing
+and All History, torrent toolbar/row actions, settings and coverage footer
+actions, and the shared playback button factory. Playback buttons no longer
+stack a second app glass view underneath modern system glass. Retain destructive
+action text cues, shared ON/OFF badges, layout, callbacks and focus routing.
+Leave intentionally custom cards, panel containers, text fields, collection
+cells and UIControl-based badge toggles rounded; they are not system buttons.
+The main browser menu already guards its native backing and remains unchanged.
+
+This is a source-level UI correction on Linux. No interaction tests, Simulator
+or physical-TV work were requested or performed, and no visual fix is claimed
+from source inspection alone. Keep both marketing settings at consolidated
+unreleased 2.22.0. This stage does not change media discovery, capture, episode
+selection, storage or signing.

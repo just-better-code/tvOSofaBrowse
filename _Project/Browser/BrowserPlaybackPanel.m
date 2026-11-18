@@ -149,8 +149,11 @@ static void BrowserPlaybackFill(UIView *view, UIView *container) {
     BOOL seek = [symbol isEqualToString:@"backward.fill"] || [symbol isEqualToString:@"forward.fill"] || [symbol hasPrefix:@"arrowtriangle."];
     UIButton *button = seek ? [BrowserSeekButton buttonWithType:UIButtonTypeSystem] : [UIButton buttonWithType:UIButtonTypeSystem];
     BOOL large = [@[@"playpause.fill",@"backward.end.alt.fill",@"browser.end.fill"] containsObject:symbol];
-    button.backgroundColor = UIColor.clearColor; button.layer.cornerRadius = large ? 40.8 : 34; button.clipsToBounds = YES;
-    UIVisualEffectView *glass = BrowserPlaybackGlass(); [button insertSubview:glass atIndex:0]; BrowserPlaybackFill(glass,button);
+    BrowserTVConfigureSystemButtonSurface(button, UIColor.clearColor, large ? 40.8 : 34);
+    if (!BrowserTVUsesNativeButtonSurface()) {
+        button.clipsToBounds = YES;
+        UIVisualEffectView *glass = BrowserPlaybackGlass(); [button insertSubview:glass atIndex:0]; BrowserPlaybackFill(glass,button);
+    }
     button.accessibilityLabel = label;
     UIImageView *image = [[UIImageView alloc] initWithImage:BrowserPlaybackControlImage(symbol)];
     image.tag = BrowserPlaybackPanelIconTag; image.translatesAutoresizingMaskIntoConstraints = NO;
@@ -209,7 +212,7 @@ static void BrowserPlaybackFill(UIView *view, UIView *container) {
         if (![all containsObject:view]) continue;
         BOOL focused = view == context.nextFocusedView;
         [coordinator addCoordinatedAnimations:^{
-            view.backgroundColor = focused ? BrowserTVFocusedSurfaceColor() : UIColor.clearColor;
+            view.backgroundColor = BrowserTVSystemButtonSurfaceColor(focused ? BrowserTVFocusedSurfaceColor() : UIColor.clearColor);
             UIImageView *image = (UIImageView *)[view viewWithTag:BrowserPlaybackPanelIconTag];
             BOOL toggle = [view viewWithTag:BrowserPlaybackPanelToggleBadgeTag] != nil;
             image.tintColor = toggle ? BrowserTVToggleBadgeColor(((UIButton *)view).selected) :
