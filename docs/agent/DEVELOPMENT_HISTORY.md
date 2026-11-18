@@ -2000,3 +2000,35 @@ code to preserve the old test expectation.
 Both marketing settings remain at the consolidated unreleased 2.22.0. Shared
 native session and panel extraction remain subsequent stages. No physical TV
 or Simulator interaction has been performed.
+
+### Unified playback, native adoption: shared session and panel
+
+Stage 1 commit `7e7f0ed` compiled, packaged and published through develop Actions
+44372176857 as 2.22.0 Build 31.1. Final stage-1 UAKino Next recaptured the next
+episode (`18-38-06.304Z-2f5292b6`) and the canonical capture/return/separate EOF
+scenario passed (`18-38-06.304Z-d57296ee`).
+
+Adopt the native session interface and common panel together so neither consumer
+ships an unused intermediate UI abstraction. `BrowserPlaybackSession` owns typed
+control commands, immutable per-renderer state, the shared Previous/restart
+threshold, five-second visibility requests, pause/buffer/cursor/seek/menu pins,
+and action/timer invalidation. Backend callbacks retain document/source guards
+and authoritative clocks; no paused HTML time is transferred into VLC.
+
+`BrowserPlaybackPanel` is now the only native header/transport/volume layout,
+glass/button factory, progress/time/capability rendering and focus-color code.
+WebKit uses the ordinary page header; VLC uses the same component with its cone,
+status text and Audio/Subtitles/Keep fullscreen accessories. Preserve the existing
+sizes, order and relative layout. Torrent payloads, playback preparation,
+HTTP context and modal return remain in the VLC controller.
+
+Retain the existing shared Select press driver and seek-ramp helpers. The small
+renderer-specific repeat loops remain intentional: VLC accumulates an explicit
+seek target to avoid cached-clock under-seeking, whereas WebKit updates its live
+HTML media element. A common panel must not erase that proven backend difference.
+The site's own controls, episode algorithms, natural-completion decision and
+fullscreen/pagehide behavior are not changed in this native adoption.
+
+This host cannot execute UIKit or TVVLCKit. Native focus/layout/remote behavior,
+track menus, saved per-site settings and torrent playback require tvOS observation
+after compilation. Do not treat the Linux bridge/decoder tests as UI verification.

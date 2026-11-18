@@ -854,6 +854,7 @@ static UIColor *kTextColor(void) {
     self.mediaArrowSeekDirection = 0;
     if (!self.fullscreenMediaControls) return;
     [self.fullscreenMediaControls stopSeeking];
+    [self.fullscreenMediaControls.playbackSession invalidate];
     [self.fullscreenMediaControls willMoveToParentViewController:nil];
     [self.fullscreenMediaControls.view removeFromSuperview];
     [self.fullscreenMediaControls removeFromParentViewController];
@@ -904,9 +905,11 @@ static UIColor *kTextColor(void) {
         self.fullscreenMediaControls = controls; self.fullscreenMediaWebView = webView;
         self.fullscreenMediaSession = session; self.fullscreenMediaGeneration = self.webview.playbackDocumentGeneration;
         __weak typeof(self) weakSelf = self;
-        controls.sendCommand = ^(NSString *command, double value) {
+        controls.playbackSession = [[BrowserPlaybackSession alloc] initWithRenderer:BrowserPlaybackRendererWebKit
+            identifier:session dispatch:^(BrowserPlaybackCommand action, double value) {
             typeof(self) owner = weakSelf;
             if (![owner fullscreenMediaInputActive]) return;
+            NSString *command = action == BrowserPlaybackCommandNext ? @"endNext" : BrowserPlaybackCommandName(action);
             owner.mediaSelectIgnoreUntil = NSDate.timeIntervalSinceReferenceDate + 0.4;
             NSArray *arguments = @[command, @(value), owner.fullscreenMediaSession ?: @""];
             NSData *data = [NSJSONSerialization dataWithJSONObject:arguments options:0 error:nil];
@@ -919,7 +922,7 @@ static UIColor *kTextColor(void) {
                 if ([result isEqualToString:@"false"] && ([command isEqualToString:@"previous"] || [command isEqualToString:@"endNext"]))
                     [owner.fullscreenMediaWebView sendSystemMediaTrackCommand:[command isEqualToString:@"endNext"]];
             }];
-        };
+        }];
         [self addChildViewController:controls];
         controls.view.frame = self.view.bounds;
         controls.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;

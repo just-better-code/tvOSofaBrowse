@@ -58,6 +58,8 @@
 		B002B8701BAE420500C744AF /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B002B86E1BAE420500C744AF /* Main.storyboard */; };
 		B002B8721BAE420500C744AF /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B002B8711BAE420500C744AF /* Assets.xcassets */; };
 		F51920261011000000000004 /* BrowserFullscreenMediaControlsController.m in Sources */ = {isa = PBXBuildFile; fileRef = F51920261011000000000002; };
+		F51920261118000000000003 /* BrowserPlaybackSession.m in Sources */ = {isa = PBXBuildFile; fileRef = F51920261118000000000002; };
+		F51920261118000000000006 /* BrowserPlaybackPanel.m in Sources */ = {isa = PBXBuildFile; fileRef = F51920261118000000000005; };
 		F51920261011000000000005 /* BrowserFullscreenMediaBridge.js in Resources */ = {isa = PBXBuildFile; fileRef = F51920261011000000000003; };
 		ADBD00000000000000000000 /* UBlockParser.js in Resources */ = {isa = PBXBuildFile; fileRef = ADBC00000000000000000000 /* UBlockParser.js */; };
 		ADBD00000000000000000001 /* UBlockScriptlets.json in Resources */ = {isa = PBXBuildFile; fileRef = ADBC00000000000000000001 /* UBlockScriptlets.json */; };
@@ -171,6 +173,10 @@
 		B002B8731BAE420500C744AF /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B0F6B4611BAEBF9900E2F26B /* ../README.mdown */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = ../README.mdown; sourceTree = "<group>"; };
 		F51920261011000000000001 /* BrowserFullscreenMediaControlsController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BrowserFullscreenMediaControlsController.h; sourceTree = "<group>"; };
+		F51920261118000000000001 /* BrowserPlaybackSession.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BrowserPlaybackSession.h; sourceTree = "<group>"; };
+		F51920261118000000000002 /* BrowserPlaybackSession.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BrowserPlaybackSession.m; sourceTree = "<group>"; };
+		F51920261118000000000004 /* BrowserPlaybackPanel.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BrowserPlaybackPanel.h; sourceTree = "<group>"; };
+		F51920261118000000000005 /* BrowserPlaybackPanel.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BrowserPlaybackPanel.m; sourceTree = "<group>"; };
 		F51920261011000000000002 /* BrowserFullscreenMediaControlsController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BrowserFullscreenMediaControlsController.m; sourceTree = "<group>"; };
 		F51920261011000000000003 /* BrowserFullscreenMediaBridge.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = BrowserFullscreenMediaBridge.js; sourceTree = "<group>"; };
 		F51920261011000000000007 /* BrowserPlaybackSeek.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BrowserPlaybackSeek.h; sourceTree = "<group>"; };
@@ -289,6 +295,10 @@
 				F51920261011000000000007 /* BrowserPlaybackSeek.h */,
 				F51920261011000000000006 /* BrowserPlaybackSymbols.h */,
 				F51920261011000000000001 /* BrowserFullscreenMediaControlsController.h */,
+				F51920261118000000000001 /* BrowserPlaybackSession.h */,
+				F51920261118000000000002 /* BrowserPlaybackSession.m */,
+				F51920261118000000000004 /* BrowserPlaybackPanel.h */,
+				F51920261118000000000005 /* BrowserPlaybackPanel.m */,
 				F51920261011000000000002 /* BrowserFullscreenMediaControlsController.m */,
 				F51920261011000000000003 /* BrowserFullscreenMediaBridge.js */,
 			);
@@ -583,6 +593,8 @@
 				C0D3A0020000000000000001 /* BrowserVLCCompressor.m in Sources */,
 				D0A202600000000000000001 /* BrowserNativeStartPageView.m in Sources */,
 				F51920261011000000000004 /* BrowserFullscreenMediaControlsController.m in Sources */,
+				F51920261118000000000003 /* BrowserPlaybackSession.m in Sources */,
+				F51920261118000000000006 /* BrowserPlaybackPanel.m in Sources */,
 				A1B49A842D6D2000001D58A1 /* BrowserDOMInteractionService.m in Sources */,
 				A1B49A4E2D680900001D58A1 /* BrowserNavigationService.m in Sources */,
 				ADBF00000000000000000006 /* BrowserAdBlockPolicy.m in Sources */,

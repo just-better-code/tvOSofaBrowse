@@ -6,6 +6,7 @@ Published packages are available for [2.21.9](https://github.com/just-better-cod
 
 ### Changed
 
+- Share the native playback panel, command mapping and control-visibility session between website fullscreen and VLC while retaining renderer-specific playback ([Playback controls](docs/USER_GUIDE.md), [Unified playback](docs/agent/plans/unified-playback.md)).
 - Switch experimental VLC web episodes through PlayerJS or Starlight's Next control, then system media controls, with real website completion as a Next-only fallback ([Playback controls](docs/USER_GUIDE.md)).
 - Move the experimental web VLC toggle directly into the main Settings tile formerly used by Magnifier, retaining the magnifier remote shortcut ([Main menu](docs/USER_GUIDE.md#main-menu)).
 - Replace VLC track labels with contextual Audio and Subtitles icons and add a per-site Keep fullscreen toggle for episode transitions ([Playback controls](docs/USER_GUIDE.md)).
