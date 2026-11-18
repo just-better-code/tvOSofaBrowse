@@ -32,3 +32,24 @@ Baseline source: `90003cb`. Working actual-site routing checks and limitations a
 - Native stages 2 and 3 are adopted together in the next independently revertible implementation commit: `BrowserPlaybackSession` supplies typed commands, renderer-owned state, Previous/restart semantics, shared five-second visibility and invalidation; `BrowserPlaybackPanel` supplies one header/control layout, button factory, capability/progress rendering and focus appearance. Both existing renderer controllers consume these components. Their modal/video-surface lifecycles stay separate.
 - Held Select press ownership and the seek ramp remain shared through the existing button/helper. Repeat execution retains a renderer-specific distinction: VLC accumulates the requested target rather than repeatedly reading its cached clock; WebKit seeks its live HTML video. Do not remove that safeguard merely to eliminate a small backend-specific loop.
 - Native panel layout, focus/remote delivery, torrent playback and saved-session restoration require tvOS verification. No physical device work is authorized by this checkpoint. Website algorithms, pagehide behavior and the known UAKino fullscreen reset are unchanged.
+- Follow-up closes the opt-out path: observe the bounded PlayerJS instance registry for ordinary website controls even with experimental VLC OFF. Blob/HLS capture remains opt-in. WebKit capability reporting uses the same adapter probes as dispatch, including Previous, instead of a second hard-coded capability list. Actual UASerials WebKit 1 → 2 → 1 passes with VLC disabled and zero offers.
+- Native adoption `fe1185d` compiled, packaged and published through Actions 44374879556 as Build 32.1. This validates source/project integration, not the visual layout, actual focused-button delivery, track menus or TV playback. All three source stages are implemented; native interaction acceptance remains open.
+
+## Open native capture regression and next task
+
+The user reports capture failure in **Build 31** (correcting an initial mention
+of 32): only UASerials captures, while other tested sites keep playing in their
+website players. This is not an observed pause-without-presentation failure.
+Treat native capture as regressed/unconfirmed despite Linux success and CI.
+The user then directs completion of the unification before capture fixes.
+Finish and commit the adapter opt-out follow-up, then stop architecture work
+and handle the capture report as a separate fix stage.
+
+Compare stage-1 `7e7f0ed` with pre-unification `90003cb`, especially native
+offer validation, evaluator callbacks, playback versus generic generations,
+configuration/foreground permission and accepted metadata URL updates. These
+are investigation targets, not established causes. The Linux stand has actual
+successful capture evidence but does not execute the Objective-C evaluator or
+UIKit lifecycle. Obtain matching native stage evidence before attributing the
+TV symptom to a specific check. Do not mix speculative capture fixes, another
+UI refactor, forced website transitions or a blind rollback into this stage.

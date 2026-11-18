@@ -30,7 +30,7 @@ var mediaAcceptedEpisode = null;
 // PlayerJS documents api('hls'), api('id') and playlist commands. Keep the
 // constructed API objects without probing unrelated globals or network traffic.
 function observePlayerJSFactory() {
-    if (!mediaVLCIframeCapture || typeof window.Playerjs !== 'function') return;
+    if (typeof window.Playerjs !== 'function') return;
     var original = window.Playerjs;
     if (mediaVLCPlayerJSFactories.has(original)) return;
     function remember(player) {
@@ -58,7 +58,7 @@ document.addEventListener('load', function(event) {
 }, true);
 document.addEventListener('DOMContentLoaded', observePlayerJSFactory);
 function playerJSVideoBinding(video) {
-    if (!mediaVLCIframeCapture || !video) return null;
+    if (!video) return null;
     for (var i = mediaVLCPlayerJSInstances.length - 1; i >= 0; i--) {
         try {
             var player = mediaVLCPlayerJSInstances[i];
@@ -69,11 +69,6 @@ function playerJSVideoBinding(video) {
         } catch (error) {}
     }
     return null;
-}
-function playerJSNextController(video) {
-    var binding = playerJSVideoBinding(video);
-    if (!binding) return null;
-    try { return binding.player.api('playlist_length') > 1 ? binding.player : null; } catch (error) { return null; }
 }
 window.__browserTVSetIframeVLCExperiment = function(enabled, active, visible) {
     mediaVLCIframeCapture = enabled === true;
@@ -163,8 +158,12 @@ function vlcVideoSource(video) {
                 // Only a loader with a source owns this decision.
                 var hlsURL = binding.hls.url;
                 if (typeof hlsURL === 'string' && hlsURL) {
-                    if (!/^blob:/.test(source) || binding.hls.media !== video || binding.hls.config.emeEnabled) return null;
-                    source = hlsURL;
+                    if (!mediaVLCIframeCapture) {
+                        if (/^blob:/.test(source)) return null;
+                    } else {
+                        if (!/^blob:/.test(source) || binding.hls.media !== video || binding.hls.config.emeEnabled) return null;
+                        source = hlsURL;
+                    }
                 }
             } catch (error) { return null; }
         }
@@ -848,6 +847,8 @@ function mediaState() {
     var current = v && Number.isFinite(v.currentTime) ? v.currentTime : 0;
     var duration = v && Number.isFinite(v.duration) ? v.duration : 0;
     var seekable = !!(v && v.seekable.length);
+    var binding = episodeBinding(v, 'webkit');
+    var previousRoute = episodeTrackRoute(binding, 'previous'), nextRoute = episodeTrackRoute(binding, 'next');
     return {available: !!v || !!mediaHandlers.play || !!mediaHandlers.pause,
         paused: v ? v.paused : !(navigator.mediaSession && navigator.mediaSession.playbackState === 'playing'),
         currentTime: current, duration: duration, muted: !!(v && v.muted), canMute: !!v,
@@ -856,10 +857,10 @@ function mediaState() {
         canSeekForward: seekable || !!mediaHandlers.seekforward,
         seekAtStart: seekable ? current <= v.seekable.start(0) : !!v && current <= 0,
         seekAtEnd: seekable ? current >= v.seekable.end(v.seekable.length - 1) : duration > 0 && current >= duration,
-        canPrevious: !!mediaHandlers.previoustrack || !!starlightPredecessor() || !!playerTrackControl(true) || (current > 5 && (seekable || !!mediaHandlers.seekto)),
-        canNext: !!mediaHandlers.nexttrack || !!playerTrackControl(false) || !!playerJSNextController(v),
-        routesNext: !!mediaHandlers.nexttrack || !!playerTrackControl(false) || !!playerJSNextController(v),
-        routesPrevious: !!mediaHandlers.previoustrack || !!(starlightPlayer() && starlightCatalog) || !!playerTrackControl(true),
+        canPrevious: !!previousRoute || (current > 5 && (seekable || !!mediaHandlers.seekto)),
+        canNext: !!nextRoute,
+        routesNext: !!nextRoute,
+        routesPrevious: !!previousRoute,
         adapterTitle: starlightSourceTitle(),
         starlightSourceID: starlightPlayer() ? starlightPlayer().source.id : '',
         canRestart: seekable || !!mediaHandlers.seekto,

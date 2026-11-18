@@ -2032,3 +2032,41 @@ fullscreen/pagehide behavior are not changed in this native adoption.
 This host cannot execute UIKit or TVVLCKit. Native focus/layout/remote behavior,
 track menus, saved per-site settings and torrent playback require tvOS observation
 after compilation. Do not treat the Linux bridge/decoder tests as UI verification.
+
+### Shared PlayerJS controls with experimental capture disabled
+
+The shared registry must also serve ordinary WebKit playback. Observe PlayerJS
+instances independently of the capture toggle, but retain the opt-in check
+before extracting Blob/HLS for VLC. Derive WebKit Next/Previous capability
+reporting from the same adapter probes as dispatch; an independent old capability
+list would otherwise send supported Previous actions to system fallback.
+
+Actual UASerials in WebKit with experimental capture OFF passed 1 → 2 → 1 with
+advancing website playback, no native player and zero VLC offers
+(`18-57-19.629Z-37c63a3e`). Delayed catalog/metadata
+(`18-57-19.631Z-54ba5704`), modeled Home/orphan recovery
+(`18-57-40.247Z-d4f6a9ba`), HTTP403 failed-start recovery
+(`18-58-04.141Z-adee260e`) and interruption/source replacement
+(`18-58-19.348Z-d043f52f`) passed against the final bridge with actual Linux
+libVLC. These remain distinct from native panel interaction and MediaRemote
+verification.
+
+Native adoption commit `fe1185d` successfully compiled and published 2.22.0
+Build 32.1 through Actions 44374879556. No native panel interaction was observed;
+the compiler/package result does not close the UI/remote/torrent acceptance
+items above.
+
+### Native capture feedback during completion
+
+The user reports that capture no longer works, first mentions Build 32, then
+corrects it to **31**. They clarify that UASerials still captures while the other
+tested sites continue playing on the website. This is new native regression
+evidence, not a confirmed cause and not the earlier pause-without-VLC symptom.
+Linux bridge/decoder success and Build 31/32 compilation cannot close it.
+
+The user directs finishing the unification first and investigating capture
+afterward. Retain the completed session/panel adoption, finish the tested
+ordinary-PlayerJS adapter follow-up, and keep capture fixes separate. No blind
+rollback, site-specific workaround, new capture timing or device action has
+been performed. Resume capture diagnosis from the concrete checkpoint in the
+[unification plan](plans/unified-playback.md#open-native-capture-regression-and-next-task).
