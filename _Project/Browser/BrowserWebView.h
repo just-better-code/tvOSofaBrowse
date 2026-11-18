@@ -11,6 +11,7 @@ FOUNDATION_EXPORT NSString * const BrowserAdBlockSourceStatusDidChangeNotificati
 - (BOOL)webView:(id _Nonnull)webView shouldCreateNewTabWithRequest:(NSURLRequest * _Nullable)request navigationType:(NSInteger)navigationType;
 - (BOOL)webView:(id _Nonnull)webView shouldImportTorrentResponse:(NSURLResponse * _Nonnull)response request:(NSURLRequest * _Nullable)request;
 - (void)webView:(id)webView didUpdateFullscreenMediaState:(NSDictionary *)state;
+- (void)webView:(id)webView didUpdateEpisodeMetadata:(NSDictionary *)state;
 - (void)webView:(id)webView didRequestVLCPlayback:(NSDictionary *)info;
 - (void)webView:(id)webView didBlockNavigationToURL:(NSURL *)URL rule:(nullable NSString *)rule;
 - (void)webViewDidStartLoad:(id _Nonnull)webView;
@@ -27,6 +28,8 @@ FOUNDATION_EXPORT NSString * const BrowserAdBlockSourceStatusDidChangeNotificati
 @property (nullable, nonatomic, readonly, strong) NSURLRequest *request;
 @property (nullable, nonatomic, readonly, strong) UIScrollView *scrollView;
 @property (nullable, nonatomic, readonly, copy) NSString *title;
+// A media session survives same-document history/title synchronization, not navigation.
+@property (nonatomic, readonly) NSUInteger playbackDocumentGeneration;
 @property (nonatomic, readonly, getter=canGoBack) BOOL canGoBack;
 @property (nonatomic, readonly, getter=canGoForward) BOOL canGoForward;
 @property (nullable, nonatomic, readonly, copy) NSString *backURLString;
@@ -54,8 +57,12 @@ FOUNDATION_EXPORT NSString * const BrowserAdBlockSourceStatusDidChangeNotificati
 @property (nonatomic, readonly) NSUInteger javaScriptGeneration;
 - (void)invalidatePendingJavaScript;
 @property (nonatomic, readonly) BOOL pageFullscreenActive;
+@property (nonatomic, readonly) BOOL fullscreenMediaSuspended;
 - (void)evaluateJavaScript:(NSString *)script
         completionHandler:(void (^ _Nullable)(NSString * _Nullable result, NSError * _Nullable error))completion;
+// Evaluate only in the WKFrameInfo that supplied the video offer; never fall back to top.
+- (void)evaluateVideoJavaScript:(NSString *)script frame:(nullable id)frame
+    completionHandler:(void (^)(NSString * _Nullable result, NSError * _Nullable error))completion;
 - (NSString * _Nonnull)runtimeMediaPreferenceReport;
 - (void)setUserAgent:(NSString * _Nullable)userAgent;
 - (void)pauseAllMediaPlayback;
@@ -63,6 +70,9 @@ FOUNDATION_EXPORT NSString * const BrowserAdBlockSourceStatusDidChangeNotificati
 - (void)resetSitePlaybackPreferences;
 // YES means the system route was attempted, not that the player switched tracks.
 - (BOOL)sendSystemMediaTrackCommand:(BOOL)nextTrack;
+// YES means no command was submitted or the system reported no actionable item.
+- (void)sendSystemMediaTrackCommand:(BOOL)nextTrack
+              unavailableCompletion:(void (^)(BOOL unavailable))completion;
 - (void)captureSnapshotWithCompletion:(void (^)(UIImage * _Nullable snapshot))completion;
 - (void)captureSnapshotInRect:(CGRect)rect
                        width:(CGFloat)width
