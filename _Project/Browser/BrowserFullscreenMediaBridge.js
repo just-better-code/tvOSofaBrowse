@@ -14,66 +14,492 @@ var mediaVolumeReady = false;
 var mediaVolumeVideos = new WeakMap();
 var mediaVLCRequests = Object.create(null);
 var mediaVLCSerial = 0;
-function directVideoSource(video) {
+var mediaVLCAttempted = false;
+// Configuration comes from native at document start and follows the real frame tree.
+var mediaVLCIframeCapture = false;
+var mediaVLCCaptureActive = false;
+var mediaVLCFrameVisible = false;
+var mediaVLCAutoAttempts = new WeakMap();
+var mediaVLCWatched = new Map();
+var mediaVLCWatchTimer = null;
+var mediaVLCResourceObserver = null;
+var mediaVLCUnsupportedVideos = new WeakSet();
+var mediaVLCPlayerJSInstances = [];
+var mediaVLCPlayerJSFactories = new WeakSet();
+// PlayerJS documents api('hls'), api('id') and playlist commands. Keep the
+// constructed API objects without probing unrelated globals or network traffic.
+function observePlayerJSFactory() {
+    if (!mediaVLCIframeCapture || typeof window.Playerjs !== 'function') return;
+    var original = window.Playerjs;
+    if (mediaVLCPlayerJSFactories.has(original)) return;
+    function remember(player) {
+        try {
+            if (player && typeof player.api === 'function' && mediaVLCPlayerJSInstances.indexOf(player) < 0) {
+                mediaVLCPlayerJSInstances.push(player);
+                if (mediaVLCPlayerJSInstances.length > 16) mediaVLCPlayerJSInstances.shift();
+            }
+        } catch (error) {}
+        return player;
+    }
+    try {
+        var wrapped = new Proxy(original, {
+            construct: function(target, args, newTarget) { return remember(Reflect.construct(target, args, newTarget)); },
+            apply: function(target, receiver, args) { return remember(Reflect.apply(target, receiver, args)); }
+        });
+        window.Playerjs = wrapped;
+        mediaVLCPlayerJSFactories.add(original);
+        mediaVLCPlayerJSFactories.add(wrapped);
+    } catch (error) {}
+}
+// A library's load event runs before the following script creates its players.
+document.addEventListener('load', function(event) {
+    if (event.target && event.target.tagName === 'SCRIPT') observePlayerJSFactory();
+}, true);
+document.addEventListener('DOMContentLoaded', observePlayerJSFactory);
+function playerJSVideoBinding(video) {
+    if (!mediaVLCIframeCapture || !video) return null;
+    for (var i = mediaVLCPlayerJSInstances.length - 1; i >= 0; i--) {
+        try {
+            var player = mediaVLCPlayerJSInstances[i];
+            var id = player.api('id');
+            var container = typeof id === 'string' && id.length <= 256 && document.getElementById(id);
+            if (container && container.isConnected && container.contains(video))
+                return {player:player, hls:player.api('hls')};
+        } catch (error) {}
+    }
+    return null;
+}
+function playerJSNextController(video) {
+    var binding = playerJSVideoBinding(video);
+    if (!binding) return null;
+    try { return binding.player.api('playlist_length') > 1 ? binding.player : null; } catch (error) { return null; }
+}
+window.__browserTVSetIframeVLCExperiment = function(enabled, active, visible) {
+    mediaVLCIframeCapture = enabled === true;
+    mediaVLCCaptureActive = active !== false;
+    mediaVLCFrameVisible = visible !== false;
+    function notify(root) {
+        Array.prototype.forEach.call(root.querySelectorAll('*'), function(element) {
+            if ((element.tagName === 'IFRAME' || element.tagName === 'FRAME') && element.contentWindow)
+                element.contentWindow.postMessage({browserTVVLCConfiguration:secret, enabled:mediaVLCIframeCapture, active:mediaVLCCaptureActive, visible:mediaVLCFrameVisible && visibleVLCCandidate(element)}, '*');
+            if (element.shadowRoot) notify(element.shadowRoot);
+        });
+    }
+    notify(document);
+    observePlayerJSFactory();
+    if (!mediaVLCIframeCapture || !mediaVLCCaptureActive || !mediaVLCFrameVisible) {
+        stopVLCWatch();
+        discardUnacceptedVLCRequests();
+    }
+    observeVLCResources();
+    if (mediaVLCIframeCapture) scanAutomaticVLCVideos();
+};
+window.addEventListener('message', function(event) {
+    var data = event.data;
+    if (!data) return;
+    if (window !== window.top && event.source === window.parent && data.browserTVVLCConfiguration === secret)
+        window.__browserTVSetIframeVLCExperiment(data.enabled === true, data.active !== false, data.visible !== false);
+    else if (data.browserTVVLCConfigurationRequest === secret) {
+        var frame = frameForSource(event.source);
+        if (frame && frame.isConnected) event.source.postMessage({browserTVVLCConfiguration:secret, enabled:mediaVLCIframeCapture, active:mediaVLCCaptureActive, visible:mediaVLCFrameVisible && visibleVLCCandidate(frame)}, '*');
+    }
+});
+var mediaVLCVisibilityTimer = null;
+function refreshVLCCaptureVisibility() {
+    if (!mediaVLCIframeCapture || mediaVLCVisibilityTimer) return;
+    mediaVLCVisibilityTimer = setTimeout(function() {
+        mediaVLCVisibilityTimer = null;
+        window.__browserTVSetIframeVLCExperiment(mediaVLCIframeCapture, mediaVLCCaptureActive, mediaVLCFrameVisible);
+        if (window !== window.top) window.parent.postMessage({browserTVVLCConfigurationRequest:secret}, '*');
+    }, 100);
+}
+window.addEventListener('scroll', refreshVLCCaptureVisibility, {passive:true});
+window.addEventListener('resize', refreshVLCCaptureVisibility);
+if (window !== window.top) window.parent.postMessage({browserTVVLCConfigurationRequest:secret}, '*');
+else try { window.webkit.messageHandlers.browserFullscreenMedia.postMessage({token:nativeToken,session:'vlc-config',vlcConfigRequest:true}); } catch(error) {}
+
+// Existing Starlight capability adapter: bind to this actual video's engine,
+// never to the embedding domain or a recently observed network URL.
+function starlightVideoEngine(video) {
+    if (!video || !window.adt || typeof adt.player !== 'function') return null;
+    var engine = video.engine;
+    return engine && engine.video === video && engine.source && engine.source.id &&
+        Array.isArray(engine.source.sources) && engine.group && Array.isArray(engine.group.playlist) ? engine : null;
+}
+function vlcVideoSource(video) {
     var source = video.currentSrc || video.src;
     if (!source) {
         var sources = Array.prototype.slice.call(video.querySelectorAll('source[src]'));
         var candidate = sources.find(function(item) { return !item.type || video.canPlayType(item.type); }) || sources[0];
         source = candidate && candidate.src;
     }
-    if (!source) return null;
+    if (!source || video.mediaKeys) return null;
+    var engine = starlightVideoEngine(video);
+    if (engine) {
+        try {
+            var adapter = engine.attachedAdapter;
+            // Ads temporarily borrow the same video, while the content adapter
+            // retains/detaches its own source. Never offer that unrelated media.
+            if (!adapter || !adapter.mediaSource || adapter.mediaSource !== source) return null;
+            if (/^blob:/.test(source)) {
+                if (!mediaVLCIframeCapture || !adapter.isSoftwareHLSAdapter || !adapter.hls ||
+                    adapter.hls.media !== video || adapter.hls.config.emeEnabled) return null;
+                source = adapter.currentUrl;
+                if (source !== adapter.hls.url || !engine.source.sources.some(function(stream) {
+                    return stream.type === 'HLS' && Array.isArray(stream.source) && stream.source.some(function(item) {
+                        return item && item.url === source;
+                    });
+                })) return null;
+            }
+        } catch (error) { return null; }
+    } else {
+        var binding = playerJSVideoBinding(video);
+        if (binding && binding.hls) {
+            try {
+                // The documented HLS plugin must own this actual Blob video.
+                // Its ad video, detached loader or EME source is not eligible.
+                // Ignore an uninitialized HLS plugin for ordinary HTTP video.
+                // Only a loader with a source owns this decision.
+                var hlsURL = binding.hls.url;
+                if (typeof hlsURL === 'string' && hlsURL) {
+                    if (!/^blob:/.test(source) || binding.hls.media !== video || binding.hls.config.emeEnabled) return null;
+                    source = hlsURL;
+                }
+            } catch (error) { return null; }
+        }
+    }
+    if (typeof source !== 'string' || !source) return null;
     try { source = new URL(source, document.baseURI); } catch (error) { return null; }
-    return /^https?:$/.test(source.protocol) && source.hostname && source.href.length <= 8192 ? source.href : null;
+    return /^https?:$/.test(source.protocol) && source.hostname && !source.username && !source.password && source.href.length <= 8192 ? source.href : null;
 }
 window.__browserTVOpenControlledVideo = function(element) {
-    if (window !== window.top || !element || element.tagName !== 'VIDEO' || !element.controls || !directVideoSource(element)) return false;
+    if ((window !== window.top && !mediaVLCIframeCapture) || !element || element.tagName !== 'VIDEO' ||
+        !element.controls || element.mediaKeys || !vlcVideoSource(element)) return false;
     enterFullscreen(element);
     return true;
 };
 function publishVLCRequest(id, info) {
-    if (window !== window.top) return;
+    if (window !== window.top) {
+        window.parent.postMessage({browserTVVLCRequest:secret, id:id, info:info}, '*');
+        return;
+    }
     try { window.webkit.messageHandlers.browserFullscreenMedia.postMessage(
         Object.assign({token:nativeToken,session:id,vlcRequest:true},info)); } catch(error) {}
 }
+function visibleVLCCandidate(element) {
+    if (!element || !element.isConnected) return false;
+    var rect = element.getBoundingClientRect();
+    var style = getComputedStyle(element);
+    return rect.width >= 40 && rect.height >= 30 && rect.right > 0 && rect.bottom > 0 &&
+        rect.left < innerWidth && rect.top < innerHeight && style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) !== 0;
+}
+function requestVLCVideo(video, automatic, explicit) {
+    if ((window !== window.top && !mediaVLCIframeCapture) || !video) return false;
+    if (automatic && (!mediaVLCIframeCapture || !mediaVLCCaptureActive || !mediaVLCFrameVisible ||
+        document.visibilityState === 'hidden' || !visibleVLCCandidate(video))) return false;
+    var source = vlcVideoSource(video);
+    if (!source || video.mediaKeys) {
+        if (/^blob:/.test(video.currentSrc || video.src || '') && !starlightVideoEngine(video) && !playerJSVideoBinding(video))
+            mediaVLCUnsupportedVideos.add(video);
+        return false;
+    }
+    if (automatic && !explicit && mediaVLCUnsupportedVideos.has(video)) return false;
+    if (explicit) mediaVLCUnsupportedVideos.delete(video);
+    var playerBinding = playerJSVideoBinding(video), playlistID;
+    if (playerBinding) { try { playlistID = playerBinding.player.api('playlist_id'); } catch (error) { return false; } }
+    var engine = starlightVideoEngine(video);
+    var ids = Object.keys(mediaVLCRequests);
+    for (var i = 0; i < ids.length; i++) {
+        var pending = mediaVLCRequests[ids[i]];
+        if (pending.video !== video) continue;
+        if (pending.url === source && pending.engineSource === (engine && engine.source) && pending.playlistID === playlistID) return true;
+        delete mediaVLCRequests[ids[i]];
+    }
+    var previous = mediaVLCAutoAttempts.get(video);
+    if (automatic && !explicit && previous && previous.url === source &&
+        previous.engineSource === (engine && engine.source) && previous.playlistID === playlistID) return false;
+    mediaVLCAutoAttempts.set(video, {url:source, engineSource:engine && engine.source, playlistID:playlistID});
+    mediaVLCAttempted = true;
+    var id = secret + ':' + Date.now() + ':vlc:' + (++mediaVLCSerial);
+    mediaVLCRequests[id] = {video:video, url:source, automatic:!!automatic, explicit:!!explicit,
+        engineSource:engine && engine.source, player:playerBinding && playerBinding.player,
+        hls:playerBinding && playerBinding.hls, playlistID:playlistID};
+    publishVLCRequest(id, {url:source, title:document.title.slice(0,512), automatic:!!automatic,
+        currentTime:Number.isFinite(video.currentTime) ? video.currentTime : 0,
+        volume:video.volume, muted:video.muted, documentURL:location.href,
+        referrerPolicy:video.referrerPolicy || document.referrerPolicy ||
+            ((document.querySelector('meta[name="referrer"]') || {}).content) || 'strict-origin-when-cross-origin',
+        crossOrigin:video.crossOrigin || ''});
+    return true;
+}
+function stopVLCWatch(video) {
+    if (video) mediaVLCWatched.delete(video);
+    else mediaVLCWatched.clear();
+    if (!mediaVLCWatched.size && mediaVLCWatchTimer) { clearInterval(mediaVLCWatchTimer); mediaVLCWatchTimer = null; }
+}
+function discardUnacceptedVLCRequests() {
+    Object.keys(mediaVLCRequests).forEach(function(id) {
+        var request = mediaVLCRequests[id];
+        // Keep ownership while native VLC is presented or its pause ACK is in
+        // flight. An unanswered offer must not block a new Play after Home.
+        if (!request.automatic || request.accepted ||
+            (request.handoff && (request.handoff.pending || request.handoff.accepted))) return;
+        if (request.video) mediaVLCAutoAttempts.delete(request.video);
+        delete mediaVLCRequests[id];
+    });
+}
+function ownsVLCVideo(video) {
+    return Object.keys(mediaVLCRequests).some(function(id) {
+        var request = mediaVLCRequests[id];
+        return request.video === video && request.accepted && vlcRequestSourceIsCurrent(request);
+    });
+}
+function holdVLCOriginal(video) {
+    if (!video || !mediaVLCIframeCapture) return false;
+    if (!mediaVLCCaptureActive || ownsVLCVideo(video)) {
+        if (!video.paused) video.pause();
+        stopVLCWatch(video);
+        return true;
+    }
+    return false;
+}
+function attemptedVLCVideo(video, source) {
+    var previous = mediaVLCAutoAttempts.get(video);
+    if (!previous || previous.url !== source) return false;
+    var engine = starlightVideoEngine(video), binding = playerJSVideoBinding(video), playlistID;
+    try { if (binding) playlistID = binding.player.api('playlist_id'); } catch (error) { return true; }
+    return previous.engineSource === (engine && engine.source) && previous.playlistID === playlistID;
+}
+function canWatchVLCVideo(video) {
+    return mediaVLCIframeCapture && mediaVLCCaptureActive && mediaVLCFrameVisible &&
+        document.visibilityState !== 'hidden' && video && video.isConnected && !video.paused && !video.ended &&
+        !video.error && !video.mediaKeys && visibleVLCCandidate(video);
+}
+function automaticVLCVideo(video) {
+    if (holdVLCOriginal(video) || !canWatchVLCVideo(video)) { stopVLCWatch(video); return; }
+    var source = vlcVideoSource(video);
+    if (!source || attemptedVLCVideo(video, source)) { stopVLCWatch(video); return; }
+    if (!mediaVLCWatched.has(video))
+        mediaVLCWatched.set(video, {url:source, time:video.currentTime, wall:performance.now(), played:0});
+    if (mediaVLCWatchTimer) return;
+    mediaVLCWatchTimer = setInterval(function() {
+        mediaVLCWatched.forEach(function(sample, current) {
+            if (holdVLCOriginal(current) || !canWatchVLCVideo(current)) { stopVLCWatch(current); return; }
+            var url = vlcVideoSource(current), now = performance.now();
+            if (!url || attemptedVLCVideo(current, url)) { stopVLCWatch(current); return; }
+            var wall = (now - sample.wall) / 1000, advance = current.currentTime - sample.time;
+            if (url !== sample.url || wall > 1.5 || advance < 0 || advance > wall + 0.5) sample.played = 0;
+            else if (current.readyState >= 2) sample.played += Math.min(advance, wall);
+            sample.url = url; sample.wall = now; sample.time = current.currentTime;
+            if (sample.played >= 0.1 && requestVLCVideo(current, true, false)) stopVLCWatch(current);
+        });
+        if (!mediaVLCWatched.size) stopVLCWatch();
+    }, 50);
+}
+function scanAutomaticVLCVideos() {
+    function scan(root) {
+        Array.prototype.forEach.call(root.querySelectorAll('video'), automaticVLCVideo);
+        Array.prototype.forEach.call(root.querySelectorAll('*'), function(e) { if (e.shadowRoot) scan(e.shadowRoot); });
+    }
+    if (mediaVLCIframeCapture) scan(document);
+}
+function observeVLCResources() {
+    if (!mediaVLCIframeCapture || !mediaVLCCaptureActive) {
+        if (mediaVLCResourceObserver) mediaVLCResourceObserver.disconnect();
+        mediaVLCResourceObserver = null;
+        return;
+    }
+    if (mediaVLCResourceObserver || typeof PerformanceObserver !== 'function') return;
+    try {
+        mediaVLCResourceObserver = new PerformanceObserver(function(list) {
+            if (list.getEntries().some(function(entry) {
+                return entry.initiatorType === 'video' || /\.(m3u8|mpd|mp4|m4v|webm|m4s|ts)(?:[?#]|$)/i.test(entry.name);
+            })) scanAutomaticVLCVideos();
+        });
+        mediaVLCResourceObserver.observe({entryTypes:['resource']});
+    } catch (error) { mediaVLCResourceObserver = null; }
+}
+function deferVLCFullscreen(element) {
+    if (!mediaVLCIframeCapture || !mediaVLCCaptureActive || !mediaVLCFrameVisible || !element) return false;
+    var videos = element.tagName === 'VIDEO' ? [element] : Array.prototype.slice.call(element.querySelectorAll('video'));
+    var video = videos.find(function(v) { return !v.paused && !v.ended; }) || videos[0];
+    if (!video || !vlcVideoSource(video)) return false;
+    mediaVLCAutoAttempts.delete(video);
+    if (video.paused) { var play = video.play(); if (play && play.catch) play.catch(function() {}); }
+    automaticVLCVideo(video);
+    return true;
+}
 function requestVLCFullscreen(element) {
-    if (window !== window.top) return;
+    if (mediaVLCIframeCapture) {
+        var candidate = element.tagName === 'VIDEO' ? element : element.querySelector('video');
+        if (candidate) automaticVLCVideo(candidate);
+        return;
+    }
+    if (mediaVLCAttempted) return;
     var videos = element.tagName === 'VIDEO' ? [element] : Array.prototype.slice.call(element.querySelectorAll('video'));
     var video = videos.find(function(v) { return !v.paused && !v.ended; }) || videos[0];
     if (!video) return;
-    var source = directVideoSource(video);
-    if (!source) return;
-    var id = secret + ':' + Date.now() + ':vlc:' + (++mediaVLCSerial);
-    mediaVLCRequests[id] = {video: video, url: source};
-    publishVLCRequest(id, {url: source, title: document.title.slice(0, 512),
-        currentTime: Number.isFinite(video.currentTime) ? video.currentTime : 0,
-        volume: video.volume, muted: video.muted, documentURL: location.href,
-        referrerPolicy: video.referrerPolicy || document.referrerPolicy ||
-            ((document.querySelector('meta[name="referrer"]') || {}).content) || 'strict-origin-when-cross-origin',
-        crossOrigin: video.crossOrigin || ''});
+    if (!requestVLCVideo(video, false, true) && !starlightVideoEngine(video) && !playerJSVideoBinding(video) &&
+        (video.mediaKeys || video.currentSrc || video.src || video.querySelector('source[src]'))) mediaVLCAttempted = true;
+}
+document.addEventListener('play', function(event) {
+    if (event.target && event.target.tagName === 'VIDEO') automaticVLCVideo(event.target);
+}, true);
+document.addEventListener('playing', function(event) {
+    if (event.target && event.target.tagName === 'VIDEO') automaticVLCVideo(event.target);
+}, true);
+document.addEventListener('pause', function(event) {
+    var video = event.target;
+    if (!video || video.tagName !== 'VIDEO') return;
+    stopVLCWatch(video);
+    if (video.paused && !ownsVLCVideo(video)) mediaVLCAutoAttempts.delete(video);
+}, true);
+document.addEventListener('ended', function(event) { if (event.target && event.target.tagName === 'VIDEO') stopVLCWatch(event.target); }, true);
+document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'hidden') stopVLCWatch(); else scanAutomaticVLCVideos();
+});
+window.__browserTVVLCRequestTime = function(id) {
+    var request = mediaVLCRequests[id];
+    return request && request.video && Number.isFinite(request.video.currentTime) ? request.video.currentTime : 0;
+};
+function vlcRequestSourceIsCurrent(request) {
+    if (request && request.player) {
+        try {
+            if (request.player.api('playlist_id') !== request.playlistID || request.player.api('hls') !== request.hls) return false;
+        } catch (error) { return false; }
+    }
+    return !!request && !!request.video && request.video.isConnected && !request.video.mediaKeys &&
+        (!request.engineSource || (request.video.engine && request.video.engine.source === request.engineSource)) &&
+        vlcVideoSource(request.video) === request.url;
 }
 window.__browserTVVLCRequestIsCurrent = function(id) {
-    return !!mediaVLCRequests[id] && !!(fullscreenTarget || fullscreenFrame);
+    var request = mediaVLCRequests[id];
+    if (request && request.frame) return mediaVLCIframeCapture && request.frame.isConnected &&
+        request.frame.contentWindow === request.source && (request.automatic
+            ? mediaVLCCaptureActive && mediaVLCFrameVisible && visibleVLCCandidate(request.frame) : mediaFrame() === request.frame);
+    return vlcRequestSourceIsCurrent(request) && (request.automatic
+        ? mediaVLCCaptureActive && mediaVLCFrameVisible && visibleVLCCandidate(request.video) &&
+          (request.accepted || request.explicit || !request.video.paused)
+        : !!(fullscreenTarget || fullscreenFrame));
 };
 window.__browserTVVLCResponse = function(id, action, time, volume, muted) {
     var request = mediaVLCRequests[id];
-    if (!request) return false;
-    if (request.video && request.video.isConnected) {
-        var video = request.video;
-        if (action === 'accepted') video.pause();
-        if (action === 'closed' && (video.currentSrc || video.src) === request.url) {
-            try {
-                if (Number.isFinite(time)) video.currentTime = Math.max(0, time);
-                if (Number.isFinite(volume)) video.volume = Math.max(0, Math.min(1, volume));
-                video.muted = !!muted;
-            } catch (error) {}
-        }
+    if (!request || ['accepted','closed','ended','rejected','cancelled','deferred','aborted'].indexOf(action) < 0) return false;
+    if (action === 'accepted' && !window.__browserTVVLCRequestIsCurrent(id)) return false;
+    if (request.frame) {
+        if (action === 'accepted') request.handoff = {pending:true};
+        request.source.postMessage({browserTVVLCResponse:secret, id:id, action:action,
+            time:time, volume:volume, muted:muted}, '*');
+        if (action !== 'accepted') delete mediaVLCRequests[id];
+        return true;
     }
-    if (action === 'accepted') window.__browserTVExitFullscreen();
-    else delete mediaVLCRequests[id];
+    var video = request.video;
+    if (action === 'deferred') mediaVLCAutoAttempts.delete(video);
+    if (action === 'accepted') {
+        request.accepted = true;
+        request.resumeOnAbort = request.automatic && !video.paused;
+        stopVLCWatch(video);
+        video.pause();
+        request.handoff = {accepted:true, time:window.__browserTVVLCRequestTime(id)};
+        if (window === window.top && !request.automatic) window.__browserTVExitFullscreen();
+        return true;
+    }
+    if (action === 'aborted') {
+        delete mediaVLCRequests[id];
+        if (request.resumeOnAbort && video.paused && canResumeAbortedVLCRequest(request)) {
+            // Keep this attempt suppressed while the site plays. A later manual
+            // pause/Play may retry VLC without bouncing straight into another handoff.
+            var attempt = {url:request.url, engineSource:request.engineSource, playlistID:request.playlistID};
+            mediaVLCAutoAttempts.set(video, attempt);
+            var allowRetry = function() {
+                if (mediaVLCAutoAttempts.get(video) === attempt) mediaVLCAutoAttempts.delete(video);
+            };
+            try {
+                var playback = video.play();
+                if (playback && playback.catch) playback.catch(allowRetry);
+            } catch (error) { allowRetry(); }
+        } else if (video.paused && !ownsVLCVideo(video)) mediaVLCAutoAttempts.delete(video);
+        return true;
+    }
+    if ((action === 'closed' || action === 'ended') && request.accepted && vlcRequestSourceIsCurrent(request)) {
+        var duration = video.duration;
+        var experimental = request.automatic || window !== window.top;
+        var finish = experimental && Number.isFinite(duration) && duration > 0 &&
+            (action === 'ended' || (Number.isFinite(time) && duration - time <= 2));
+        try {
+            video.pause();
+            if (finish) video.currentTime = Math.max(0, duration - 0.1);
+            else if (Number.isFinite(time)) video.currentTime = Math.max(0, Number.isFinite(duration) && duration > 0 ? Math.min(time, duration - 0.1) : time);
+            if (Number.isFinite(volume)) video.volume = Math.max(0, Math.min(1, volume));
+            video.muted = !!muted;
+            if (!finish) mediaVLCAutoAttempts.delete(video);
+            // Remove ownership before Play; its real ended event owns episode advance.
+            delete mediaVLCRequests[id];
+            if (finish && mediaVLCCaptureActive) { var play = video.play(); if (play && play.catch) play.catch(function() {}); }
+        } catch (error) {}
+    }
+    if ((action === 'cancelled' || action === 'rejected') && video && (request.accepted || video.paused))
+        mediaVLCAutoAttempts.delete(video);
+    delete mediaVLCRequests[id];
     return true;
 };
+function canResumeAbortedVLCRequest(request) {
+    var video = request.video;
+    return mediaVLCIframeCapture && mediaVLCCaptureActive && mediaVLCFrameVisible &&
+        document.visibilityState !== 'hidden' && !video.ended && !video.error &&
+        visibleVLCCandidate(video) && vlcRequestSourceIsCurrent(request) && !ownsVLCVideo(video);
+}
+// Native always talks to the main document. Replies follow the selected frame
+// chain and acceptance is acknowledged only after the original video is paused.
+window.__browserTVVLCHandoffResult = function(id) {
+    var request = mediaVLCRequests[id];
+    return JSON.stringify(request && request.handoff || {accepted:false});
+};
+window.addEventListener('message', function(event) {
+    var data = event.data;
+    if (!data) return;
+    if (data.browserTVVLCRequest === secret) {
+        var info = data.info;
+        var automatic = !!(info && info.automatic);
+        var frame = automatic ? frameForSource(event.source) : mediaFrame();
+        if (!frame || !frame.isConnected || event.source !== frame.contentWindow ||
+            typeof data.id !== 'string' || data.id.length > 128 || !info || typeof info !== 'object') return;
+        // The first parent checks the leaf context against the browser-supplied
+        // message origin; each subsequent parent accepts only its selected child.
+        try {
+            var context = new URL(info.documentURL);
+            var source = new URL(info.url);
+            if (!/^https?:$/.test(context.protocol) || !context.hostname || context.username || context.password ||
+                context.href.length > 8192 || !/^https?:$/.test(source.protocol) || !source.hostname ||
+                source.username || source.password || source.href.length > 8192 ||
+                (!info.iframeRelay && context.origin !== event.origin)) return;
+        } catch (error) { return; }
+        if (!mediaVLCIframeCapture || (automatic && (!mediaVLCCaptureActive || !mediaVLCFrameVisible || !visibleVLCCandidate(frame)))) {
+            event.source.postMessage({browserTVVLCResponse:secret, id:data.id, action:'deferred'}, '*');
+            return;
+        }
+        mediaVLCRequests[data.id] = {frame:frame, source:event.source, automatic:automatic};
+        publishVLCRequest(data.id, Object.assign({}, info, {iframeRelay:true}));
+    } else if (data.browserTVVLCResponse === secret && window !== window.top && event.source === window.parent) {
+        var ok = window.__browserTVVLCResponse(data.id, data.action, data.time, data.volume, data.muted);
+        var request = mediaVLCRequests[data.id];
+        if (data.action === 'accepted' && (!ok || !request || !request.frame))
+            window.parent.postMessage({browserTVVLCAcknowledgement:secret, id:data.id,
+                result:ok && request ? request.handoff : {accepted:false}}, '*');
+    } else if (data.browserTVVLCAcknowledgement === secret) {
+        var pending = mediaVLCRequests[data.id];
+        if (!pending || !pending.frame || !window.__browserTVVLCRequestIsCurrent(data.id) || event.source !== pending.source) return;
+        pending.handoff = {accepted:!!(data.result && data.result.accepted), time:data.result && Number.isFinite(data.result.time) ? data.result.time : 0};
+        if (window !== window.top) window.parent.postMessage({browserTVVLCAcknowledgement:secret,
+            id:data.id, result:pending.handoff}, '*');
+    }
+});
 document.addEventListener('loadedmetadata', function(event) {
-    if (event.target && event.target.tagName === 'VIDEO') mediaVolumeVideos.delete(event.target);
+    if (event.target && event.target.tagName === 'VIDEO') {
+        mediaVolumeVideos.delete(event.target);
+        if (fullscreenTarget) requestVLCFullscreen(fullscreenTarget);
+        automaticVLCVideo(event.target);
+    }
 }, true);
 function restoreMediaVideoVolume(preference) {
     if (preference && preference.episodes && typeof preference.episodes.scope === 'string' && Array.isArray(preference.episodes.episodes))
@@ -231,8 +657,8 @@ function mediaState() {
         seekAtStart: seekable ? current <= v.seekable.start(0) : !!v && current <= 0,
         seekAtEnd: seekable ? current >= v.seekable.end(v.seekable.length - 1) : duration > 0 && current >= duration,
         canPrevious: !!mediaHandlers.previoustrack || !!starlightPredecessor() || !!playerTrackControl(true) || (current > 5 && (seekable || !!mediaHandlers.seekto)),
-        canNext: !!mediaHandlers.nexttrack || !!playerTrackControl(false),
-        routesNext: !!mediaHandlers.nexttrack || !!playerTrackControl(false),
+        canNext: !!mediaHandlers.nexttrack || !!playerTrackControl(false) || !!playerJSNextController(v),
+        routesNext: !!mediaHandlers.nexttrack || !!playerTrackControl(false) || !!playerJSNextController(v),
         routesPrevious: !!mediaHandlers.previoustrack || !!(starlightPlayer() && starlightCatalog) || !!playerTrackControl(true),
         adapterTitle: starlightSourceTitle(),
         starlightSourceID: starlightPlayer() ? starlightPlayer().source.id : '',
@@ -327,6 +753,13 @@ function performMediaCommand(command, value, request) {
     if (command === 'next' || command === 'previous') {
         var trackControl = playerTrackControl(command === 'previous');
         if (trackControl) { trackControl.click(); return true; }
+        if (command === 'next') {
+            var nextPlayer = playerJSNextController(mediaVideo());
+            if (nextPlayer) {
+                try { nextPlayer.api('next'); } catch (error) {}
+                return true; // A throwing API may already have submitted Next.
+            }
+        }
     }
     var v = mediaVideo();
     var state = mediaState();
@@ -414,9 +847,15 @@ window.__browserTVSendFullscreenMediaCommand = function(command, value, session)
     if (command === 'volume' && !mediaVolumeReady) return false;
     return performMediaCommand(command, value, ++mediaRequestSerial);
 };
-window.addEventListener('pagehide', function() {
+window.addEventListener('pagehide', function(event) {
+    stopVLCWatch();
+    if (mediaVLCResourceObserver) mediaVLCResourceObserver.disconnect();
+    mediaVLCResourceObserver = null;
+    if (!event.persisted) mediaVLCPlayerJSInstances = [];
     mediaVLCRequests = Object.create(null);
     clearInterval(mediaTimer); mediaTimer = null;
     mediaActive = false; publishNativeMedia();
     if (fullscreenTarget || fullscreenFrame) sendFullscreenToParent('exit');
 });
+
+window.addEventListener('pageshow', observeVLCResources);
