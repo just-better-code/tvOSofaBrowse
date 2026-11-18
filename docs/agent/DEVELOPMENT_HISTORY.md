@@ -1739,3 +1739,21 @@ episode (`16-49-34.133Z-dd73e0ed`). Cross-origin Home regression with the inject
 permission mismatch and the canonical capture/return/Next checks passed
 (`16-49-25.759Z-9e22c447`, `16-49-27.235Z-554478ea`). The origin of the physical
 TV pause is still unconfirmed. Keep both marketing versions at 2.22.0.
+
+### Capture baseline and handoff to episode navigation
+
+At the user's direction, record `c30aef7` as the working baseline for the basic
+website-to-VLC capture flow and move on to Previous/Next. This checkpoint is not
+confirmation of every TV lifecycle case, seamless playback, or episode
+navigation. The separate early playback hiccup is not marked fixed.
+
+Review the generic routes first, independently of Teleportal: the existing
+website controls try registered `navigator.mediaSession` track handlers and
+recognized player capabilities, then send system MediaRemote track commands
+only after a definite unsupported JS result. The historical PlayerJS capability
+path demonstrated Next, not Previous; the official API lists `prev`, which still
+needs actual-site validation. The older VLC beta explicitly submitted
+website Next after dismissal; the current button instead uses real VLC EOF.
+Record the staged investigation in the
+[episode-navigation plan](plans/automatic-web-video-vlc.md#episode-navigation-after-the-capture-baseline).
+No runtime behavior changed in this checkpoint.

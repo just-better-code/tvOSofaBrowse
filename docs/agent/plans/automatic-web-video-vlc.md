@@ -1052,3 +1052,38 @@ website playback. Keep holding the specific video owned by VLC and retain the
 existing inactive/hidden guard. Enable the already-added `[WebVLC]` stage markers
 in the debug logger's prefix allowlist. No native lifecycle timing is established
 by the stand, and no appearance-time UIKit workaround is included.
+
+## Episode navigation after the capture baseline
+
+Use `c30aef7` as the user-designated working capture baseline. Evaluate explicit
+Previous/Next separately from natural EOF; preserve capture eligibility,
+source binding, visible VLC buffering, Back return, and natural completion
+while investigating. Do not use Teleportal to define the generic contract.
+
+1. **Standard routes, including UASerials.** Start from the existing website
+   fullscreen implementation: a registered Media Session `nexttrack` or
+   `previoustrack` handler in the owning page/frame; then a verified player
+   capability such as the bound PlayerJS playlist's documented `next` command.
+   The same [PlayerJS command reference](https://playerjs.com/docs/en=apicommands)
+   documents `prev`; this does not establish that the actual UASerials instance
+   exposes a usable predecessor or owns an outer website playlist. Observe
+   both directions and the real playlist boundaries independently before wiring
+   the commands into the VLC controls.
+2. **System media-command fallback.** Reuse the existing
+   `MRMediaRemoteSendCommandToApp` NextTrack (4) / PreviousTrack (5) routing with
+   a NULL target, not synthetic JavaScript key events. Fall back only after an
+   explicit unsupported result, not a timeout, a throwing handler, or a
+   submitted command with an unknown result. Verify on tvOS that the command
+   reaches the website's Now Playing session rather than the departing VLC
+   player; Linux WebKit cannot establish that routing.
+3. **VLC integration and evidence.** Use the older post-dismissal Next path as
+   a reference: after VLC releases the session, validate the active tab,
+   document and bound source before sending one command. Require observed
+   episode identity change and decoding from the newly offered source, not
+   merely command acceptance. Check both directions, playlist boundaries and
+   natural EOF separately, and preserve the historical distinction between
+   Previous in the first five seconds and restart later. Validate generic
+   routes first on actual sites with the app stand.
+4. **Teleportal separately.** Only after the generic work, evaluate existing
+   Starlight Next and season-catalog Previous. Its catalog fallback and title/URL
+   synchronization are site-specific and must not be used on generic players.
