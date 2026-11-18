@@ -1890,3 +1890,63 @@ Record this as an open app defect, not a passing fullscreen test; see the
 [transition checkpoint](plans/automatic-web-video-vlc.md#open-keep-fullscreen-across-uakino-iframe-navigation).
 No application code changed, no native build or physical TV verification was
 performed, and the user's visible stand was not touched.
+
+### Remaining locally testable navigation and interruption cases
+
+The user asks to complete the outstanding checks without overriding website
+episode/fullscreen behavior. No application runtime changes are made in this
+stage. Add `episode-navigation-guards.mjs` and retain the site's choice to stop
+at natural completion rather than sending a second manual Next.
+
+- Actual UAKino manual Next reaches episode 2 through the last-resort genuine
+  website end and recaptures decoded output: Naruto with Keep fullscreen ON
+  (`17-53-43.923Z-3136a36c`) and Cunk with it OFF
+  (`17-55-26.720Z-5d157a49`). These explicitly model MediaRemote as unavailable;
+  they do not verify the real Apple system route. UAKino's iframe-navigation
+  fullscreen reset remains unchanged. A separate Naruto OFF attempt stalled
+  during initial HTML playback at 0.1 s before capture
+  (`17-53-43.883Z-762be2e8`); do not hide that intermittent startup observation
+  behind the successful Cunk control.
+- Actual UAKino Previous at the first episode, with modeled system commands
+  unavailable, does not wrap, seek to the end, or fabricate an episode switch;
+  the website remains paused (`17-55-17.183Z-2a069985`). This is not evidence
+  that the actual tvOS media-key route supports UAKino Previous.
+- Actual Teleportal manual Next selects 92 → 93 and decodes the new source
+  with Keep fullscreen ON (`17-55-26.729Z-5f6b25ad`) and OFF
+  (`17-55-26.679Z-fa334786`). Only the Starlight adapter is used.
+- Actual Teleportal natural VLC EOF returns a trusted website ended event but
+  does not select episode 93 during the 35-second window. Keep fullscreen ON
+  retains the expanded page (`17-53-43.925Z-56744577`); OFF exits it
+  (`17-53-43.916Z-fb40660f`). With capture inactive, the same actual website
+  also reaches its real ended state without changing episode
+  (`17-56-16.117Z-bbc387d2`). Do not turn this website-owned stop into an
+  automatic manual Next.
+  A further plain WebKit control with production adblock but **no app media
+  bridge at all** reproduces the same trusted ended/unchanged episode result
+  (`17-57-56.612Z-b1a65f3c`).
+- The new guard scenario passes adapter boundary/no-op, an adapter throwing
+  after dispatch, stale source, detached iframe, ambiguous modeled system
+  submission and foreground loss during the track acknowledgement
+  (`17-54-53.947Z-6638193e`): no duplicated or fallback action is observed.
+
+The standard actual-libVLC checks pass capture/paused return/manual replay and
+separate natural versus fallback EOF (`17-54-09.402Z-7e6e4fae`), modeled Home
+and lost-offer recovery (`17-54-47.601Z-5bf7e3ab`), injected HTTP403 failed-start
+recovery without false completion (`17-55-20.185Z-f359e45b`), adapter/system-model
+navigation (`17-55-54.111Z-ce189474`), and existing-fullscreen eligibility
+(`17-57-09.729Z-dbf8e759`).
+
+The older interruption test assumed inactive capture pauses visible HTML.
+Update that assertion to the accepted visible-site behavior and use an actual
+pause/Play cycle when retrying. Calling play() on the already-playing video
+did not produce a fresh capture in the initial run
+(`17-56-34.846Z-0505e2c4`). The corrected manual-cycle test recaptures and rejects
+a source replaced before acceptance (`17-58-17.272Z-cde4b859`). This distinguishes
+manual recovery from automatic foreground recapture; it does not establish the
+user's physical TV startup cause.
+
+CI for the previous application revision successfully published 2.22.0 Build
+29.1 (Actions 44362188857). These Linux checks cannot verify UIKit focus,
+MediaRemote destination/status delivery, native preference persistence or
+physical-device interruptions. The reported Build 23.1 capture regression and
+early playback hiccup remain unconfirmed at the device boundary.

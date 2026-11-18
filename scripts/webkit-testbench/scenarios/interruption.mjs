@@ -9,8 +9,13 @@ export default async function(lab){
   await leaf.evaluate(()=>{document.querySelector('video').play().catch(()=>{})});
   await waitFor(()=>lab.native.phase==='checking');
   await lab.native.setActive(false);await delay(150);
-  assert(await leaf.evaluate(()=>document.querySelector('video').paused));
+  assert.equal(lab.native.presented,false);
+  assert(await leaf.evaluate(()=>!document.querySelector('video').paused),
+   'Inactive capture must not pause an unowned video in the still-visible modeled page');
   await lab.native.setActive(true);await delay(100);
+  // The visible page kept playing. Calling play() again is not a new Play
+  // gesture and emits no event; exercise an actual manual pause/Play cycle.
+  await leaf.evaluate(()=>document.querySelector('video').pause());await delay(50);
   await leaf.evaluate(()=>{document.querySelector('video').play().catch(()=>{})});
   await waitFor(()=>lab.native.phase==='playing',{describe:()=>JSON.stringify(lab.native.snapshot())});
   await lab.native.close('closed');await delay(300);

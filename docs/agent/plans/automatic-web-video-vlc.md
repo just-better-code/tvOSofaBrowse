@@ -1139,3 +1139,22 @@ playlist success as coverage of this case. A fix must preserve the bound visible
 frame's fullscreen shell only for the intended transition, without globally
 disabling pagehide cleanup, retaining stale requests, or auto-expanding unrelated
 navigation. No retention fix is included in this diagnostic stage.
+
+### Final local navigation acceptance boundary
+
+The follow-up test stage verifies UAKino's manual Next through an explicitly
+unavailable system-media model and genuine website EOF, and Teleportal's manual
+Next via the Starlight adapter with both Keep fullscreen states. The Teleportal
+natural-end case stops at episode 92 both after actual Linux VLC EOF and in plain
+WebKit with adblock but no app media bridge. Respect that website-owned stop;
+do not use an automatic manual Next to make the test pass. Teleportal Previous
+remains intentionally unimplemented.
+
+Generic guard cases cover adapter boundaries/throws, stale source, detached
+frame, ambiguous system submission and backgrounding during the acknowledgement.
+Native MediaRemote, UIKit/focus, saved per-site preference interaction and the
+reported physical-TV startup/hiccup are still outside this stand's evidence.
+UAKino playback had an intermittent pre-capture 0.1 s stall in one run; passing
+other episodes does not close that observation. See the development history for
+the exact successful and failed controls. No runtime changes are made by this
+test-only stage, and no new native/device verification is implied.

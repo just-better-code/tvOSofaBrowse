@@ -163,6 +163,10 @@ EOF, both with trusted HTML ended events.
 `scenarios/episode-navigation.mjs` distinguishes adapter and modeled system
 dispatch, verifies real Linux decoder output for the replacement source, tests
 unavailable Previous with no second action, and covers fullscreen keep/exit.
+`scenarios/episode-navigation-guards.mjs` checks no duplicate/fallback after a
+player boundary or thrown action, source replacement and iframe detachment,
+ambiguous modeled system submission, and loss of foreground during track
+acknowledgement. MediaRemote results and foreground transitions remain modeled.
 `lifecycle.mjs` is a compatibility alias. The interruption scenario uses an explicit
 400 ms pre-acceptance delay to check cancellation/new Play and changed-source
 rejection. The timeout scenario stalls the worker's actual HTTP media request and
