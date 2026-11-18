@@ -256,7 +256,9 @@ function ownsVLCVideo(video) {
 }
 function holdVLCOriginal(video) {
     if (!video || !mediaVLCIframeCapture) return false;
-    if (!mediaVLCCaptureActive || ownsVLCVideo(video)) {
+    // Capture permission can lag after Home or a modal transition. It must not
+    // pause playback on a visible page unless VLC actually owns this source.
+    if (ownsVLCVideo(video) || (!mediaVLCCaptureActive && document.visibilityState === 'hidden')) {
         if (!video.paused) video.pause();
         stopVLCWatch(video);
         return true;

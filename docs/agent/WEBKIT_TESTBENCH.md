@@ -171,7 +171,9 @@ advance and decoded main-video identity; never substitute synthetic media events
 
 `scenarios/home.mjs` exercises foreground cycles before capture, an interruption
 after the accepted source acknowledgement and one deliberately lost native reply.
-It requires manual Play of the same URL to recover to actual decoder output.
+It also injects stale inactive capture permission into a visible iframe and checks
+that website playback advances without an offer until permission is restored.
+Recovery requires actual decoder output for the same source.
 `scenarios/denied-start.mjs` denies the media request after acceptance and checks
 that a zero-output VLC Ended is treated as a failed start, preserving a paused
 website for Back/retry rather than forcing its completion. These injected faults

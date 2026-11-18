@@ -233,7 +233,7 @@ void BrowserDebugLog(NSString *format, ...) {
     va_end(arguments);
     if (![message hasPrefix:@"[TorrentState]"] && ![message hasPrefix:@"[TorrentVLC]"] &&
         ![message hasPrefix:@"[TorrentHTTP]"] && ![message hasPrefix:@"[BackgroundTask]"] &&
-        ![message hasPrefix:@"[BackgroundProbe]"]) return;
+        ![message hasPrefix:@"[BackgroundProbe]"] && ![message hasPrefix:@"[WebVLC]"]) return;
     if ([message hasPrefix:@"[TorrentState] tick "]) {
         NSLog(@"%@", message);
         return;

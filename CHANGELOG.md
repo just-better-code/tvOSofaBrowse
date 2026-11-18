@@ -19,6 +19,7 @@ Published packages are available for [2.21.9](https://github.com/just-better-cod
 
 ### Fixed
 
+- Let visible website video keep playing when experimental VLC capture is temporarily inactive ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
 - Resume the same foreground web video on the site if VLC cannot confirm the handoff after pausing it, without immediately retrying the transfer ([Playback controls](docs/USER_GUIDE.md)).
 - Retry unanswered automatic VLC offers after returning from Home so a new Play of the same video can capture again ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
 - Start web playback at the website position once, avoiding a second seek based on VLC's initially unset time ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).

@@ -1717,3 +1717,25 @@ UIKit presentation. Keep both marketing versions at the consolidated 2.22.0.
 The stand's Home interruption (`16-36-45.595Z-805dd30d`) and canonical capture,
 paused close, replay and real Next/EOF checks (`16-36-47.217Z-6fcf5e39`) also
 passed with actual Linux libVLC.
+
+The develop workflow published that revision (`02a3f8f`, Actions 44349420463)
+as 2.22.0 Build 22.1. The user reports that the startup symptom persists.
+
+### Visible video paused by inactive capture permission
+
+Inject inactive capture permission while actual UASerials remains visible.
+Before the change, the bridge pauses the main episode at 0 s without any VLC
+offer (`16-48-02.854Z-c3abf9f7`). This is independent of acknowledgement
+delivery. Inactive capture still blocks offers, but no longer pauses visible
+unowned video; retain the inactive/hidden guard and the hold for VLC-owned video.
+Do not add an unverified UIKit appearance-time refresh. Allow existing `[WebVLC]`
+stage markers through the debug logger; the prefix filter previously dropped them.
+
+The first live run after the change remained unpaused but had no clock advance
+in the short sample (`16-49-07.003Z-8169a7a1`). An instrumented longer run observed
+actual UASerials playback from 6.468 to 7.472 s without an offer, then restored
+permission and confirmed actual Linux libVLC decoded and displayed the same
+episode (`16-49-34.133Z-dd73e0ed`). Cross-origin Home regression with the injected
+permission mismatch and the canonical capture/return/Next checks passed
+(`16-49-25.759Z-9e22c447`, `16-49-27.235Z-554478ea`). The origin of the physical
+TV pause is still unconfirmed. Keep both marketing versions at 2.22.0.

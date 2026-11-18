@@ -1044,3 +1044,11 @@ change, distinguish `acceptSubmissionFailed`, `pauseAckMissing`, `handoffCancell
 and `presenting` without `presented` before changing another part of the flow.
 The stand does not confirm which path the TV took; the tenth-second VLC hiccup
 remains separate and unresolved.
+
+The user reports the startup symptom still occurs on Build 22.1. A separate path
+paused visible HTML video before any offer when foreground capture permission was
+stale. Treat permission as a gate for new capture, not permission to hold visible
+website playback. Keep holding the specific video owned by VLC and retain the
+existing inactive/hidden guard. Enable the already-added `[WebVLC]` stage markers
+in the debug logger's prefix allowlist. No native lifecycle timing is established
+by the stand, and no appearance-time UIKit workaround is included.
