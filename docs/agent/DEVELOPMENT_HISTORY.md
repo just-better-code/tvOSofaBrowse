@@ -1757,3 +1757,36 @@ website Next after dismissal; the current button instead uses real VLC EOF.
 Record the staged investigation in the
 [episode-navigation plan](plans/automatic-web-video-vlc.md#episode-navigation-after-the-capture-baseline).
 No runtime behavior changed in this checkpoint.
+
+### Generic VLC episode navigation and per-site fullscreen exit
+
+The user chose the order player adapter → system media keys → real website
+completion as a last resort for Next. Manual track actions run after dismissal
+using the accepted source/frame and one acknowledged result. Prefer PlayerJS's
+documented `next`/`prev` for the bound playlist; treat the player's own boundary
+as handled, not grounds for a duplicate command. If Previous changes the selected
+ID but does not start playback, call the same player's documented `play` once.
+System MediaRemote is only a fallback. A definite "no actionable item" can fall
+through; ambiguous replies cannot. Keep natural VLC EOF independent. No
+Teleportal-specific adapter was added in this stage.
+
+Restore the fullscreen-exit control with the shared ON/OFF badge and persist its
+value by top-level page host, default ON. It applies to manual Next and
+completion; mid-video Back still restores layout. The older global value is not
+applied to every site.
+
+Actual UASerials in production WebKit with adblock and actual Linux libVLC
+selected the previous episode without starting it before the PlayerJS `play`
+follow-up (`17-13-00.594Z-178a99a3`). The adjusted path passed `1 → 2 → 1` with
+displayed decoder frames on each new source and no modeled media-key submissions;
+Previous on the initial episode did not change the selected item
+(`17-15-21.146Z-48f1c517`). The cross-origin fixture passed adapter navigation,
+fullscreen keep/exit, exclusive modeled system submission, and unavailable Prev
+(`17-15-41.102Z-9385b09c`). Home (`17-13-45.135Z-51eb84b8`) and separate real
+website/native EOF checks (`17-13-00.598Z-e876726b`) passed on Linux.
+
+The user reported a capture regression in published Build 23.1, then paused the
+requested rollback. Retain `c30aef7`; this stage does not change capture eligibility
+or claim that regression fixed. UIKit, actual tvOS MediaRemote routing, and
+native persistence/focus are not verified by the Linux stand. Keep the
+consolidated development version 2.22.0.

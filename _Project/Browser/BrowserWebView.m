@@ -660,6 +660,12 @@ static NSString *BrowserFrameClickBridgeScript(NSString *secret, NSString *nativ
                     "} else if (data.browserTVFrameFullscreen === secret) {"
                         "var frame = frameForSource(event.source);"
                         "if (!frame) { return; }"
+                        "if (data.action === 'vlcExit') {"
+                            "if (fullscreenFrame === frame || (fullscreenTarget && fullscreenTarget.contains(frame))) {"
+                                "window.__browserTVExitFullscreen();"
+                            "} else { sendFullscreenToParent('vlcExit'); }"
+                            "return;"
+                        "}"
                         "if (data.action === 'enter') {"
                             "fullscreenFrame = frame;"
                             "fullscreenFrameStyle = frame.style.cssText;"
@@ -1000,6 +1006,7 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 
 - (void)recordUBlockMessage:(NSDictionary *)body;
 - (void)handleUBlockPolicyMarker:(NSDictionary *)body;
+- (BOOL)submitSystemMediaTrackCommand:(BOOL)nextTrack reply:(void (^ _Nullable)(BOOL unavailable))reply;
 @property (nonatomic, copy) NSString *adBlockRecoveredPolicy;
 - (void)prepareEarlyAdBlockForURL:(NSURL *)URL completion:(void (^)(BOOL ready))completion;
 - (void)prepareAdBlockForNavigationURL:(NSURL *)URL;
@@ -1295,6 +1302,22 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 // sendMediaRemoteCommand helper. Send to system Now Playing, letting WebKit select
 // the actual media session rather than guessing which DOM frame owns its handler.
 - (BOOL)sendSystemMediaTrackCommand:(BOOL)nextTrack {
+    return [self submitSystemMediaTrackCommand:nextTrack reply:nil];
+}
+
+- (void)sendSystemMediaTrackCommand:(BOOL)nextTrack unavailableCompletion:(void (^)(BOOL))completion {
+    __block BOOL finished = NO;
+    void (^finish)(BOOL) = ^(BOOL unavailable) {
+        if (finished) return;
+        finished = YES;
+        completion(unavailable);
+    };
+    if (![self submitSystemMediaTrackCommand:nextTrack reply:finish]) { finish(YES); return; }
+    // No answer is ambiguous, never permission to submit another action.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{ finish(NO); });
+}
+
+- (BOOL)submitSystemMediaTrackCommand:(BOOL)nextTrack reply:(void (^)(BOOL))reply {
     if (!self.runtimeWebView || !self.window || self.loading ||
         UIApplication.sharedApplication.applicationState != UIApplicationStateActive) return NO;
     typedef Boolean (*SendCommandFunction)(uint32_t, CFDictionaryRef, void *, CFStringRef,
@@ -1319,6 +1342,13 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
             NSNumber *status = [results.firstObject isKindOfClass:NSNumber.class] ? results.firstObject : nil;
             BrowserLog(@"[FullscreenMedia] systemReply command=%u error=%u status=%ld", command, error,
                        status ? (long)status.integerValue : -1L);
+            // WebKit's MediaRemoteSPI.h: NoActionableNowPlayingItem = 10.
+            // NoSuchContent might instead be a legitimate playlist boundary.
+            BOOL unavailable = error == 0 && results.count > 0;
+            for (id result in results) {
+                if (![result isKindOfClass:NSNumber.class] || [result unsignedIntValue] != 10) unavailable = NO;
+            }
+            if (reply) reply(unavailable);
         });
     BrowserLog(@"[FullscreenMedia] systemRoute=1 command=%u accepted=%d", command, accepted);
     // Do not send a second JS command after an ambiguous system result: that can

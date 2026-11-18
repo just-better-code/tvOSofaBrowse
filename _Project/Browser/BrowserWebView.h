@@ -67,6 +67,9 @@ FOUNDATION_EXPORT NSString * const BrowserAdBlockSourceStatusDidChangeNotificati
 - (void)resetSitePlaybackPreferences;
 // YES means the system route was attempted, not that the player switched tracks.
 - (BOOL)sendSystemMediaTrackCommand:(BOOL)nextTrack;
+// YES means no command was submitted or the system reported no actionable item.
+- (void)sendSystemMediaTrackCommand:(BOOL)nextTrack
+              unavailableCompletion:(void (^)(BOOL unavailable))completion;
 - (void)captureSnapshotWithCompletion:(void (^)(UIImage * _Nullable snapshot))completion;
 - (void)captureSnapshotInRect:(CGRect)rect
                        width:(CGFloat)width

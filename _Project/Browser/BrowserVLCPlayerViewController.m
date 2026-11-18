@@ -39,6 +39,7 @@
 @property (nonatomic) UIButton *audioTrackButton;
 @property (nonatomic) UIButton *subtitleTrackButton;
 @property (nonatomic) UIButton *autoExitFullscreenButton;
+@property (nonatomic) UILabel *autoExitFullscreenBadge;
 @property (nonatomic, copy) NSString *audioMenuKey;
 @property (nonatomic, copy) NSString *subtitleMenuKey;
 @property (nonatomic) NSTimer *progressTimer;
@@ -198,6 +199,17 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     UIButton *autoExit = [self controlButtonWithSymbol:@"arrow.down.right.and.arrow.up.left"
         label:@"Exit fullscreen after Next or completion" action:@selector(toggleAutoExitFullscreen)];
     self.autoExitFullscreenButton = autoExit;
+    UILabel *autoExitBadge = [UILabel new];
+    autoExitBadge.translatesAutoresizingMaskIntoConstraints = NO;
+    autoExitBadge.isAccessibilityElement = NO;
+    [autoExit addSubview:autoExitBadge];
+    [NSLayoutConstraint activateConstraints:@[
+        [autoExitBadge.centerXAnchor constraintEqualToAnchor:autoExit.centerXAnchor],
+        [autoExitBadge.bottomAnchor constraintEqualToAnchor:autoExit.bottomAnchor constant:-5],
+        [autoExitBadge.widthAnchor constraintEqualToConstant:42],
+        [autoExitBadge.heightAnchor constraintEqualToConstant:22],
+    ]];
+    self.autoExitFullscreenBadge = autoExitBadge;
     autoExit.hidden = !self.returnWebVideoOnEnd;
     [self refreshAutoExitFullscreenControl];
     self.audioTrackButton = audioTrack;
@@ -529,27 +541,29 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
     icon.tintColor = UIColor.whiteColor;
     icon.userInteractionEnabled = NO;
     [button addSubview:icon];
+    BOOL fullscreenToggle = [symbol isEqualToString:@"arrow.down.right.and.arrow.up.left"];
+    CGFloat iconSize = fullscreenToggle ? 30 : 38 * scale;
     [NSLayoutConstraint activateConstraints:@[
         [icon.centerXAnchor constraintEqualToAnchor:button.centerXAnchor],
-        [icon.centerYAnchor constraintEqualToAnchor:button.centerYAnchor],
-        [icon.widthAnchor constraintEqualToConstant:38 * scale],
-        [icon.heightAnchor constraintEqualToConstant:38 * scale],
+        [icon.centerYAnchor constraintEqualToAnchor:button.centerYAnchor constant:fullscreenToggle ? -10 : 0],
+        [icon.widthAnchor constraintEqualToConstant:iconSize],
+        [icon.heightAnchor constraintEqualToConstant:iconSize],
     ]];
     [button addTarget:self action:action forControlEvents:UIControlEventPrimaryActionTriggered];
     return button;
 }
 
 - (void)refreshAutoExitFullscreenControl {
-    BOOL enabled = [BrowserPreferencesStore new].automaticallyExitIframeFullscreen;
+    BOOL enabled = [[BrowserPreferencesStore new] automaticallyExitIframeFullscreenForURL:self.webPageURL];
     self.autoExitFullscreenButton.selected = enabled;
     self.autoExitFullscreenButton.accessibilityValue = enabled ? @"ON" : @"OFF";
-    UIImageView *icon = (UIImageView *)[self.autoExitFullscreenButton viewWithTag:kBrowserVLCControlIconTag];
-    icon.tintColor = BrowserTVToggleBadgeColor(enabled);
+    BrowserTVConfigureToggleBadge(self.autoExitFullscreenBadge, enabled);
 }
 
 - (void)toggleAutoExitFullscreen {
     BrowserPreferencesStore *preferences = [BrowserPreferencesStore new];
-    preferences.automaticallyExitIframeFullscreen = !preferences.automaticallyExitIframeFullscreen;
+    [preferences setAutomaticallyExitIframeFullscreen:![preferences automaticallyExitIframeFullscreenForURL:self.webPageURL]
+                                              forURL:self.webPageURL];
     [self refreshAutoExitFullscreenControl];
     [self showControls];
 }
@@ -721,11 +735,12 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
         button.enabled = duration > 0;
         button.alpha = button.enabled ? 1 : 0.35;
     }
-    self.previousButton.accessibilityLabel = elapsed <= 5000 ? @"Previous file" : @"Go to beginning";
-    self.previousButton.enabled = !self.webVideoURL || elapsed > 5000;
+    BOOL atBeginning = [self playbackTimeMilliseconds] <= 5000;
+    self.previousButton.accessibilityLabel = atBeginning ? (self.returnWebVideoOnEnd ? @"Previous episode" : @"Previous file") : @"Go to beginning";
+    self.previousButton.enabled = self.returnWebVideoOnEnd || !self.webVideoURL || !atBeginning;
     self.previousButton.alpha = self.previousButton.enabled ? 1 : 0.35;
-    self.endButton.accessibilityLabel = @"Go to end and next file";
-    self.endButton.enabled = duration > 0 || !self.webVideoURL;
+    self.endButton.accessibilityLabel = self.returnWebVideoOnEnd ? @"Next episode" : @"Go to end and next file";
+    self.endButton.enabled = self.returnWebVideoOnEnd || duration > 0 || !self.webVideoURL;
     self.endButton.alpha = self.endButton.enabled ? 1 : 0.35;
     NSTimeInterval now = NSDate.date.timeIntervalSince1970;
     BOOL advanced = elapsed > self.lastPlaybackTime;
@@ -851,20 +866,14 @@ static NSInteger const kBrowserVLCControlIconTag = 9797;
 - (void)previousFilePressed {
     [self stopHeldSeek];
     int64_t position = [self playbackTimeMilliseconds];
-    if (position <= 5000) [self switchToAdjacentFileInDirection:-1];
+    if (position <= 5000 && self.returnWebVideoOnEnd) [self finishWebVideo:@"previous"];
+    else if (position <= 5000) [self switchToAdjacentFileInDirection:-1];
     else [self restartPressed];
 }
 
 - (void)nextFilePressed {
     if (self.returnWebVideoOnEnd) {
-        int64_t duration = self.vlcPlayer.media.length.value.longLongValue;
-        int64_t remaining = self.vlcPlayer.remainingTime.value.longLongValue;
-        if (duration <= 0 && remaining < 0) duration = self.vlcPlayer.time.value.longLongValue - remaining;
-        if (duration <= 0) return;
-        [self stopHeldSeek];
-        [self seekToMilliseconds:MAX(0, duration - 100)];
-        [self.vlcPlayer play]; // Actual EOF closes VLC through its normal state callback.
-        [self showControls];
+        [self finishWebVideo:@"next"];
         return;
     }
     [self endPressed]; [self switchToAdjacentFileInDirection:1];

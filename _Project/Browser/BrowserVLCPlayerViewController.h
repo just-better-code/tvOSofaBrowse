@@ -6,7 +6,7 @@
                        currentTime:(double)time volume:(double)volume muted:(BOOL)muted
                   requestHeaders:(NSDictionary<NSString *, NSString *> *)headers cookies:(NSArray<NSHTTPCookie *> *)cookies;
 - (void)closePlayer;
-// Return experimental iframe EOF/End to the site's own episode lifecycle.
+// Enable experimental website episode controls and return VLC EOF to the site.
 @property (nonatomic) BOOL returnWebVideoOnEnd;
 @property (nonatomic, copy) void (^webVideoDidClose)(double time, double volume, BOOL muted, NSString *action);
 @end

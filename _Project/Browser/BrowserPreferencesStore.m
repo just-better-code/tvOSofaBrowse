@@ -11,7 +11,7 @@ static NSString * const kDontShowHintsOnLaunchDefaultsKey = @"DontShowHintsOnLau
 static NSString * const kDebugEnabledDefaultsKey = @"BrowserDebugEnabled";
 static NSString * const kDebugLastLogDefaultsKey = @"BrowserDebugLastLog";
 static NSString * const kDebugRecentLogsDefaultsKey = @"BrowserDebugRecentLogs";
-static NSString * const kExitIframeFullscreenDefaultsKey = @"AutomaticallyExitIframeFullscreen";
+static NSString * const kExitIframeFullscreenByHostDefaultsKey = @"AutomaticallyExitIframeFullscreenByHost";
 static NSString * const kHomepageDefaultsKey = @"homepage";
 
 static NSUInteger const kDefaultTextFontSize = 100;
@@ -44,15 +44,6 @@ NSNotificationName const BrowserDebugEnabledDidChangeNotification = @"BrowserDeb
 }
 + (BOOL)iframeVLCExperimentEnabled {
     return self.iframeVLCExperimentAvailable && [NSUserDefaults.standardUserDefaults boolForKey:@"BrowserIframeVLCExperiment"];
-}
-
-- (BOOL)automaticallyExitIframeFullscreen {
-    NSNumber *value = [[self defaults] objectForKey:kExitIframeFullscreenDefaultsKey];
-    return value == nil ? YES : value.boolValue;
-}
-
-- (void)setAutomaticallyExitIframeFullscreen:(BOOL)enabled {
-    [[self defaults] setBool:enabled forKey:kExitIframeFullscreenDefaultsKey];
 }
 
 + (BOOL)debugEnabled {
@@ -172,10 +163,26 @@ NSNotificationName const BrowserDebugEnabledDidChangeNotification = @"BrowserDeb
     [[self defaults] setObject:values forKey:@"PlayerVolumeByHost"];
 }
 
+- (BOOL)automaticallyExitIframeFullscreenForURL:(NSURL *)URL {
+    NSString *host = [self pageZoomHostForURL:URL];
+    id value = host ? [[self defaults] dictionaryForKey:kExitIframeFullscreenByHostDefaultsKey][host] : nil;
+    return ![value isKindOfClass:NSNumber.class] || [value boolValue];
+}
+
+- (void)setAutomaticallyExitIframeFullscreen:(BOOL)enabled forURL:(NSURL *)URL {
+    NSString *host = [self pageZoomHostForURL:URL];
+    if (!host) return;
+    NSMutableDictionary *values = [[[self defaults] dictionaryForKey:kExitIframeFullscreenByHostDefaultsKey] mutableCopy]
+        ?: [NSMutableDictionary dictionary];
+    if (enabled) [values removeObjectForKey:host];
+    else values[host] = @NO;
+    [[self defaults] setObject:values forKey:kExitIframeFullscreenByHostDefaultsKey];
+}
+
 - (void)clearSitePreferencesForURL:(NSURL *)URL {
     NSString *host = URL ? [self pageZoomHostForURL:URL] : nil;
     if (URL && !host) return;
-    for (NSString *key in @[kPageZoomByHostDefaultsKey, @"PlayerVolumeByHost"]) {
+    for (NSString *key in @[kPageZoomByHostDefaultsKey, @"PlayerVolumeByHost", kExitIframeFullscreenByHostDefaultsKey]) {
         if (!URL) { [[self defaults] removeObjectForKey:key]; continue; }
         NSMutableDictionary *values = [[[self defaults] dictionaryForKey:key] mutableCopy];
         for (NSString *savedHost in values.allKeys) {

@@ -30,10 +30,12 @@ VLC starts at the acknowledged website position. Closing mid-video seeks the sam
 website video to VLC's position and leaves it **paused**. A later manual Play
 rearms capture of that same source. Closing within two seconds of the end returns
 the website video to `duration - 0.1` and plays it so its genuine ended lifecycle
-can select the next item. Native Next also seeks **VLC** to `duration - 0.1` and
-plays; VLC's real EOF closes it and uses the same website completion path. There
-is no separate `close('next')` shortcut, synthetic ended event or forced website
-Next API in this experimental return path.
+can select the next item. Manual Next/Previous are separate commands sent after
+VLC dismissal: a source-bound player adapter first, a modeled system media-key
+result second, and a real website-end seek only for Next if both are unavailable.
+The stand does not emulate Apple MediaRemote or native per-site preferences. It
+models the selected fullscreen-exit setting and observes actual WebKit fullscreen
+bridge state. Neither route emits a synthetic ended event.
 
 The desktop transport uses RC `get_time`/`get_length`; position precision is one
 second. It passes `:start-time`, `:http-user-agent` and `:http-referrer` as input
@@ -156,7 +158,11 @@ server binds loopback, implements ranges and serves media/HTML, never commands.
 
 The canonical simple scenario checks 0.1 s real advancement, one accepted ack,
 presentation before actual decoder readiness, position return, paused mid-close,
-manual same-source rearm, Next through actual VLC EOF, and trusted HTML ended events.
+manual same-source rearm, Next's last-resort website EOF and a separate actual VLC
+EOF, both with trusted HTML ended events.
+`scenarios/episode-navigation.mjs` distinguishes adapter and modeled system
+dispatch, verifies real Linux decoder output for the replacement source, tests
+unavailable Previous with no second action, and covers fullscreen keep/exit.
 `lifecycle.mjs` is a compatibility alias. The interruption scenario uses an explicit
 400 ms pre-acceptance delay to check cancellation/new Play and changed-source
 rejection. The timeout scenario stalls the worker's actual HTTP media request and
@@ -196,12 +202,12 @@ Useful terminal commands:
 - `center X Y` uses the production website click path. It refuses to click a hidden
   website while the modeled native player is presented; UIKit focus is unsupported.
 - `play-pause` targets VLC when presented, otherwise the website bridge.
-- `next` seeks VLC near its actual end and waits for EOF; `player-back` closes it.
+- `next` runs the manual episode route; `player-back` closes VLC.
 - `inactive`, `active`, `native-status` exercise/inspect the modeled lifecycle.
 - `open URL`, `back`, `reload`, `status`, `screenshot`, `inspect`, `quit` control browsing.
 
 The scenario API supports `lab.native.setPage(page)`, `setActive(false/true)`,
-`next()` and `close('closed'|'ended')`. Modal occupancy remains modeled. Source
+`next()`, `previous()` and `close('closed'|'ended')`. Modal occupancy remains modeled. Source
 fingerprints identify the code against which a run was performed; review the model
 whenever the Objective-C contract changes.
 

@@ -6,8 +6,9 @@ Published packages are available for [2.21.9](https://github.com/just-better-cod
 
 ### Changed
 
+- Switch experimental VLC web episodes through the recognized player, then system media controls, with real website completion as a Next-only fallback ([Playback controls](docs/USER_GUIDE.md)).
 - Move the experimental web VLC toggle directly into the main Settings tile formerly used by Magnifier, retaining the magnifier remote shortcut ([Main menu](docs/USER_GUIDE.md#main-menu)).
-- Replace VLC track labels with contextual Audio and Subtitles icons and add an icon toggle for automatic iframe fullscreen exit after Next or completion ([Playback controls](docs/USER_GUIDE.md)).
+- Replace VLC track labels with contextual Audio and Subtitles icons and remember the fullscreen-exit toggle separately for each site ([Playback controls](docs/USER_GUIDE.md)).
 - Show the containing page's title beside the original monochrome cone icon in the shared VLC player header, retaining file names for torrents ([Playback controls](docs/USER_GUIDE.md)).
 - Show the installed build number and available CI revision beside the application version so test updates can be identified in the menu ([Main menu](docs/USER_GUIDE.md#main-menu)).
 - Distinguish develop installations with a purple compass icon and a BETA badge ([Develop setup](docs/DEPLOYMENT.md#automatic-test-app-alongside-stable)).
@@ -25,7 +26,6 @@ Published packages are available for [2.21.9](https://github.com/just-better-cod
 - Start web playback at the website position once, avoiding a second seek based on VLC's initially unset time ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
 - Keep failed VLC starts visible for Back/retry instead of treating zero decoded output as episode completion ([Playback controls](docs/USER_GUIDE.md)).
 - Pause the bound website source before opening VLC, return mid-video closes to its position paused, and allow a new Play to capture that same source again ([Playback controls](docs/USER_GUIDE.md)).
-- Route Next through VLC's actual EOF by seeking to its final 0.1 seconds, then resume the website at its own final 0.1 seconds for natural episode completion ([Playback controls](docs/USER_GUIDE.md)).
 - Restrict automatic capture to foreground visible video with real playback progress, preserve iframe source acknowledgements and HTTP context, and reject unrelated or unsupported sources ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
 - Prioritize Back dismissal of visible VLC over website fullscreen and retain accepted playback across temporary system interruptions ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
 

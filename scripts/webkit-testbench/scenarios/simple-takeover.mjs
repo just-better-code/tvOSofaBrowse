@@ -24,9 +24,8 @@ export default async function(lab){
   await leaf.evaluate(()=>{document.querySelector('video').play().catch(()=>{})});
   await waitFor(()=>playing()&&lab.native.session?.body.session!==first,{describe:()=>JSON.stringify(lab.native.snapshot())});
   assert(lab.native.session.time>=returned.time+.09,'Manual Play must rearm the same source after actual advance');
-  // Native Next seeks VLC near EOF; its actual EOF then returns the HTML media,
-  // and only the HTML video's real ended listener
-  // chooses the next item. The site's MediaSession next handler must not run.
+   // No adapter and the modeled system media command is unavailable. Only
+   // real website EOF from the last-resort seek chooses the next item.
   await lab.native.next();
   await waitFor(()=>playing()&&lab.native.session?.body.url.endsWith('/two.webm'),{describe:()=>JSON.stringify(lab.native.snapshot())});
   assert.equal(await leaf.evaluate(()=>nexts),0);
@@ -42,6 +41,6 @@ export default async function(lab){
   const ready=events.findIndex(e=>e.event==='native-host'&&e.name==='decoder-ready');
   assert(presented>=0&&ready>presented,'Presentation must precede decoder readiness');
   assert(!events.some(e=>e.event==='bridge-trace'&&e.replyAction==='prepare'),'No hidden prepare round trip');
-  console.log(JSON.stringify({runDirectory:lab.runDirectory,actualVLC:true,actualHTMLAdvanceThreshold:true,singleAcceptedAck:true,presentationBeforeDecoderReady:true,startAndReturnPosition:true,midClosePaused:true,sameSourceManualRearm:true,nextUsesTrustedEOF:true,naturalVLCEndReturnsTrustedEOF:true,UIKit:'modeled'}));
+   console.log(JSON.stringify({runDirectory:lab.runDirectory,actualVLC:true,actualHTMLAdvanceThreshold:true,singleAcceptedAck:true,presentationBeforeDecoderReady:true,startAndReturnPosition:true,midClosePaused:true,sameSourceManualRearm:true,nextFallbackUsesTrustedEOF:true,naturalVLCEndReturnsTrustedEOF:true,systemTrack:'modeled unavailable',UIKit:'modeled'}));
  }finally{await lab.native.dispose();await lab.page.goto('about:blank');await media.close()}
 }

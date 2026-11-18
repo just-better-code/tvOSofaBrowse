@@ -67,16 +67,16 @@ export class NativeMediaHost {
   return session.frame.evaluate(({expression,args,token})=>{if(window.__webkitLabDocumentToken!==token)throw Error('changed-document');return (0,eval)(expression)(...args)},{expression,args,token:session.documentToken});
  }
  async isActive(session){return !this.disposed&&this.active&&session.frame.page()===this.page&&session.serial===this.serial&&!this.presented&&!this.overview&&this.enabled}
- async response(session,action,time=0,volume=0,muted=false){
+  async response(session,action,time=0,volume=0,muted=false,exitFullscreen=false){
   if(!this.active||session.frame.page()!==this.page||session.serial!==this.serial)action='cancelled';
   this.event('response',{action});
-  return this.evaluate(session,'window.__browserTVVLCResponse',[session.body.session,action,time,volume,muted]);
+   return this.evaluate(session,'window.__browserTVVLCResponse',[session.body.session,action,time,volume,muted,exitFullscreen]);
  }
  async checkpoint(session,expected){
   const deadline=Date.now()+2000;let reply;
   do{reply=JSON.parse(await this.evaluate(session,'window.__browserTVVLCHandoffResult',[session.body.session]));if(!reply?.pending)break;await delay(50)}while(Date.now()<deadline);
-  this.event('ack',{expected,reply});
-  if(!reply?.[expected])throw Error(`missing-${expected}-ack`);
+   this.event('ack',{expected,reply});
+   if(!reply?.[expected])throw Error(`missing-${expected}-ack`);
   return reply;
  }
  async receive(frame,handler,body){
@@ -129,15 +129,10 @@ export class NativeMediaHost {
   const status=await this.decoder?.status();if(!status)return;this.decoder.command(status.state===3?'pause':'activate');
   await delay(150);const current=await this.decoder.status();this.phase=current.state===4?'paused':'playing';this.event('transport-toggle',{decoderState:current.state});return current;
  }
- async next(){
-  if(!this.presented||!this.decoder)throw Error('no-presented-player');
-  const status=await this.decoder.status();
-  if(!(status.lengthMs>0)){this.event('next-without-duration');return false}
-  this.event('seek-near-native-end',{lengthMs:status.lengthMs});
-  this.decoder.command('seek',{time:Math.max(0,status.lengthMs/1000-.1)});this.decoder.command('activate');
- }
+ async next(){return this.close('next')}
+ async previous(){return this.close('previous')}
  async close(action='closed',{callbackPhase=this.options.callbackPhase??'completion',dismissalDelayMs=this.options.dismissalDelayMs??250}={}){
-  if(!['closed','ended'].includes(action))throw Error('unsupported-close-action: use next() to seek VLC and await its real EOF');
+  if(!['closed','ended','next','previous'].includes(action))throw Error('unsupported-close-action');
   const session=this.session;if(!session||!this.presented)throw Error('no-presented-player');
   const status=await session.decoder?.status()??{timeMs:session.time*1000};await session.decoder?.stop();this.decoder=null;
   this.phase='dismissing';this.event('dismiss-start',{action,callbackPhase});
@@ -145,8 +140,18 @@ export class NativeMediaHost {
    // The app restores JS permission then submits the close command. Native modal
    // state may still be occupied if the callback incorrectly runs too early.
    await session.frame.page().evaluate(enabled=>{window.__browserTVSetFullscreenMediaSuspended?.(false);window.__browserTVSetIframeVLCExperiment?.(enabled,true)},this.enabled);
-   await this.response(session,action,(status.timeMs||0)/1000,session.body.volume,session.body.muted);
-   if(this.options.autoExit!==false&&action==='ended'||action==='closed')await session.frame.page().evaluate(()=>window.__browserTVExitFullscreen?.());
+   const exitFullscreen=this.options.autoExit!==false&&action!=='previous';
+   const sent=await this.response(session,action,(status.timeMs||0)/1000,session.body.volume,session.body.muted,exitFullscreen);
+   if(sent&&(action==='next'||action==='previous')){
+    const reply=await this.checkpoint(session,'track');
+    if(await this.isActive(session)){
+     if(reply.track==='unavailable'){
+      const systemSent=await this.options.systemTrack?.({action,session})===true;
+      this.event('system-track-modeled',{action,sent:systemSent});
+      await this.response(session,action==='next'&&!systemSent?'trackEnd':'trackDone',0,0,false,exitFullscreen);
+     }else await this.response(session,'trackDone');
+    }
+   }
    this.event('close-delivered',{action});
   };
   if(callbackPhase==='viewDidDisappear')await deliver();

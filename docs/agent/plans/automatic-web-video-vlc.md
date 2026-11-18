@@ -1087,3 +1087,27 @@ while investigating. Do not use Teleportal to define the generic contract.
 4. **Teleportal separately.** Only after the generic work, evaluate existing
    Starlight Next and season-catalog Previous. Its catalog fallback and title/URL
    synchronization are site-specific and must not be used on generic players.
+
+### Implemented generic dispatch, fullscreen preference, and acceptance
+
+The final user-selected order is **adapter → system media command → website
+EOF for Next only**. The post-dismissal relay uses the accepted capture's exact
+frame and source. An adapter may decline, identify a boundary, or supply an
+action; dispatch consumes the action even if it throws or the player stops at
+its boundary. The system path only allows a seek on non-submission or an
+explicit NoActionableNowPlayingItem reply. A timeout or ambiguous status is
+not a second attempt. By that point VLC is dismissed, so the last resort seeks
+the still-current HTML video to 0.1 s before its own end, rather than reopening
+VLC to seek it. Natural VLC EOF remains a separate return path.
+
+The fullscreen-exit toggle defaults ON per normalized top-page host; clearing
+that site's cache also resets the preference. It affects Next and completion,
+not Previous, and only exits the bound website fullscreen scope. Mid-video Back
+still leaves the site paused and restores the page layout. Native MediaRemote
+target selection, focus and the saved preference require tvOS verification.
+
+The user reported that published Build 23.1 regressed capture and then asked
+not to rush to revert it. Leave the capture changes in place; this navigation
+stage does not change capture eligibility, startup timing, or its original
+visibility rule. Do not conflate a successful Linux navigation check with a
+fix for the 23.1 report.

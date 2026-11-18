@@ -1654,7 +1654,7 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
     NSString *message = hasSite
         ? [NSString stringWithFormat:@"Choose this site (%@) or all sites.%@", pageURL.host,
            [kind isEqualToString:@"History"] ? @" Favorites stay saved." :
-           [kind isEqualToString:@"Cache"] ? @" Also reset saved volume, zoom and tab previews." : @""]
+            [kind isEqualToString:@"Cache"] ? @" Also reset saved volume, zoom, fullscreen preferences and tab previews." : @""]
         : @"Open a website to use This Site.";
     UIAlertController *alert = [self browserAlertControllerWithTitle:title message:message];
     __weak typeof(self) weakSelf = self;

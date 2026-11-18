@@ -22,8 +22,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setPlayerVolume:(double)volume forURL:(nullable NSURL *)URL;
 // nil clears the per-site preferences for every host.
 - (void)clearSitePreferencesForURL:(nullable NSURL *)URL;
-// Experimental iframe End/Next exits website fullscreen by default.
-@property (nonatomic) BOOL automaticallyExitIframeFullscreen;
+// Experimental web completion exits website fullscreen by default, per page host.
+- (BOOL)automaticallyExitIframeFullscreenForURL:(nullable NSURL *)URL;
+- (void)setAutomaticallyExitIframeFullscreen:(BOOL)enabled forURL:(nullable NSURL *)URL;
 @property (nonatomic) BOOL adBlockEnabled;
 @property (nonatomic) BOOL cursorMagnifierEnabled;
 @property (nonatomic) BOOL dontShowHintsOnLaunch;
