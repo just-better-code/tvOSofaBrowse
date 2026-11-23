@@ -609,12 +609,16 @@ static NSString *BrowserFrameClickBridgeScript(NSString *secret, NSString *nativ
                 "window.addEventListener('pagehide',window.__browserTVResetClickSequence);"
                 "window.__browserTVFrameAtPoint = function(x, y) { return !!frameAtPoint(x, y); };"
                 "window.__browserTVExitFullscreen = function() {"
-                    "if (exitFullscreen()) { return true; }"
-                    "if (fullscreenFrame && fullscreenFrame.contentWindow) {"
-                        "fullscreenFrame.contentWindow.postMessage({browserTVFullscreenCommand: secret, action: 'exit'}, '*');"
-                        "return true;"
+                    "var exited = exitFullscreen();"
+                    "if (fullscreenFrame) {"
+                        "var frame = fullscreenFrame;"
+                        "if (frame.contentWindow) frame.contentWindow.postMessage({browserTVFullscreenCommand: secret, action: 'exit'}, '*');"
+                        "frame.style.cssText = fullscreenFrameStyle;"
+                        "endTheater(); fullscreenFrame = null; fullscreenFrameStyle = '';"
+                        "sendFullscreenToParent('exit'); notifyFullscreenChange();"
+                        "exited = true;"
                     "}"
-                    "return false;"
+                    "return exited;"
                 "};"
                 "window.__browserTVToggleVideo = toggleVideo;"
                 "window.__browserTVHandleMediaHorizontalPress = handleMediaHorizontalPress;"
@@ -655,6 +659,12 @@ static NSString *BrowserFrameClickBridgeScript(NSString *secret, NSString *nativ
                     "} else if (data.browserTVFrameFullscreen === secret) {"
                         "var frame = frameForSource(event.source);"
                         "if (!frame) { return; }"
+                        "if (data.action === 'vlcExit') {"
+                            "if (fullscreenFrame === frame || (fullscreenTarget && fullscreenTarget.contains(frame))) {"
+                                "window.__browserTVExitFullscreen();"
+                            "} else { sendFullscreenToParent('vlcExit'); }"
+                            "return;"
+                        "}"
                         "if (data.action === 'enter') {"
                             "fullscreenFrame = frame;"
                             "fullscreenFrameStyle = frame.style.cssText;"
@@ -800,41 +810,71 @@ static id BrowserPersistentWebsiteDataStore(void) {
 - (void)userContentController:(id)controller didReceiveScriptMessage:(id)message {
     BrowserWebView *owner = self.owner;
     if (!owner) return;
+    id frame = [message valueForKey:@"frameInfo"];
+    BOOL mainFrame = [[frame valueForKey:@"isMainFrame"] boolValue];
+    NSURLRequest *request = [frame valueForKey:@"request"];
+    id body = [message valueForKey:@"body"];
+    if (![body isKindOfClass:NSDictionary.class] || ![body[@"token"] isEqual:self.token]) return;
+    if (![body[@"session"] isKindOfClass:NSString.class] || [body[@"session"] length] > 128) return;
+    if (mainFrame && [body[@"episodeMetadata"] boolValue]) {
+        // Same-document replaceState may race the URL observation. Bind this
+        // title-only update to the accepted capture session instead of a URL.
+        NSString *title = body[@"pageTitle"];
+        if (owner.loading || !owner.window || UIApplication.sharedApplication.applicationState != UIApplicationStateActive ||
+            ![title isKindOfClass:NSString.class] || title.length > 512) return;
+        if ([owner.delegate respondsToSelector:@selector(webView:didUpdateEpisodeMetadata:)])
+            [owner.delegate webView:owner didUpdateEpisodeMetadata:@{@"session":body[@"session"], @"pageTitle":title}];
+        return;
+    }
+    // Configuration only returns a boolean; it may arrive during redirect/commit.
+    // Playback and media-state messages retain exact document URL validation.
+    if (mainFrame && ![body[@"vlcConfigRequest"] boolValue] && ![request.URL isEqual:owner.request.URL]) return;
+    if (mainFrame && [body[@"vlcConfigRequest"] boolValue]) {
+        BOOL active = !owner.fullscreenMediaSuspended && owner.window && UIApplication.sharedApplication.applicationState == UIApplicationStateActive;
+        NSString *script = [NSString stringWithFormat:@"window.__browserTVSetIframeVLCExperiment && window.__browserTVSetIframeVLCExperiment(%@,%@)",
+            BrowserPreferencesStore.iframeVLCExperimentEnabled ? @"true" : @"false", active ? @"true" : @"false"];
+        [owner evaluateJavaScript:script completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
+        return;
+    }
     if (!owner.window) {
         [owner setFullscreenMediaControlsSuspended:YES];
         return;
     }
-    id frame = [message valueForKey:@"frameInfo"];
-    if (![[frame valueForKey:@"isMainFrame"] boolValue]) return;
-    NSURLRequest *request = [frame valueForKey:@"request"];
-    if (![request.URL isEqual:owner.request.URL]) return;
-    id body = [message valueForKey:@"body"];
-    if (![body isKindOfClass:NSDictionary.class] || ![body[@"token"] isEqual:self.token]) return;
-    if (![body[@"session"] isKindOfClass:NSString.class] || [body[@"session"] length] > 128) return;
+    if ([body[@"vlcRequest"] boolValue])
+        BrowserDebugLog(@"[WebVLC] offer=1 child=%d enabled=%d", !mainFrame, BrowserPreferencesStore.iframeVLCExperimentEnabled);
+    BOOL iframeExperiment = mainFrame && ([body[@"iframeRelay"] boolValue] || [body[@"automatic"] boolValue]) && [body[@"vlcRequest"] boolValue];
+    if (!mainFrame || (iframeExperiment && !BrowserPreferencesStore.iframeVLCExperimentEnabled)) return;
     if ([body[@"fullscreenState"] isKindOfClass:NSNumber.class]) {
         [owner updatePageFullscreenActive:[body[@"fullscreenState"] boolValue]];
         return;
     }
-    if (owner.loading) return;
+    if (owner.loading && ![body[@"vlcRequest"] boolValue]) return;
     if ([body[@"vlcRequest"] boolValue]) {
-        // Only a direct video from the main document uses VLC. Iframes keep
-        // the website player and its existing episode lifecycle.
+        // Direct offers retain exact WebKit document binding. Experimental relay
+        // context is checked against MessageEvent.origin by the first parent;
+        // subsequent hops are restricted to the selected fullscreen frame.
         NSString *documentString = [body[@"documentURL"] isKindOfClass:NSString.class] ? body[@"documentURL"] : nil;
         NSURL *documentURL = documentString.length > 0 && documentString.length <= 8192 ? [NSURL URLWithString:documentString] : nil;
-        if (![documentURL isEqual:request.URL]) return;
+        if ((![body[@"iframeRelay"] boolValue] && ![documentURL isEqual:request.URL]) ||
+            !documentURL.host.length || documentURL.user.length || documentURL.password.length ||
+            ![@[@"http", @"https"] containsObject:documentURL.scheme.lowercaseString]) {
+            BrowserDebugLog(@"[WebVLC] documentMismatch=1 child=%d", !mainFrame); return;
+        }
         NSString *URLString = [body[@"url"] isKindOfClass:NSString.class] ? body[@"url"] : nil;
         NSURL *URL = URLString.length > 0 && URLString.length <= 8192 ? [NSURL URLWithString:URLString] : nil;
-        if (!URL.host.length || ![@[@"http", @"https"] containsObject:URL.scheme.lowercaseString]) return;
+        if (!URL.host.length || URL.user.length || URL.password.length || ![@[@"http", @"https"] containsObject:URL.scheme.lowercaseString]) return;
         double time = [body[@"currentTime"] isKindOfClass:NSNumber.class] ? [body[@"currentTime"] doubleValue] : 0;
         double volume = [body[@"volume"] isKindOfClass:NSNumber.class] ? [body[@"volume"] doubleValue] : 1;
-        NSDictionary *info = @{@"session": body[@"session"], @"url": URLString,
+        NSMutableDictionary *info = [@{@"session": body[@"session"], @"url": URLString,
             @"title": [body[@"title"] isKindOfClass:NSString.class] && [body[@"title"] length] <= 512 ? body[@"title"] : @"Video",
             @"currentTime": @(isfinite(time) && time >= 0 && time < 1e9 ? time : 0),
             @"volume": @(isfinite(volume) ? MIN(1, MAX(0, volume)) : 1),
             @"muted": @([body[@"muted"] isKindOfClass:NSNumber.class] && [body[@"muted"] boolValue]),
             @"documentURL": [body[@"documentURL"] isKindOfClass:NSString.class] && [body[@"documentURL"] length] <= 8192 ? body[@"documentURL"] : @"",
             @"referrerPolicy": [body[@"referrerPolicy"] isKindOfClass:NSString.class] && [body[@"referrerPolicy"] length] <= 64 ? body[@"referrerPolicy"] : @"",
-            @"crossOrigin": [body[@"crossOrigin"] isKindOfClass:NSString.class] && [body[@"crossOrigin"] length] <= 32 ? body[@"crossOrigin"] : @""};
+            @"crossOrigin": [body[@"crossOrigin"] isKindOfClass:NSString.class] && [body[@"crossOrigin"] length] <= 32 ? body[@"crossOrigin"] : @""} mutableCopy];
+        if (iframeExperiment) info[@"iframeExperiment"] = @YES;
+        info[@"automatic"] = @([body[@"automatic"] boolValue]);
         if ([owner.delegate respondsToSelector:@selector(webView:didRequestVLCPlayback:)]) {
             [owner.delegate webView:owner didRequestVLCPlayback:info];
         }
@@ -937,6 +977,7 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 
 @property (nullable, nonatomic, strong) id runtimeWebView;
 @property (nonatomic, readwrite) NSUInteger documentGeneration;
+@property (nonatomic, readwrite) NSUInteger playbackDocumentGeneration;
 @property (nonatomic, readwrite) NSUInteger javaScriptGeneration;
 @property (nonatomic, readwrite) BOOL pageFullscreenActive;
 @property (nullable, nonatomic, strong) NSURLRequest *lastRequest;
@@ -975,6 +1016,7 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 
 - (void)recordUBlockMessage:(NSDictionary *)body;
 - (void)handleUBlockPolicyMarker:(NSDictionary *)body;
+- (BOOL)submitSystemMediaTrackCommand:(BOOL)nextTrack reply:(void (^ _Nullable)(BOOL unavailable))reply;
 @property (nonatomic, copy) NSString *adBlockRecoveredPolicy;
 - (void)prepareEarlyAdBlockForURL:(NSURL *)URL completion:(void (^)(BOOL ready))completion;
 - (void)prepareAdBlockForNavigationURL:(NSURL *)URL;
@@ -1086,6 +1128,11 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 @end
 
 @implementation BrowserWebView
+
+- (void)setDocumentGeneration:(NSUInteger)generation {
+    _documentGeneration = generation;
+    _playbackDocumentGeneration += 1;
+}
 
 - (void)updatePageFullscreenActive:(BOOL)active {
     BOOL exited = self.pageFullscreenActive && !active;
@@ -1270,6 +1317,22 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 // sendMediaRemoteCommand helper. Send to system Now Playing, letting WebKit select
 // the actual media session rather than guessing which DOM frame owns its handler.
 - (BOOL)sendSystemMediaTrackCommand:(BOOL)nextTrack {
+    return [self submitSystemMediaTrackCommand:nextTrack reply:nil];
+}
+
+- (void)sendSystemMediaTrackCommand:(BOOL)nextTrack unavailableCompletion:(void (^)(BOOL))completion {
+    __block BOOL finished = NO;
+    void (^finish)(BOOL) = ^(BOOL unavailable) {
+        if (finished) return;
+        finished = YES;
+        completion(unavailable);
+    };
+    if (![self submitSystemMediaTrackCommand:nextTrack reply:finish]) { finish(YES); return; }
+    // No answer is ambiguous, never permission to submit another action.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{ finish(NO); });
+}
+
+- (BOOL)submitSystemMediaTrackCommand:(BOOL)nextTrack reply:(void (^)(BOOL))reply {
     if (!self.runtimeWebView || !self.window || self.loading ||
         UIApplication.sharedApplication.applicationState != UIApplicationStateActive) return NO;
     typedef Boolean (*SendCommandFunction)(uint32_t, CFDictionaryRef, void *, CFStringRef,
@@ -1294,6 +1357,13 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
             NSNumber *status = [results.firstObject isKindOfClass:NSNumber.class] ? results.firstObject : nil;
             BrowserLog(@"[FullscreenMedia] systemReply command=%u error=%u status=%ld", command, error,
                        status ? (long)status.integerValue : -1L);
+            // WebKit's MediaRemoteSPI.h: NoActionableNowPlayingItem = 10.
+            // NoSuchContent might instead be a legitimate playlist boundary.
+            BOOL unavailable = error == 0 && results.count > 0;
+            for (id result in results) {
+                if (![result isKindOfClass:NSNumber.class] || [result unsignedIntValue] != 10) unavailable = NO;
+            }
+            if (reply) reply(unavailable);
         });
     BrowserLog(@"[FullscreenMedia] systemRoute=1 command=%u accepted=%d", command, accepted);
     // Do not send a second JS command after an ambiguous system result: that can
@@ -1302,8 +1372,11 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 }
 
 - (void)setFullscreenMediaControlsSuspended:(BOOL)suspended {
+    _fullscreenMediaSuspended = suspended;
     if (suspended) [self evaluateJavaScript:@"window.__browserTVResetClickSequence && window.__browserTVResetClickSequence()" completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
-    NSString *script = [NSString stringWithFormat:@"window.__browserTVSetFullscreenMediaSuspended && window.__browserTVSetFullscreenMediaSuspended(%@)", suspended ? @"true" : @"false"];
+    BOOL active = !suspended && self.window && UIApplication.sharedApplication.applicationState == UIApplicationStateActive;
+    NSString *script = [NSString stringWithFormat:@"window.__browserTVSetFullscreenMediaSuspended && window.__browserTVSetFullscreenMediaSuspended(%@);window.__browserTVSetIframeVLCExperiment && window.__browserTVSetIframeVLCExperiment(%@,%@)",
+        suspended ? @"true" : @"false", BrowserPreferencesStore.iframeVLCExperimentEnabled ? @"true" : @"false", active ? @"true" : @"false"];
     [self evaluateJavaScript:script completionHandler:^(__unused NSString *result, __unused NSError *error) {}];
 }
 
@@ -1338,6 +1411,7 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
     BrowserEnsureWebKitRuntimeLoaded();
 
     self.backgroundColor = UIColor.blackColor;
+    _fullscreenMediaSuspended = YES;
     self.userAgent = userAgent;
     self.pageZoomFactor = 1.0;
     self.textZoomFactor = 1.0;
@@ -1863,7 +1937,11 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
     }
     // Same-document history can leave and return to the same URL without a
     // provisional navigation. Invalidate before queued JS replies are delivered.
-    if ([keyPath isEqualToString:@"URL"] && object == self.runtimeWebView) self.documentGeneration += 1;
+    if ([keyPath isEqualToString:@"URL"] && object == self.runtimeWebView) {
+        // Generic DOM/UI replies still expire on every history change. Playback
+        // is bound to the document/source, so a replaceState must not orphan VLC.
+        _documentGeneration += 1;
+    }
     __weak typeof(self) weakSelf = self;
     dispatch_async(dispatch_get_main_queue(), ^{
         BrowserWebView *webView = weakSelf;
@@ -2058,6 +2136,36 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
     // Bound the reply without pumping a nested run loop or blocking the caller.
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
+        finish(nil, [NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorTimedOut userInfo:nil]);
+    });
+}
+
+- (void)evaluateVideoJavaScript:(NSString *)script frame:(id)frame
+    completionHandler:(void (^)(NSString *, NSError *))completion {
+    id runtime = self.runtimeWebView;
+    SEL selector = NSSelectorFromString(frame ? @"evaluateJavaScript:inFrame:inContentWorld:completionHandler:" : @"evaluateJavaScript:completionHandler:");
+    Class worldClass = NSClassFromString(@"WKContentWorld");
+    id world = [worldClass respondsToSelector:NSSelectorFromString(@"pageWorld")]
+        ? ((id (*)(id, SEL))objc_msgSend)(worldClass, NSSelectorFromString(@"pageWorld")) : nil;
+    if ((frame && !world) || ![runtime respondsToSelector:selector]) {
+        completion(nil, [NSError errorWithDomain:@"BrowserVideoFrame" code:1 userInfo:nil]); return;
+    }
+    NSUInteger generation = self.playbackDocumentGeneration, javaScriptGeneration = self.javaScriptGeneration;
+    __weak typeof(self) weakSelf = self;
+    __block BOOL finished = NO;
+    void (^finish)(id, NSError *) = ^(id result, NSError *error) {
+        if (finished) return;
+        finished = YES;
+        BrowserWebView *view = weakSelf;
+        if (!view || view.runtimeWebView != runtime || view.playbackDocumentGeneration != generation ||
+            view.javaScriptGeneration != javaScriptGeneration)
+            error = [NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorCancelled userInfo:nil];
+        completion(error ? nil : BrowserStringFromJavaScriptResult(result), error);
+    };
+    void (^reply)(id, NSError *) = ^(id result, NSError *error) { dispatch_async(dispatch_get_main_queue(), ^{ finish(result, error); }); };
+    if (frame) ((void (*)(id, SEL, id, id, id, id))objc_msgSend)(runtime, selector, script, frame, world, reply);
+    else ((void (*)(id, SEL, id, id))objc_msgSend)(runtime, selector, script, reply);
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
         finish(nil, [NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorTimedOut userInfo:nil]);
     });
 }

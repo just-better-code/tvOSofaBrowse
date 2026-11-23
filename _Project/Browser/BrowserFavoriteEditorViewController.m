@@ -3,6 +3,7 @@
 
 @interface BrowserFavoriteEditorButton : UIButton
 @property (nonatomic, strong) UIColor *restingColor;
+@property (nonatomic, strong) UIColor *restingTextColor;
 @end
 
 @implementation BrowserFavoriteEditorButton
@@ -10,9 +11,9 @@
        withAnimationCoordinator:(UIFocusAnimationCoordinator *)coordinator {
     [super didUpdateFocusInContext:context withAnimationCoordinator:coordinator];
     [coordinator addCoordinatedAnimations:^{
-        self.backgroundColor = self.isFocused ? BrowserTVFocusedSurfaceColor() : self.restingColor;
+        self.backgroundColor = BrowserTVSystemButtonSurfaceColor(self.isFocused ? BrowserTVFocusedSurfaceColor() : self.restingColor);
         [self setTitleColor:self.isFocused ? BrowserTVFocusedTextColor()
-                                           : UIColor.whiteColor forState:UIControlStateNormal];
+                                           : self.restingTextColor forState:UIControlStateNormal];
     } completion:nil];
 }
 @end
@@ -49,15 +50,15 @@
     return label;
 }
 
-- (UIButton *)actionButtonWithTitle:(NSString *)title color:(UIColor *)color selector:(SEL)selector {
+- (UIButton *)actionButtonWithTitle:(NSString *)title color:(UIColor *)color destructive:(BOOL)destructive selector:(SEL)selector {
     BrowserFavoriteEditorButton *button = [BrowserFavoriteEditorButton buttonWithType:UIButtonTypeSystem];
     button.translatesAutoresizingMaskIntoConstraints = NO;
     button.restingColor = color;
-    button.backgroundColor = color;
-    button.layer.cornerRadius = 18.0;
+    button.restingTextColor = destructive && BrowserTVUsesNativeButtonSurface() ? UIColor.systemRedColor : UIColor.whiteColor;
+    BrowserTVConfigureSystemButtonSurface(button, color, 18.0);
     button.titleLabel.font = [UIFont systemFontOfSize:28.0 weight:UIFontWeightSemibold];
     [button setTitle:title forState:UIControlStateNormal];
-    [button setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    [button setTitleColor:button.restingTextColor forState:UIControlStateNormal];
     [button addTarget:self action:selector forControlEvents:UIControlEventPrimaryActionTriggered];
     return button;
 }
@@ -122,13 +123,16 @@
     self.errorLabel = errorLabel;
 
     UIButton *save = [self actionButtonWithTitle:@"Save"
-                                          color:BrowserTVRestingSurfaceColor()
+                                           color:BrowserTVRestingSurfaceColor()
+                                     destructive:NO
                                        selector:@selector(savePressed)];
     UIButton *cancel = [self actionButtonWithTitle:@"Cancel"
-                                            color:BrowserTVRestingSurfaceColor()
+                                             color:BrowserTVRestingSurfaceColor()
+                                       destructive:NO
                                          selector:@selector(cancelPressed)];
     UIButton *remove = [self actionButtonWithTitle:@"Delete"
-                                            color:[UIColor colorWithRed:0.69 green:0.23 blue:0.27 alpha:0.70]
+                                             color:[UIColor colorWithRed:0.69 green:0.23 blue:0.27 alpha:0.70]
+                                       destructive:YES
                                          selector:@selector(deletePressed)];
     UIStackView *actions = [[UIStackView alloc] initWithArrangedSubviews:@[save, cancel, remove]];
     actions.translatesAutoresizingMaskIntoConstraints = NO;

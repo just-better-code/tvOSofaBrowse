@@ -1067,6 +1067,129 @@ The extended production three-frame DOM harness passes known-episode 91 URL sync
 
 Publish immutable v2.21.9 on f1843dc from feature/teleportal-player. GitHub run 42387463543 completed successfully with Apple TV Release only; confirm the unsigned IPA, notices and SHA256SUMS are attached to the public release. The user subsequently reported “все чудово працює”. Record this as successful user confirmation of the reported playback workflow on TV; no agent-controlled device interaction, exhaustive other-player checks or separately enumerated restart/EOF cases were observed. This supersedes the earlier unreleased status and pending user confirmation for the reported workflow. The user then requested merging the branch into master. Keep the published tag unchanged.
 
+
+## 2026-11-10 — Isolated Debug VLC compressor prototype
+
+Implement the agreed prototype on a separate branch based on master `70f74eb`.
+The user subsequently clarified that automatic iframe-stream discovery and
+working website episode transitions are the primary goal, with compression an
+optional follow-on. Rename the branch to `research/automatic-web-video-vlc`;
+the selected scope remains the isolated compressor prototype plus a detailed
+website integration investigation, not re-enabling iframe takeover now.
+
+Create a common `BrowserVLCCreatePlayer` factory for initial playback and EOF
+reopening. Without an explicit Debug launch argument, including all Release
+builds, it returns the original shared-library player. Explicit Debug ON/OFF runs
+use a private library, PCM and an allowlisted numeric logger. The enabled path
+checks the core build identity and dynamically resolves checked variable access
+and retained child enumeration. Match the unique existing audio output before
+assigning media, set/read back the seven compressor parameters and append the
+filter while preserving other filters on both player and output. Discard the
+unplayed experimental player on setup failure; do not keep partial settings in
+the normal fallback. No offsets into private player structures are used.
+
+The existing local binary has a provenance discrepancy: the bootstrap URL names
+VLC `79128878`, while every local slice contains VLC `3.0.23` and build changeset
+`3.0.23-2-47-g738f288a1c`. Bootstrap skips existing binaries, so do not assert
+that these local files came from that archive or that this describes released
+packages. Fetch exact VLC/VLCKit Git revisions into ignored `.references/` with
+user authorization. Relevant headers, player/object code, audio output/filter
+management and compressor source are unchanged between `79128878` and the public
+3.0.23 tag (`578d28f6`). The local build commit did not resolve through GitHub's
+public commit API (HTTP 422); its patches are not established. Guard the
+experiment to the reviewed archive changeset family or the exact local build.
+Retain upstream attribution for the small namespaced ABI header.
+
+Source/diff inspection only; no app tests, build, Simulator/TV work, listening
+comparison, Git remote push or release. This Linux host has no Xcode. Neither
+runtime filter activation nor audible effect is established. Keep version
+2.21.9 because this disabled Debug research stage delivers no public feature or
+logical bug fix. Exact launch arguments, reason codes and the pending runtime
+matrix are recorded in [the prototype plan](plans/vlc-compressor.md).
+
+
+### Automatic stream discovery is the primary feature; inspect the other sites
+
+The user emphasized that the accidental automatic stream capture, rather than
+compression, is the main feature to investigate. Clarify that the prior
+"old PlayerJS" wording meant the previously investigated example, not an
+assessment that PlayerJS itself is obsolete. Starlight recognition/title/Next
+are not Teleportal-only, but its catalog-backed Previous and canonical episode
+URL provider are Teleportal-specific; prior user confirmation does not establish
+other hosts or VLC episode switching.
+
+Read the retained failed iframe experiment and the current all-frame/native
+paths. Preserve the distinction between discovering a direct element URL,
+successfully playing it in VLC and keeping the website's episode lifecycle.
+The old frame watcher, generic Media Session commands and the end-seek/play
+hypothesis did not establish working transitions. The new design separates
+discovery from renderer ownership and the website's episode owner, retains a
+session across child-document replacement, and latches each transition to avoid
+duplicate Next/EOF actions. Do not reactivate the reverted path in this stage.
+
+Inspect the other saved examples and download their public host/player code
+without cookies into ignored `.references/web-video-interception/`. A embeds
+single-source PlayerJS but its outer host supplies its own Next/Previous,
+progress tracker, `end` consumer and cancellable autonext countdown. C's outer
+host instead consumes `finish`/`next` and navigates its iframe through its own
+playlist. D's public `player-control` component uses an open shadow root,
+`nextEpisode(true)`, an `ended` consumer respecting autoswitch, and correlated
+`tortuga:getInfo` queries for progress. Its actual leaf source/protocol still
+needs inspection before implementing takeover there. B's current public host
+still embeds the saved path, but that embed returns a short nginx 404 HTML body;
+stop this retrieval path without claiming player incompatibility.
+
+Record source hashes, concrete JS/native/session interfaces, per-owner routes,
+progress and completion responsibilities, website fallback and six staged
+acceptance gates in [the integration plan](plans/automatic-web-video-vlc.md).
+Automatic candidates require a known main-content contract; unknown owners or
+Blob/MSE/DRM stay in the website until a compatible route is established. A's
+website countdown must remain accessible rather than hidden behind VLC.
+Compression remains a follow-on after successful stream handoff and transitions.
+
+No website bridge behavior, iframe routing or adapter implementation is changed
+by this research. No app tests, builds, live WebKit/VLC playback, Simulator/TV
+interaction, listening, release or remote push. Check staged diffs for formatting
+and review source only. Retain app version 2.21.9. Save the user's reusable
+instruction to clone research repositories into ignored `.references/` for local
+searches instead of repeatedly downloading individual upstream source files.
+
+
+### Use and refine the user-provided Linux WebKit stand
+
+The user supplied the local `webkit-testbench` skill and explicitly authorized
+fixing an inconvenient or broken stand during this work. Read that skill and
+its scenario instructions; use ephemeral browser profiles and the current
+production bridge extractor. Sandboxed browser launch failed with a closed
+context; the approved unsandboxed launch succeeded. No TV or Simulator access
+was involved. Also apply the skill-creator workflow for the focused local skill
+update, without changing invocation policy or installing other dependencies.
+
+Collect passive live DOM inventories of A/C/D. C exposes `PlayerNextCustom` and
+an iframe video with no source; D instantiates its component, data and open
+shadow roots. With the production bridge, helper functions exist in their
+observed child documents. A's snapshot did not acquire a ready page/player.
+The C interaction scenario acquired no visible video box and no active episode
+LI; it delivered no Play click. One direct Next submission produced no selected
+episode change and the page logged a null playerfr access. This is insufficient
+readiness evidence, not proof of an injection regression or working transport.
+Stop that path instead of repeating the action blindly.
+
+Add frame-existing/attached/navigated/detached logging to the ignored local
+skill runtime, with stable per-run frame IDs, cached parent IDs and increasing
+document generations, also on native stub messages. Update its documentation to
+wait for the actual asynchronously populated playlist before invoking transport,
+and to arm child-navigation observation before the action. The instrumented D
+run recorded one existing frame, four attachments, five navigations and one
+detachment, but no media source or transition. Node syntax inspection of the
+runtime and the skill structure validator passed. No separate app tests or
+native mocks/acceptance replies were added. Exact environment, source fingerprint,
+private scripts/runs and limitations are in the integration plan.
+
+No VLC playback, stream handoff, natural EOF, audible effect, tvOS interaction
+or successfully switched episode is established. The primary deliverable remains
+the staged integration plan plus the already isolated Debug compressor prototype.
+
 ## 2026-11-15 — Label-gated develop delivery beside stable
 
 The user wants two independent TV installations and authorized repository-side
@@ -1115,6 +1238,39 @@ personal-token workaround, which would also trigger the unchanged stable release
 workflow. Draft assets are inspected through authenticated release listing and
 published by release ID, avoiding the published-release-by-tag lookup for drafts.
 
+
+## 2026-11-15 — Implement an opt-in iframe-to-VLC trial (2.22.0)
+
+The user requested an actual automatic-capture experiment after clarifying that
+research plans and the disabled compressor gave the installed test copy no new
+web-video behavior. The user reminded us of the accidental fullscreen stream
+capture. This is new authorization to implement that bounded path, superseding
+the earlier research-only scope; it is not authorization for physical-TV work.
+
+Reuse the existing all-frame fullscreen hook for direct HTTP(S) video offers.
+Add an OFF-by-default shared-style toggle under held-Center Debug options, exposed
+in Debug and the named develop Release app. Bind child offers/replies to native
+WKFrameInfo, validate the video document URL and current source, and fail closed
+if frame-scoped WKContentWorld evaluation is unavailable. Keep cookie/UA/referrer
+handling in the existing native helpers. No parent URL relay, network interceptor
+or new native player is introduced.
+
+Prepare shared VLC muted, wait for Playing and advancing time, then accept/pause
+the exact website video, resample position, align seekable VLC and restore audio.
+Retain iframe fullscreen behind VLC. Error/15-second startup timeout returns to
+the website; Back returns position/audio and attempts website Play on the same
+live source. Reject stale source/document replies and detected DRM/Blob/MSE.
+This first trial does not provide Next/Previous, owner adapters or natural episode
+continuation. Select episodes on the website after returning from VLC.
+
+Advance both marketing versions to 2.22.0 and document the experimental feature
+and exact enable/try steps. JavaScript syntax and diff/source inspection passed.
+No app tests, Xcode/CI build, Simulator/TV interaction, installation, Git remote
+push or playback observation ran. Native frame API support, stream authentication,
+startup/audio and restoration are unverified until a built trial is observed.
+The updated plan checkpoint records implementation interfaces and next checks.
+
+
 ## 2026-11-15 — Separate develop icon
 
 The user requested a slightly different beta icon. Add the sibling asset catalog
@@ -1138,3 +1294,878 @@ BETA. A white compass is composited separately. No other text or extra borders."
 Final project assets are in the beta brand catalog above; private preview stays
 under `.data/icon-preview/`. Visual preview and JSON/Bash/diff syntax inspection
 only; no app tests, Xcode build, device action or Git remote push performed.
+
+
+## 2026-11-15 — Trial Back recovery and renderer identification
+
+User reports black fullscreen and Back not returning on the reported website, and asks
+for a way to identify VLC. Exact page and visible-control evidence were requested;
+no physical-TV access is authorized by this report. Source review found the
+browser's global Menu path could consume Back through the retained website
+fullscreen before dismissing visible VLC. Prioritize that modal, add a VLC Menu
+recognizer and restore ancestor iframe layout immediately on exit rather than
+waiting for child acknowledgement. Experimental close/fallback also exits the
+parent fullscreen. Require hasVideoOut/nonzero videoSize plus advancing time for
+handoff acceptance; keep a visible startup countdown and independent 15-second
+deadline. Label native/website headers VLC/Website, including native loading.
+
+Consolidate into unreleased 2.22.0; develop run/build metadata distinguishes this
+trial update. Validate the production bridge via the webkit-testbench extractor
+and syntax compilation, plus source/diff inspection. No app tests, native build,
+website/TV playback reproduction or Git remote push in this turn. These are
+code-path fixes and diagnostic UI, not proof the site's missing picture is fixed.
+See the trial feedback checkpoint in plans/automatic-web-video-vlc.md.
+
+
+## 2026-11-15 — Find and restore the accidental iframe capture entry
+
+At the user's request search Git history after the trial still failed to capture.
+The committed 7416ee4 bridge opened controlled video on Center in all frames as
+well as on fullscreen, relaying child offers through the selected parent chain.
+45862ce restricted both entry points to top. The 6dd2e7c trial restored child
+fullscreen offers but left __browserTVOpenControlledVideo top-only. Restore that
+missing controlled-click entry under the experiment flag. Deliver native settings
+at document start, propagate them through validated parent/child relationships
+and broadcast menu changes; keep native preference/window checks authoritative.
+Add numeric native offer/document-mismatch logs. Keep frame-bound native context
+validation and single-source behavior; do not revive the unbuilt continuation draft.
+
+Consolidate into unreleased 2.22.0. Current bridge extraction/JavaScript syntax and
+diff/source checks passed. No app tests, native build or real-site/TV reproduction.
+The historical code difference is established; success on the user's site remains
+unverified. Push this completed stage to the working PR under standing permission.
+The integration plan records exact commits, differences and next observations.
+
+
+## 2026-11-15 — Make the installed trial build identifiable
+
+The user reports another unsuccessful capture attempt, then asks to see whether
+the installed app is fresh. The precise installed trial build was not identified
+in that report. Keep capture failure unresolved rather than claiming success from
+CI or source changes. Show marketing version, CFBundleVersion and the available
+short CI checkout SHA in the native menu footer; mark the separately named test
+IPA as Beta. The develop workflow already supplies a unique run.attempt build
+number, so no workflow change or master synchronization is necessary.
+
+Replace the retired archive-only no-op version phase with an always-running
+metadata phase declaring BuildRevision.txt as its sole bundle output, compatible
+with the existing script sandbox. Record only a validated hexadecimal GITHUB_SHA;
+local builds without it write an empty stamp and omit the SHA in UI. This is the
+actual PR merge revision built by Actions, not an invented PR-head identifier.
+No source checkout access, signing change, online updater or credentials are used.
+Consolidate menu identification into unreleased 2.22.0; retain the technical source
+build number and the existing CI override.
+
+Validation: decoded build-script sh syntax and diff/source inspection. No app
+tests, local Xcode build or on-device footer observation. Push the completed
+stage to the working PR; CI must establish the build before the user's next
+atvloadly update. The earlier failed site-capture observation remains pending
+exact-page and renderer/native-stage evidence.
+
+
+## 2026-11-15 — Confirm the historical accidental capture route on live WebKit
+
+The user rejected further unconfirmed trial pushes and requested the original
+context rather than another designed extractor. Existing history places the
+observation during Ad Block work, after shared VLC was attached to the generic
+all-frame fullscreen hook for ordinary web video/MDN controls. 7416ee4 is the first
+committed all-frame VLC path; 45862ce later restricts it. The original accidental
+iframe route was not a site-specific stream extractor or the unbuilt later draft.
+
+Run live Example C on visible Linux WebKit. Scrolling into the player triggers
+lazy playlist/iframe loading, revealing 440 items and a direct HTTPS source.
+PlayerJS controls=false disproves treating the standard-controlled-video Center
+entry as the sole explanation. Ordinary Play returns media error 4/not found on
+Linux for two voice sources; that backend failure does not establish TV failure.
+With current production JS and only an ON setting simulation, a real fullscreen
+click emits a child-frame native request matching the real video URL. With the
+complete unchanged 7416ee4 bridge, the same action emits a matching request from
+the top document, relayed through the real iframe chain. No native acceptance or
+playback is simulated. This is meaningful discovery/transport evidence, not a
+VLC playback success or a proved native rejection cause.
+
+Correct the earlier overconfident focus on Center. Preserve the run IDs, private
+driver and native-vs-web boundary in plans/automatic-web-video-vlc.md. No app code,
+version change, native build, physical-TV action or remote push during this work.
+Keep the user out of another TV trial until the relevant correction has evidence.
+
+
+## 2026-11-15 — Restore experimental iframe capture through the main document
+
+Restore the selected-frame relay from the original 7416ee4 fullscreen bridge,
+retaining the opt-in gate and validated HTTP(S) media context. Replace direct
+child-frame native evaluation with main-document requests and routed replies.
+Wait for a leaf acknowledgement and resample its position after pausing before
+activating prepared VLC audio. Keep the existing bounded startup and Back recovery.
+
+Live UAKino with the production bridge emitted one main-document offer containing
+the exact real video URL and leaf document URL. Explicitly simulated native replies
+confirmed pending -> pause acknowledgement, close position/volume/mute restoration,
+and deleted-session rejection. A supplied two-hop iframe fixture additionally
+confirmed changed-source rejection and experiment-OFF suppression. These are WebKit
+bridge observations; native tvOS receipt, compilation and VLC playback remain
+unverified. The stand's Linux media backend is not a TV playback verdict.
+See [the implementation checkpoint](plans/automatic-web-video-vlc.md).
+
+## 2026-11-15 — User confirms iframe capture on TV
+
+After delivery of successful develop Build 10.1 (2.22.0, source 688d411), the
+user reported that capture worked. This confirms the user-observed capture
+outcome for the restored main-document relay. Playback continuity, audio,
+Back restoration and episode changes were not separately reported. No agent
+inspection of the physical TV was performed.
+
+
+## 2026-11-15 — Generic iframe completion and less intrusive preparation
+
+User reports roughly five seconds of black during capture and End/Next leaving
+VLC stopped in fullscreen; Back lets the website advance. The user asks to remove
+VLC/Website prefixes and explicitly prefers generic video behavior before any
+player-specific integration.
+
+Keep the website visible beneath muted VLC preparation, shorten experimental
+buffering/readiness polling and avoid a redundant seek for small drift. Return
+experimental End/Next and natural EOF to the same HTML video near its end outside
+fullscreen, allowing its real ended listener to run. Preserve direct-main replay
+and torrent behavior. Remove temporary player-identification title prefixes.
+
+The unchanged live UAKino still supplies the exact media URL through the relay.
+A supplied decoded HTML video fixture produced a trusted ended event after the
+production completion reply and passed fullscreen/audio/repeat-completion checks;
+nested-frame regression checks also passed. Native replies were simulated. Attempts
+to substitute media inside real PlayerJS failed to establish a site transition on
+Linux and were stopped; no PlayerJS-specific code entered the implementation.
+Native transition duration and UAKino episode advancement require user observations.
+See [the checkpoint](plans/automatic-web-video-vlc.md).
+
+
+## 2026-11-15 — Restore the original VLC cone in the shared player header
+
+The user withheld further pushes after f46c163 and requested the earlier torrent
+VLC icon in the shared player's header. Recover the original monochrome vector
+cone geometry from BrowserVLCButtonIcon in 7416ee4's parent, reuse the existing
+cached template-glyph renderer, and place a 30-point cone before the title with a
+12-point gap. This applies to both web and torrent playback; website panels keep
+their plain titles. No raster generation, new playback behavior, native build or
+UI verification was performed for this small visual change. Keep it local until
+an explicit push request; Build 11.1 already in CI contains f46c163 and excludes it.
+
+## 2026-11-15 — Use the browser page title in VLC
+
+The user requested the page title from the browser's top bar beside the VLC cone.
+Read the originating BrowserWebView.title when opening shared web playback,
+falling back to its page host, instead of the iframe-supplied document title.
+Torrent file titles remain unchanged. This small local UI change was not built
+or tested; no push was performed under the current hold. Keep version 2.22.0.
+
+
+## 2026-11-15 — Contextual track icons and optional fullscreen exit
+
+The user asks whether completion must leave fullscreen, requests hiding irrelevant
+Audio/Subtitles controls, and confirms the third icon should toggle automatic exit
+rather than exit immediately. Keep all changes local under the existing push hold.
+
+Replace text track selectors with shared 68-point icon buttons. Show Audio for more
+than one nonnegative track ID; show Subtitles for at least one. Retain named menus,
+selected-track checks and accessibility labels/values. Hidden arranged views use
+collapsible width constraints. Keep transport centered and the track/toggle group
+at the right edge. Show an inward-arrow exit toggle only for experimental iframe
+return-on-end playback. Persist AutomaticallyExitIframeFullscreen globally, default
+ON. Use green/gray icon tint with accessibility ON/OFF; the user explicitly requests
+icons for all three controls rather than a visible textual toggle badge.
+
+At Next/EOF return, apply the setting to parent fullscreen cleanup. Back and failed
+startup still always clean up. The website's own fullscreen decisions are retained;
+no player-specific adapter or synthetic ended event is added.
+
+A generic decoded WebM fixture passed both exit and retain-fullscreen completion
+paths with one trusted ended event, restored audio and duplicate-completion
+rejection. Native replies and the native preference branch were modeled in the
+stand. This verifies bridge compatibility, not UIKit menus, preference persistence,
+focus, native compilation or a specific website's next episode. No native build,
+device work or push. Private evidence: WebKit run
+2026-11-15T14-35-44.494Z-8fdc6fb7, check-fullscreen-completion.mjs.
+
+
+## 2026-11-15 — Live Teleportal and UASerials HLS capture
+
+At the user's request, test both real sites before any further push. The user
+clarifies that Teleportal must enter VLC: shared VLC is the foundation for future
+features, so website-only playback is insufficient. Extend the generic bridge with
+source-bound Starlight and documented PlayerJS HLS capabilities, rejecting ads and
+unrelated/detached loaders. Track PlayerJS constructor results only while the
+experiment is enabled; reload pages whose unexposed instance already existed.
+
+Distinguish explicit Next from EOF in the native close callback. Submit the site's
+Media Session/existing Starlight control/registered PlayerJS playlist command once;
+use near-end HTML playback only when no track route exists. Keep natural EOF and
+optional fullscreen behavior, source/session guards and direct HTTP capture.
+
+Actual Teleportal main HLS was offered, acknowledged, decoded with Linux libVLC
+and sought to 120 seconds. Simulated native Next switched 92 -> 93 with actual
+content playing and fullscreen retained, then 93 -> 94 with fullscreen exit.
+Actual UASerials production bridge emitted main HLS that Linux libVLC decoded and
+sought. Next selected episode 2 without an old-video ended event; the site's ad
+held further website playback on this stand. Its HTTP ad failed source eligibility.
+The visible UAKino regression emitted the exact original HTTPS video URL after
+transient headless/readiness failures were investigated. All raw logs and signed
+media context remain ignored. See [the detailed checkpoint](plans/automatic-web-video-vlc.md)
+and [primary source index](RESEARCH_SOURCES.md).
+
+These are actual-site WebKit observations plus Linux libVLC verification, with
+explicit simulated native replies. They do not verify tvOS/TVVLCKit UI, startup
+latency or seamless native episode playback. No native build or push; all changes
+remain local under the user's hold. Keep 2.22.0 consolidated.
+
+Follow-up within the same local stage: complete the UASerials PlayerJS path using
+its documented HLS getter and a bounded opt-in constructor registry. A fresh
+production-only bridge emitted the real main HLS offer, paused the original Blob
+video on acknowledgement and selected episode 2 via explicit Next, without an EOF
+or duplicate transition. The exact production URL decoded and sought in local
+libVLC; ads remained ineligible. Post-Next website content was still behind an ad,
+so seamless native playback of the next episode is pending. Final generic/nested
+regressions and actual UAKino fullscreen capture passed. No push or native build.
+
+## 2026-11-15 — Automatic VLC preparation and Teleportal Next after dismissal
+
+The user reports that native Build 13.1 displays white -> VLC -> website, frequently
+returns to inline/background playback and fails Next despite a visible VLC cone.
+Do not treat earlier Linux success as native verification. Implement automatic
+foreground/visible playing-video offers, a source-bound prepare/pause acknowledgement,
+and muted VLC preparation as an attached child behind the browser. Require fresh
+post-seek decoded/displayed frames, video output and advancing time, then acknowledge
+acceptance before transferring the prepared opaque surface into native fullscreen.
+Use a 2000 ms network cache; keep the 15-second preparation limit. Stop late site
+Play before its clock advances. Cancel on background/tab change; Back/failure resume
+once, while inactive pages stay paused. Website fullscreen is no longer a prerequisite.
+
+Move close/Next delivery after modal disappearance and restore foreground capture
+permission before asking the site's real track control. A new source can then offer
+VLC automatically. Actual Teleportal 92 -> 93 -> 94 played and emitted new automatic
+offers without website fullscreen in the WebKit stand, using simulated native
+prepare/accept/close and active-page permission. Nested decoded-video checks passed
+prepare/accept, held late Play, Back/no-loop, source changes, failure rollback,
+inactive playback prevention and offscreen -> visible retry. That last case exposed
+a stale visibility message consuming a source attempt; add a deferred relay reply.
+Generic main-document and iframe EOF/Next-without-track-API each produced exactly
+one real trusted ended event. The unsupported MSE/late-ad regression passed.
+Linux libVLC 3.0.20 decoded the actual Teleportal offer with 2000 ms cache, sought to
+120 s, produced fresh displayed frames and held time on pause. Logs and signed
+media context remain ignored; detailed run identifiers are in the
+[experiment checkpoint](plans/automatic-web-video-vlc.md).
+
+Commit f02cce4 was pushed to beta PR #20 under standing authorization. GitHub Actions
+run 43738492640 compiled the native Release app and packaged/verified its unsigned
+IPA as 2.22.0 Build 14.1 before these documentation updates. Keep the unreleased
+2.22.0 entry consolidated. No local native build, Simulator or physical TV work was
+performed. Linux checks plus CI do not verify UIKit child-to-modal rendering,
+first-frame latency or consecutive Next on TV; those observations remain pending.
+
+## 2026-11-15 — Reusable libVLC stand and capture lifecycle corrections
+
+The user reports that UAKino pauses after about a second without visible VLC,
+UASerials loses native capture after Next, and Teleportal Next stops without advancing.
+They did not wait for the 15-second UAKino preparation deadline, so a permanent
+native hang is not established. Fullscreen-retention/per-site preference work is
+explicitly deferred. Move the experiment directly to the main Settings VLC tile,
+replacing Magnifier in Debug/develop while retaining its remote shortcut; remove
+the Debug submenu entry. Ordinary stable builds retain their existing Magnifier tile.
+
+At the user's explicit delegation request, create the tracked reusable stand and
+expand the existing local skill. It uses production source, default app adblock,
+actual Linux libVLC and explicit host state instead of manual optimistic replies.
+See [the runbook](WEBKIT_TESTBENCH.md) and [parity evidence](plans/webkit-testbench-parity.md).
+An early close callback while the modeled modal remains occupied reproduces lost
+recapture; completion delivery permits the next real source to decode. The app now
+uses dismissal completion for explicit close/Next. Preserve an accepted offer serial
+across temporary application inactivity. Separately, a cancelled prepared source
+consumed its automatic attempt forever; clear only that attempt so a later real Play
+can retry. Existing accepted Back/failure suppression remains intact.
+
+Nested decoded-media lifecycle, inactive/active, Play/Pause, completion Next, deliberate
+early-callback failure, cancelled warm-up retry, Back without loops, changed source
+and rollback checks passed. An actual stalled HTTP decoder timed out at 15115 ms,
+then resumed HTML once. Actual Teleportal with adblock decoded episode 92 and then
+93; UASerials with adblock passed initial capture, a ten-second hold and Next with
+a new actual ready decoder. UAKino without adblock passed the same capture/Next path;
+with adblock, its video stayed at readyState 0 before any offer. Attribution remains
+unproven: do not label this a stand defect or a confirmed TV capture failure. Per the
+user's working assumption, investigate our blocker behavior/rules first. The user
+will compare Ad Block ON/OFF on TV. No persistent exceptions were added.
+
+Stand commit d756a57 and app commit 42d9f2e were pushed to beta PR #20. Actions run
+43743814825 successfully compiled and packaged native Release 2.22.0 Build 16.1
+before this documentation update. Keep 2.22.0 consolidated. No device or Simulator
+work was performed; UIKit presentation remains unverified by the Linux evidence.
+
+## 2026-11-15 — User-approved simple takeover baseline and beta Build 18.1
+
+The user manually confirms the simplified stand on UAKino (also called Юафільм),
+UASerials and Teleportal, explicitly says TV has not been tested, and requests push
+and build as a working baseline. Preserve that distinction. Move the proved behavior
+into production source: event-armed 50 ms sampling, at least 100 ms real playback,
+one accepted leaf pause acknowledgement, then immediate visible VLC presentation.
+Remove background-child decoder preparation, muted readiness presentation gates and
+the app startup deadline. Actual decoding now follows presentation, as requested.
+Keep source/document/foreground checks and native per-media UA/referrer/cookie context.
+Input start-time preserves the site position without a second unnecessary decoder seek.
+
+Mid-close returns the website to the VLC position paused; a new manual Play rearms
+capture. Completion or close within the final two seconds seeks the website to its
+final 100 ms and Play so its own real end listener handles episodes. Per the user's
+clarification, Next seeks VLC itself to its final 100 ms and plays; natural VLC EOF
+alone performs the same closure/return mechanism. Remove the separate JS Next action.
+A real resumed WebKit fixture emitted play/timeupdate but delayed playing until EOF;
+arm on play too while still requiring real advancement. Fullscreen metadata cannot
+bypass that threshold.
+
+Final production bridge/actual libVLC fixture passed position roundtrip, paused
+mid-close, same-source replay, single accepted ACK, presentation-before-readiness,
+actual-VLC Next EOF and trusted HTML completion with new-source capture. Final runs:
+19-45-54.475Z-9f 3d 4018 and fullscreen 19-45-58.466Z-c 30cc 55d. Cancellation/source-change
+and stalled HTTP checks also pass. A controlled actual Teleportal leaf passes capture,
+actual decoding, paused return 12 s, manual recapture, actual VLC EOF and actual HTML EOF;
+episode 93 does not start there within 35 s. Do not describe Teleportal auto-advance as
+fixed or infer behavior of its full host or TV from that isolated embed.
+
+Correct earlier stand conclusions: the UAKino adblock-OFF decode may have been preroll,
+not main content. Later causal A/B proves PlayerJS's Safari-UA native-HLS choice fails
+on Linux WebKit; HLS.js plays actual main content. Desktop VLC's ignored global UA flag
+caused 403, while per-input :http-user-agent fixed actual decoding. These are stand
+issues with direct evidence, not explanations of the TV reports. Native code already
+uses per-media options. Stand helpers/skill and [the runbook](WEBKIT_TESTBENCH.md) now
+use current production bridge source rather than the private prototype as a second
+implementation. Private raw logs and signed media values remain ignored.
+
+Atomic source/stand contract commit 7743352 was pushed to PR #20. Actions run 43754626533
+successfully compiled Apple TV Release, packaged/verified the unsigned IPA and published
+2.22.0 Build 18.1 before this documentation update. Both marketing versions remain 2.22.0,
+consolidated as the unreleased minor feature. No device or Simulator work was performed.
+Native fullscreen/focus and website episode behavior now require the user's TV check.
+
+## 2026-11-15 — Interrupted VLC retries and standard slow-network stand
+
+The user confirms the simplified TV baseline, then reports an early playback hiccup
+and intermittent UASerials startup, especially after Home: a click produces less
+than a second of activity and then nothing. They cannot distinguish whether VLC
+briefly appears. These observations supersede the earlier pending-TV baseline.
+
+Production JS has a reproducible orphan-offer defect: deliberately dropping one
+native reply, then inactive/active and manual Play of the same source, emits no new
+offer until the source changes. Clear automatic unaccepted requests/attempts when
+capture becomes inactive or invisible; retain accepted ownership and in-flight
+pause acknowledgements. The before/after controls and healthy/accepted-ACK Home
+checks use actual WebKit/libVLC, with UIKit/application lifecycle explicitly modeled.
+Actual UASerials also passes those modeled Home/close/replay cases. See the
+[parity evidence](plans/webkit-testbench-parity.md).
+
+Remove initial web pendingResumeMs and rely on per-media start-time. VLCKit's time
+getter returns a cache initially set to null; a Playing event can otherwise cause
+our fallback to flush the decoder a second time. Retain queued explicit/torrent
+seeks and use the frozen site position until a real cached time is available.
+Separately, actual libVLC reports Ended with zero decoded audio/video for403, empty
+HLS and denied segments. Keep that failed start visible instead of sending website
+EOF. The denied-start regression verifies Back/Play recovery without false completion.
+None of these injected failures establishes what occurred on the user's TV.
+
+Commit ae35c6e was pushed under standing PR20 authorization. Actions43758023991
+successfully compiled, packaged, verified and published 2.22.0 Build20.1 before this
+documentation update. Keep both marketing versions at the consolidated2.22.0.
+No physical TV or Simulator work was performed.
+
+At the user's request, add standard Linux tc/netem with rootless slirp4netns in a
+private network namespace for WebKit and its VLC children. Remove the custom-proxy
+prototype after the user asks about standard tooling. No host qdisc changes or TLS
+interception are needed. The controlled512kbit/s,+150ms check transfers128KiB in2458ms
+and passes the actual media roundtrip. UASerials at2000kbit/s,+150ms captures/replays,
+but a12s observation exposes early clock/output stalls and continued paused-browser
+TS downloads. This is useful stand evidence; attribution and the user's TV hiccup
+remain unresolved. The wrapper, dependency boundary and commands are recorded in
+[the stand runbook](WEBKIT_TESTBENCH.md); raw evidence remains ignored.
+
+### Session-end user confirmation
+
+The user reports that the change works, while a playback hiccup at approximately
+the tenth second remains. Record startup/capture as working in this user check;
+the exact installed build and all individual Home scenarios were not separately
+confirmed. The hiccup is still open. The unshaped UASerials control advances10995ms
+over11515ms versus8313ms over11519ms under the slow connection, but raw backward
+clock updates also occur without shaping and do not establish the TV cause.
+The user explicitly ends work for today. Save the resumable checkpoint in
+[the experiment plan](plans/automatic-web-video-vlc.md) and stop further work.
+This is a progress-only update; application code and version are unchanged.
+
+## 2026-11-18 — UASerials pauses before VLC opens
+
+The user clarifies that UASerials briefly plays on the site, then pauses and no
+VLC appears. This is a startup failure, not the separate tenth-second VLC hiccup.
+The earlier orphan-offer fix handled missing replies before an accepted pause.
+Here, discard a real leaf pause acknowledgement in the modeled host before
+presentation: production WebKit leaves the 1429.36 s UASerials episode paused at
+0.194 s (`16-35-53.147Z-c7f800b5`). The unmodified healthy control opens LibVLC
+and decodes the episode (`16-36-04.339Z-ecb495f9`).
+
+Separate active handoff abort from inactive/stale cancellation. On abort, release
+the paused leaf and resume only the same visible, still-current source, once;
+suppress immediate recapture while it plays. Manual pause/Play can retry. The
+same fault after the change resumes website playback (0.262 to 1.749 s, just one
+offer), then manual pause/Play opens actual Linux libVLC with decoded and displayed
+frames (`16-36-37.062Z-df05a1f6`). Keep the physical TV cause unconfirmed; the
+lost host acknowledgement was injected, and UIKit is modeled. Native debug
+markers distinguish submit failure, missing acknowledgement, cancellation and
+UIKit presentation. Keep both marketing versions at the consolidated 2.22.0.
+The stand's Home interruption (`16-36-45.595Z-805dd30d`) and canonical capture,
+paused close, replay and real Next/EOF checks (`16-36-47.217Z-6fcf5e39`) also
+passed with actual Linux libVLC.
+
+The develop workflow published that revision (`02a3f8f`, Actions 44349420463)
+as 2.22.0 Build 22.1. The user reports that the startup symptom persists.
+
+### Visible video paused by inactive capture permission
+
+Inject inactive capture permission while actual UASerials remains visible.
+Before the change, the bridge pauses the main episode at 0 s without any VLC
+offer (`16-48-02.854Z-c3abf9f7`). This is independent of acknowledgement
+delivery. Inactive capture still blocks offers, but no longer pauses visible
+unowned video; retain the inactive/hidden guard and the hold for VLC-owned video.
+Do not add an unverified UIKit appearance-time refresh. Allow existing `[WebVLC]`
+stage markers through the debug logger; the prefix filter previously dropped them.
+
+The first live run after the change remained unpaused but had no clock advance
+in the short sample (`16-49-07.003Z-8169a7a1`). An instrumented longer run observed
+actual UASerials playback from 6.468 to 7.472 s without an offer, then restored
+permission and confirmed actual Linux libVLC decoded and displayed the same
+episode (`16-49-34.133Z-dd73e0ed`). Cross-origin Home regression with the injected
+permission mismatch and the canonical capture/return/Next checks passed
+(`16-49-25.759Z-9e22c447`, `16-49-27.235Z-554478ea`). The origin of the physical
+TV pause is still unconfirmed. Keep both marketing versions at 2.22.0.
+
+### Capture baseline and handoff to episode navigation
+
+At the user's direction, record `c30aef7` as the working baseline for the basic
+website-to-VLC capture flow and move on to Previous/Next. This checkpoint is not
+confirmation of every TV lifecycle case, seamless playback, or episode
+navigation. The separate early playback hiccup is not marked fixed.
+
+Review the generic routes first, independently of Teleportal: the existing
+website controls try registered `navigator.mediaSession` track handlers and
+recognized player capabilities, then send system MediaRemote track commands
+only after a definite unsupported JS result. The historical PlayerJS capability
+path demonstrated Next, not Previous; the official API lists `prev`, which still
+needs actual-site validation. The older VLC beta explicitly submitted
+website Next after dismissal; the current button instead uses real VLC EOF.
+Record the staged investigation in the
+[episode-navigation plan](plans/automatic-web-video-vlc.md#episode-navigation-after-the-capture-baseline).
+No runtime behavior changed in this checkpoint.
+
+### Generic VLC episode navigation and per-site fullscreen exit
+
+The user chose the order player adapter → system media keys → real website
+completion as a last resort for Next. Manual track actions run after dismissal
+using the accepted source/frame and one acknowledged result. Prefer PlayerJS's
+documented `next`/`prev` for the bound playlist; treat the player's own boundary
+as handled, not grounds for a duplicate command. If Previous changes the selected
+ID but does not start playback, call the same player's documented `play` once.
+System MediaRemote is only a fallback. A definite "no actionable item" can fall
+through; ambiguous replies cannot. Keep natural VLC EOF independent. No
+Teleportal-specific adapter was added in this stage.
+
+Restore the fullscreen-exit control with the shared ON/OFF badge and persist its
+value by top-level page host, default ON. It applies to manual Next and
+completion; mid-video Back still restores layout. The older global value is not
+applied to every site.
+
+Actual UASerials in production WebKit with adblock and actual Linux libVLC
+selected the previous episode without starting it before the PlayerJS `play`
+follow-up (`17-13-00.594Z-178a99a3`). The adjusted path passed `1 → 2 → 1` with
+displayed decoder frames on each new source and no modeled media-key submissions;
+Previous on the initial episode did not change the selected item
+(`17-15-21.146Z-48f1c517`). The cross-origin fixture passed adapter navigation,
+fullscreen keep/exit, exclusive modeled system submission, and unavailable Prev
+(`17-15-41.102Z-9385b09c`). Home (`17-13-45.135Z-51eb84b8`) and separate real
+website/native EOF checks (`17-13-00.598Z-e876726b`) passed on Linux.
+
+The user reported a capture regression in published Build 23.1, then paused the
+requested rollback. Retain `c30aef7`; this stage does not change capture eligibility
+or claim that regression fixed. UIKit, actual tvOS MediaRemote routing, and
+native persistence/focus are not verified by the Linux stand. Keep the
+consolidated development version 2.22.0.
+
+### Starlight Next adapter only
+
+At the user's request, connect Starlight Next to the same ordered VLC adapter
+registry without implementing Previous. Reuse the recognized SkipNext button,
+bound to the accepted video's `engine.placement.container` and original source.
+The retained upstream core's SkipNext control inserts its `fetch_next` result
+before calling next; calling the lower-level engine method alone bypasses that.
+Do not add catalog fetching or source rewriting.
+
+Actual public Teleportal passed `92 → 93 → 94` with production scripts, adblock,
+fresh offers and displayed Linux libVLC output for all three episodes
+(`17-23-17.363Z-5469ea04`). Both track acknowledgements were `submitted`; zero
+modeled system media commands were used. An earlier driver failed on a transient
+empty frame URL before checking playback; correct that driver rather than
+changing app recognition. A separate actual-page close/replay/Next run passed
+(`17-21-57.690Z-485d685c`). No UIKit or physical TV interaction was performed.
+
+The prior navigation revision `ed40974` failed Apple TV CI run 44356855134
+(Build 24.1): a block invocation in ViewController ended with `}];` instead of
+`});`. Commit `d4ab217` corrects that syntax independently. Build 24.1 was not
+published. This does not change the unconfirmed Build 23.1 capture report.
+
+### Natural EOF with website fullscreen retained
+
+The user asks whether keeping fullscreen interferes with website-owned automatic
+episode changes, and whether the app explicitly sends Next at completion.
+The production `ended` response is distinct from manual Next: return the bound
+HTML video to duration minus 0.1 s and play it, without a player track API call.
+The OFF preference omits our own fullscreen exit; it does not block website
+calls to exit fullscreen.
+
+Separate ephemeral WebKit/app/adblock/Linux-libVLC sessions on actual UASerials
+confirmed actual VLC EOF, a trusted HTML ended event, website playlist selection
+`1-1 → 1-2`, a changed media source and displayed output from the new VLC input.
+OFF retained fullscreen through the website ended event and new capture
+(`17-33-16.676Z-1ddcd6a5`); ON exited it before website completion
+(`17-33-16.658Z-6e7dba23`). Native response order in both cases was only
+`accepted, ended, accepted`; no manual Next/Previous response was sent.
+The website's reported PlayerJS `autonext` value was 0 in both successful runs:
+that one setting is not sufficient to infer the entire site's completion
+behavior.
+An additional OFF control explicitly setting the site's own documented
+`autonext` option to 1 also passed the same genuine EOF, retained-fullscreen,
+next-source decode path (`17-34-00.105Z-7f4120f3`).
+
+UAKino did not reach this acceptance gate: the current page did not expose the
+expected visible `#playerfr` in the stand. Do not infer either interference or
+working fullscreen auto-advance from those load-stage failures. Initial
+UASerials drivers also failed before EOF because they enabled constructor
+observation too late; the successful runs kept the experiment enabled at document
+start and deferred only active capture until fullscreen was established.
+The user's visible stand was not touched. tvOS/UIKit and native per-host
+preference persistence are not established by these Linux observations.
+
+### Present fullscreen retention as a positive feature
+
+The user requests **Keep fullscreen** rather than an exit-fullscreen control.
+Invert the displayed selection, badge and accessibility value: ON keeps website
+fullscreen after Next/completion, OFF exits it. Use outward arrows. Keep the
+existing per-host exit preference and invert only its UI presentation, preserving
+every saved site's playback behavior without migration. Default Keep fullscreen
+is OFF, equivalent to the existing default exit behavior. No capture, navigation
+or completion-path change. Consolidate in unreleased 2.22.0; no tests or native
+build were requested for this UI inversion.
+
+### Complete the actual UAKino fullscreen/EOF check
+
+The user rejects the earlier load-stage failure as insufficient investigation
+and requests an actual UAKino test. Inspect the live host loader: its
+IntersectionObserver activates `.playlists-ajax` with a 50 px root margin and
+only then creates `#playerfr`. Scroll that precise block, not a surrounding
+section. The current outer page's `finish` consumer selects the next LI in the
+same group and schedules the site's own play command after three seconds;
+it does not require leaving fullscreen.
+
+With production scripts, adblock, ephemeral Linux WebKit and actual Linux
+libVLC, "Cunk on Cinema" advances episode 1 (810.16 s) to 2 (950.52 s)
+with both exit modes (`17-42-49.438Z-47f5e15b`,
+`17-42-49.451Z-30fd9aec`). "Naruto" advances episode 1 (1417.05 s) to
+2 (1410.04 s) after starting normal playback before entering fullscreen
+(`17-44-17.070Z-4acb17f2`, `17-44-17.085Z-d51cf74e`). The previous Naruto
+driver's fullscreen-before-start sequence stalled at 0.1 s; no app playback
+change was needed to complete the check.
+
+Both Naruto controls observed actual VLC EOF, a trusted HTML ended event and
+the website's `finish` message, then active episode index 0 → 1, a changed source
+and displayed output from the new Linux VLC input. Host responses were
+`accepted, ended, accepted` only: no manual Next command was submitted.
+Keeping fullscreen therefore does not prevent website auto-advance.
+
+However, **Keep fullscreen ON is not retained across the UAKino iframe
+navigation**. In that control, ended and finish occur while fullscreen is true,
+but the replacement episode starts with it false. The production bridge's
+pagehide handler sends fullscreen exit up the parent chain when the outgoing
+leaf navigates. The same retention failure occurred on both tested series.
+Record this as an open app defect, not a passing fullscreen test; see the
+[transition checkpoint](plans/automatic-web-video-vlc.md#open-keep-fullscreen-across-uakino-iframe-navigation).
+No application code changed, no native build or physical TV verification was
+performed, and the user's visible stand was not touched.
+
+### Remaining locally testable navigation and interruption cases
+
+The user asks to complete the outstanding checks without overriding website
+episode/fullscreen behavior. No application runtime changes are made in this
+stage. Add `episode-navigation-guards.mjs` and retain the site's choice to stop
+at natural completion rather than sending a second manual Next.
+
+- Actual UAKino manual Next reaches episode 2 through the last-resort genuine
+  website end and recaptures decoded output: Naruto with Keep fullscreen ON
+  (`17-53-43.923Z-3136a36c`) and Cunk with it OFF
+  (`17-55-26.720Z-5d157a49`). These explicitly model MediaRemote as unavailable;
+  they do not verify the real Apple system route. UAKino's iframe-navigation
+  fullscreen reset remains unchanged. A separate Naruto OFF attempt stalled
+  during initial HTML playback at 0.1 s before capture
+  (`17-53-43.883Z-762be2e8`); do not hide that intermittent startup observation
+  behind the successful Cunk control.
+- Actual UAKino Previous at the first episode, with modeled system commands
+  unavailable, does not wrap, seek to the end, or fabricate an episode switch;
+  the website remains paused (`17-55-17.183Z-2a069985`). This is not evidence
+  that the actual tvOS media-key route supports UAKino Previous.
+- Actual Teleportal manual Next selects 92 → 93 and decodes the new source
+  with Keep fullscreen ON (`17-55-26.729Z-5f6b25ad`) and OFF
+  (`17-55-26.679Z-fa334786`). Only the Starlight adapter is used.
+- Actual Teleportal natural VLC EOF returns a trusted website ended event but
+  does not select episode 93 during the 35-second window. Keep fullscreen ON
+  retains the expanded page (`17-53-43.925Z-56744577`); OFF exits it
+  (`17-53-43.916Z-fb40660f`). With capture inactive, the same actual website
+  also reaches its real ended state without changing episode
+  (`17-56-16.117Z-bbc387d2`). Do not turn this website-owned stop into an
+  automatic manual Next.
+  A further plain WebKit control with production adblock but **no app media
+  bridge at all** reproduces the same trusted ended/unchanged episode result
+  (`17-57-56.612Z-b1a65f3c`).
+- The new guard scenario passes adapter boundary/no-op, an adapter throwing
+  after dispatch, stale source, detached iframe, ambiguous modeled system
+  submission and foreground loss during the track acknowledgement
+  (`17-54-53.947Z-6638193e`): no duplicated or fallback action is observed.
+
+The standard actual-libVLC checks pass capture/paused return/manual replay and
+separate natural versus fallback EOF (`17-54-09.402Z-7e6e4fae`), modeled Home
+and lost-offer recovery (`17-54-47.601Z-5bf7e3ab`), injected HTTP403 failed-start
+recovery without false completion (`17-55-20.185Z-f359e45b`), adapter/system-model
+navigation (`17-55-54.111Z-ce189474`), and existing-fullscreen eligibility
+(`17-57-09.729Z-dbf8e759`).
+
+The older interruption test assumed inactive capture pauses visible HTML.
+Update that assertion to the accepted visible-site behavior and use an actual
+pause/Play cycle when retrying. Calling play() on the already-playing video
+did not produce a fresh capture in the initial run
+(`17-56-34.846Z-0505e2c4`). The corrected manual-cycle test recaptures and rejects
+a source replaced before acceptance (`17-58-17.272Z-cde4b859`). This distinguishes
+manual recovery from automatic foreground recapture; it does not establish the
+user's physical TV startup cause.
+
+CI for the previous application revision successfully published 2.22.0 Build
+29.1 (Actions 44362188857). These Linux checks cannot verify UIKit focus,
+MediaRemote destination/status delivery, native preference persistence or
+physical-device interruptions. The reported Build 23.1 capture regression and
+early playback hiccup remain unconfirmed at the device boundary.
+
+## 2026-11-18 — Unified playback, stage 1: shared episode routes and metadata
+
+The user approves the staged unification plan: shared website episode routing
+and metadata first, then a shared playback-session interface and native panel.
+Keep WebKit and VLC separate engines and leave website playlist/fullscreen
+decisions alone. Store implementation checkpoints in
+[the tracked plan](plans/unified-playback.md).
+
+Both existing control paths now use one capability-based episode adapter
+registry. Preserve WebKit's existing catalog-backed Teleportal Previous without
+enabling it for VLC. Registered Media Session track handlers are shared too,
+after recognized player actions and before native system fallback. Submitted
+or boundary results never cause a second action.
+
+Carry verified Starlight episode metadata in the accepted leaf pause reply
+through the existing frame chain. Apply its title independently of WebKit panel
+visibility; resolve canonical Teleportal URLs only against the host catalog,
+including a catalog response arriving after capture. Unknown entries do not
+invent a page URL. Native title-only updates are bound to the accepted source
+session and cannot create a WebKit panel or overwrite VLC's transport clock.
+
+Source inspection also exposed a native integration constraint: the generic
+document generation intentionally changes on every same-document URL update.
+Keep that generic DOM/input safety rule, but give media calls a separate
+playback-document generation. Explicit load/reload/back/forward, navigation
+start/commit, process loss and tab invalidation still expire media operations;
+replaceState alone must not orphan the accepted capture or its close callback.
+Linux can exercise the JS contract, not WK's KVO/callback ordering.
+
+Actual public Teleportal passed 92 → 93 → 94 in WebKit
+(`18-33-23.095Z-5d664205`) and Linux libVLC
+(`18-33-23.075Z-54d9b7f1`). Both paths updated page title and canonical path,
+kept history length and top-document token, and retained the same video node.
+Actual UASerials passed 1 → 2 → 1 with Linux libVLC
+(`18-36-45.630Z-746b9899`). The delayed-catalog fixture passed unchanged
+history state/query/fragment, title delivery with the panel suspended and no URL
+guess for an unknown source (`18-36-45.679Z-32bff80f`).
+
+Shared adapter/Media Session/system-model navigation passes
+(`18-36-45.625Z-ae0c318b`), as do duplicate/stale/boundary/throw guards
+(`18-36-45.694Z-1cc48f3d`). An initial guard run expected a system submission
+despite its fixture already registering a Media Session handler. Isolate the
+fallback cases by removing that fixture handler and add an explicit shared
+Media Session case instead; do not remove the working handler route from app
+code to preserve the old test expectation.
+
+Both marketing settings remain at the consolidated unreleased 2.22.0. Shared
+native session and panel extraction remain subsequent stages. No physical TV
+or Simulator interaction has been performed.
+
+### Unified playback, native adoption: shared session and panel
+
+Stage 1 commit `7e7f0ed` compiled, packaged and published through develop Actions
+44372176857 as 2.22.0 Build 31.1. Final stage-1 UAKino Next recaptured the next
+episode (`18-38-06.304Z-2f5292b6`) and the canonical capture/return/separate EOF
+scenario passed (`18-38-06.304Z-d57296ee`).
+
+Adopt the native session interface and common panel together so neither consumer
+ships an unused intermediate UI abstraction. `BrowserPlaybackSession` owns typed
+control commands, immutable per-renderer state, the shared Previous/restart
+threshold, five-second visibility requests, pause/buffer/cursor/seek/menu pins,
+and action/timer invalidation. Backend callbacks retain document/source guards
+and authoritative clocks; no paused HTML time is transferred into VLC.
+
+`BrowserPlaybackPanel` is now the only native header/transport/volume layout,
+glass/button factory, progress/time/capability rendering and focus-color code.
+WebKit uses the ordinary page header; VLC uses the same component with its cone,
+status text and Audio/Subtitles/Keep fullscreen accessories. Preserve the existing
+sizes, order and relative layout. Torrent payloads, playback preparation,
+HTTP context and modal return remain in the VLC controller.
+
+Retain the existing shared Select press driver and seek-ramp helpers. The small
+renderer-specific repeat loops remain intentional: VLC accumulates an explicit
+seek target to avoid cached-clock under-seeking, whereas WebKit updates its live
+HTML media element. A common panel must not erase that proven backend difference.
+The site's own controls, episode algorithms, natural-completion decision and
+fullscreen/pagehide behavior are not changed in this native adoption.
+
+This host cannot execute UIKit or TVVLCKit. Native focus/layout/remote behavior,
+track menus, saved per-site settings and torrent playback require tvOS observation
+after compilation. Do not treat the Linux bridge/decoder tests as UI verification.
+
+### Shared PlayerJS controls with experimental capture disabled
+
+The shared registry must also serve ordinary WebKit playback. Observe PlayerJS
+instances independently of the capture toggle, but retain the opt-in check
+before extracting Blob/HLS for VLC. Derive WebKit Next/Previous capability
+reporting from the same adapter probes as dispatch; an independent old capability
+list would otherwise send supported Previous actions to system fallback.
+
+Actual UASerials in WebKit with experimental capture OFF passed 1 → 2 → 1 with
+advancing website playback, no native player and zero VLC offers
+(`18-57-19.629Z-37c63a3e`). Delayed catalog/metadata
+(`18-57-19.631Z-54ba5704`), modeled Home/orphan recovery
+(`18-57-40.247Z-d4f6a9ba`), HTTP403 failed-start recovery
+(`18-58-04.141Z-adee260e`) and interruption/source replacement
+(`18-58-19.348Z-d043f52f`) passed against the final bridge with actual Linux
+libVLC. These remain distinct from native panel interaction and MediaRemote
+verification.
+
+Native adoption commit `fe1185d` successfully compiled and published 2.22.0
+Build 32.1 through Actions 44374879556. No native panel interaction was observed;
+the compiler/package result does not close the UI/remote/torrent acceptance
+items above.
+
+### Native capture feedback during completion
+
+The user reports that capture no longer works, first mentions Build 32, then
+corrects it to **31**. They clarify that UASerials still captures while the other
+tested sites continue playing on the website. This is new native regression
+evidence, not a confirmed cause and not the earlier pause-without-VLC symptom.
+Linux bridge/decoder success and Build 31/32 compilation cannot close it.
+
+The user directs finishing the unification first and investigating capture
+afterward. Retain the completed session/panel adoption, finish the tested
+ordinary-PlayerJS adapter follow-up, and keep capture fixes separate. No blind
+rollback, site-specific workaround, new capture timing or device action has
+been performed. Resume capture diagnosis from the concrete checkpoint in the
+[unification plan](plans/unified-playback.md#open-native-capture-regression-and-next-task).
+
+### Reproduce the existing-tab PlayerJS capture gap before requesting TV logs
+
+The user asks to exhaust the stand first, then suggests that the failing video
+was already loaded and paused in an existing tab. Pin detached source worktrees
+for pre-unification `90003cb` and Build 31 `7e7f0ed`. Confirm that published Build
+31's merge target `33cbdc23a6ac54267a7030ebd191cde9ae302072` has identical app and
+stand source files to the tested head. Use each pinned bridge/model and record
+hashes with real website playback, production adblock and Linux libVLC.
+
+The fresh-page TV symptom was not reproduced: Teleportal captures on both
+revisions and Build 31 passes inline, fullscreen and modeled Home/manual-Play
+recovery. UAKino has an intermittent HTML-clock stall at 0.1 s, including in
+plain WebKit with no app media bridge; do not mislabel it as the user's advancing
+website/no-VLC symptom. The visible desktop CLI launch succeeded, but its
+unlabeled RC replies misassociated time and duration, so rely on worker decoder
+stats rather than that run's clock for playback evidence.
+
+The **warm tab with capture enabled after player creation** does reproduce the
+reported behavior on actual UAKino: the same paused video/document survives the
+tab switch, then Play advances 0.334 → 18.325 s with zero offers and no VLC
+(`19-17-39.150Z-131b3130`). Pre-unification code also reproduces it
+(`19-20-23.024Z-9eab4ade`). Current `97fb98d` captures the same retained video
+without reload and Linux VLC displays output (`19-17-57.234Z-c39ef28d`).
+
+The constructor registry used to ignore private PlayerJS instances while
+experimental capture was OFF. Enabling it later wrapped only future
+constructors, leaving the already-playing Blob video unbound. The independent
+registration added in the unification follow-up already fixes this case;
+capture permissions, source validation and the website's own player remain
+unchanged. Add `scenarios/warm-playerjs.mjs`: actual Blob/HTTP media and real
+Linux libVLC with a controlled PlayerJS capability and modeled tab ownership.
+It fails against Build 31 after OFF-time construction, passes the Build-31
+always-ON control, and passes current OFF → ON without source/video replacement.
+Exact run IDs and scope limitations are in the
+[plan checkpoint](plans/unified-playback.md#reproduced-previously-created-playerjs-instance-missing-after-opt-in).
+
+Actual Teleportal existing-tab controls capture with initial VLC ON and OFF;
+this specific PlayerJS diagnosis does not establish the cause of every native
+TV failure. No TV logs or physical-device work were required for this
+reproduction. Build 33.1 compiled and passed IPA verification, but publication
+failed because GitHub's comparison API returned HTTP500. The later read-only
+comparison succeeded with HTTP200; do not confuse that infrastructure failure
+with an application build failure.
+
+## 2026-11-18 — Extend the native system-button surface fix to secondary screens
+
+Before this cosmetic delivery, Actions 44381819743 successfully compiled,
+packaged and published `b7b15b4` as 2.22.0 Build 34.1, including the verified
+PlayerJS registration fix. Build 34.1 does not include the surface changes below.
+
+The user sees the earlier duplicate button-surface defect in the startup guide
+and requests a source audit of analogous app-owned UI. Reuse the established
+native-glass detection from the accepted browser-menu fix, rather than changing
+the main menu or introducing a new theme.
+
+Add shared system-button surface helpers in BrowserTVAppearance.h: when UIKit
+owns the glass capsule, leave the button's own backing clear, remove the manual
+root corner radius and avoid clipping its system focus surface. Preserve the
+existing color/radius fallback on older tvOS. Apply the same conditional rule
+during custom focus transitions so focusing cannot repaint the extra rectangle.
+
+Apply this to Start Browsing in the guide, action buttons in Favorites editing
+and All History, torrent toolbar/row actions, settings and coverage footer
+actions, and the shared playback button factory. Playback buttons no longer
+stack a second app glass view underneath modern system glass. Retain destructive
+action text cues, shared ON/OFF badges, layout, callbacks and focus routing.
+Leave intentionally custom cards, panel containers, text fields, collection
+cells and UIControl-based badge toggles rounded; they are not system buttons.
+The main browser menu already guards its native backing and remains unchanged.
+
+This is a source-level UI correction on Linux. No interaction tests, Simulator
+or physical-TV work were requested or performed, and no visual fix is claimed
+from source inspection alone. Keep both marketing settings at consolidated
+unreleased 2.22.0. This stage does not change media discovery, capture, episode
+selection, storage or signing.
+
+## 2026-11-23 — Retry automatic VLC capture from live playback
+
+The user wants the active video to determine automatic capture, not attempt
+history. The earlier actual UASerials run `20-10-30.466Z-6c7b2b66` sent one
+offer that the modeled host rejected, then continued website playback with
+no second offer, even after OFF/ON. The bridge deleted the request but kept
+the attempted-source entry.
+
+Remove attempted/unsupported source caches. Actual media progress can re-arm
+capture; unacknowledged offers expire and retries are paced without remembering
+which video was refused. Only final handoff pauses the source. Native serializes
+offers through presentation; a failed transfer resumes the exact source once
+visible, whereas release of successfully opened VLC never acts as rollback.
+Preserve the 0.1-second actual-play threshold, paused Back and genuine website
+EOF for completion. Keep both marketing settings at unreleased 2.22.0.
+
+Clean-source Linux WebKit with production adblock and actual libVLC verified
+same-source retries on actual UASerials after modeled modal refusal and modeled
+Home after pause, without a new Play, plus the controlled [lifecycle and return
+cases](plans/automatic-web-video-vlc.md#simplify-automatic-capture-around-the-live-video).
+These are not device results. The separate in-progress Live Logs changes were
+not included.
