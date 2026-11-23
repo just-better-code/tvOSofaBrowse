@@ -172,32 +172,49 @@ static void BrowserPlaybackFill(UIView *view, UIView *container) {
     return button;
 }
 - (void)setSelected:(BOOL)selected forAccessoryButton:(UIButton *)button {
-    if (button.selected == selected) return;
     button.selected = selected;
+    UIImageView *imageView = (UIImageView *)[button viewWithTag:BrowserPlaybackPanelIconTag];
     if (@available(tvOS 26.0, *)) {
-        if (selected) {
-            UIButtonConfiguration *configuration = [UIButtonConfiguration prominentGlassButtonConfiguration];
-            configuration.baseBackgroundColor = BrowserTVFocusedSurfaceColor();
-            configuration.cornerStyle = UIButtonConfigurationCornerStyleCapsule;
-            button.configuration = configuration;
-        } else {
-            button.configuration = nil;
+        if (!button.configurationUpdateHandler) {
+            UIImage *symbol = imageView.image;
+            UIColor *ink = BrowserTVFocusedTextColor();
+            UIImage *darkSymbol = [symbol imageWithTintColor:ink renderingMode:UIImageRenderingModeAlwaysOriginal];
+            UIImage *lightSymbol = [symbol imageWithTintColor:UIColor.whiteColor renderingMode:UIImageRenderingModeAlwaysOriginal];
+            imageView.hidden = YES;
+            button.configuration = [UIButtonConfiguration glassButtonConfiguration];
+            // Keep the glyph inside the native glass control. A separate image
+            // view can be covered or retinted by the selected glass surface.
+            button.configurationUpdateHandler = ^(UIButton *control) {
+                UIButtonConfiguration *configuration = control.selected
+                    ? [UIButtonConfiguration prominentGlassButtonConfiguration] : [UIButtonConfiguration glassButtonConfiguration];
+                if (control.selected) configuration.baseBackgroundColor = BrowserTVFocusedSurfaceColor();
+                BOOL inverted = control.selected || control.focused || control.highlighted;
+                configuration.baseForegroundColor = inverted ? ink : UIColor.whiteColor;
+                configuration.image = inverted ? darkSymbol : lightSymbol;
+                configuration.cornerStyle = UIButtonConfigurationCornerStyleCapsule;
+                configuration.contentInsets = NSDirectionalEdgeInsetsZero;
+                control.configuration = configuration;
+            };
         }
+        [button setNeedsUpdateConfiguration];
+        return;
     }
+    imageView.image = [imageView.image imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
     [self updateButtonAppearance:button focused:button.focused];
 }
 - (void)updateButtonAppearance:(UIButton *)button focused:(BOOL)focused {
+    if (button.configurationUpdateHandler) return;
     BOOL selected = button.selected;
     BOOL native = BrowserTVUsesNativeButtonSurface();
-    UIColor *legacyColor = focused ? BrowserTVFocusedSurfaceColor() : selected ? BrowserTVRestingSurfaceColor() : UIColor.clearColor;
+    BOOL inverted = focused || selected;
+    UIColor *legacyColor = inverted ? BrowserTVFocusedSurfaceColor() : UIColor.clearColor;
     button.backgroundColor = BrowserTVSystemButtonSurfaceColor(legacyColor);
     if (!native) {
         button.layer.borderWidth = selected ? 2 : 0;
-        UIColor *outline = focused ? BrowserTVFocusedTextColor() : [UIColor colorWithWhite:1 alpha:0.65];
-        button.layer.borderColor = outline.CGColor;
+        button.layer.borderColor = BrowserTVFocusedTextColor().CGColor;
     }
     UIImageView *image = (UIImageView *)[button viewWithTag:BrowserPlaybackPanelIconTag];
-    image.tintColor = (focused || (native && selected)) ? BrowserTVFocusedTextColor() : UIColor.whiteColor;
+    image.tintColor = inverted ? BrowserTVFocusedTextColor() : UIColor.whiteColor;
 }
 - (void)setControlsVisible:(BOOL)visible {
     if (!visible) self.needsRevealFocus = NO;
