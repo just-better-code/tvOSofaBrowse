@@ -12,6 +12,7 @@ Use the existing translucent browser menu and `BrowserTVAppearance.h` as the vis
 
 - Preserve the existing browser menu layout and its translucent panel. Use `BrowserTVPanelEffect` and the shared surface and text colors for app-owned dialogs.
 - Keep filter-preparation feedback non-obscuring; use the existing status badge rather than a full-screen overlay over website content.
+- Use a neutral dark canvas behind WebKit before the first website paints. Do not cover the site, inject a page theme, or delay its first render; once content appears, let the website and WebKit own the background.
 - Let modern system glass buttons draw their own surfaces; do not add a separate rectangular background beneath their capsule or replace the accepted native focus appearance.
 - For `UIButtonTypeSystem`, use `BrowserTVConfigureSystemButtonSurface` at creation and `BrowserTVSystemButtonSurfaceColor` in custom focus updates. Keep custom backing/clipping only on the older-tvOS fallback. Do not apply this rule to custom `UIControl` toggles, badges, cards, fields or panel containers, which still own their surfaces.
 - Respect tvOS focus and remote behavior. Center activates the focused control; Play/Pause uses the screen's documented shortcut. Prefer UIKit controls over HTML for app UI.

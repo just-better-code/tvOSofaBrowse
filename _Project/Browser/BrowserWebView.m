@@ -20,6 +20,8 @@ static NSString * const kBrowserUserContentControllerClassName = @"WKUserContent
 static NSString * const kBrowserUserScriptClassName = @"WKUserScript";
 static NSString * const kBrowserAdBlockEnabledDefaultsKey = @"AdBlockEnabled";
 static char kBrowserNavigationURLObservationContext;
+// WebKit's _WKRenderingProgressEventFirstVisuallyNonEmptyLayout.
+static const NSUInteger kBrowserFirstVisuallyNonEmptyLayout = 1 << 1;
 
 static NSString *BrowserAdBlockEnabledSourceConfiguration(void) {
     NSMutableArray<NSString *> *enabled = [NSMutableArray array];
@@ -978,6 +980,8 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 @property (nullable, nonatomic, strong) id runtimeWebView;
 @property (nonatomic, readwrite) NSUInteger documentGeneration;
 @property (nonatomic, readwrite) NSUInteger playbackDocumentGeneration;
+@property (nonatomic) BOOL waitingForInitialWebsitePaint;
+@property (nonatomic) BOOL initialWebsiteCommitted;
 @property (nonatomic, readwrite) NSUInteger javaScriptGeneration;
 @property (nonatomic, readwrite) BOOL pageFullscreenActive;
 @property (nullable, nonatomic, strong) NSURLRequest *lastRequest;
@@ -1479,7 +1483,6 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
     UIView *runtimeView = (UIView *)webViewObject;
     runtimeView.frame = self.bounds;
     runtimeView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    runtimeView.backgroundColor = UIColor.blackColor;
 
     SEL navigationDelegateSelector = NSSelectorFromString(@"setNavigationDelegate:");
     if ([webViewObject respondsToSelector:navigationDelegateSelector]) {
@@ -1491,6 +1494,7 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
         ((void (*)(id, SEL, id))objc_msgSend)(webViewObject, UIDelegateSelector, self);
     }
 
+    [self setInitialPageBackdropVisible:YES];
     [self addSubview:runtimeView];
     [self setUserAgent:userAgent];
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(adBlockRulesDidUpdate:)
@@ -1498,6 +1502,26 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(websiteDiagnosticsDidChange:)
                                                  name:BrowserDebugEnabledDidChangeNotification object:nil];
     [self setAdBlockEnabled:[[NSUserDefaults standardUserDefaults] boolForKey:kBrowserAdBlockEnabledDefaultsKey]];
+}
+
+
+- (void)setInitialPageBackdropVisible:(BOOL)visible {
+    self.waitingForInitialWebsitePaint = visible;
+    self.initialWebsiteCommitted = NO;
+    // Paint behind WebKit, not over it. Site backgrounds and content can paint
+    // immediately; only the default blank canvas is transparent while waiting.
+    self.backgroundColor = visible ? [UIColor colorWithWhite:0.12 alpha:1] : UIColor.blackColor;
+    UIView *runtimeView = self.runtimeWebView;
+    runtimeView.backgroundColor = visible ? UIColor.clearColor : nil;
+    runtimeView.opaque = !visible;
+    SEL progress = NSSelectorFromString(@"_setObservedRenderingProgressEvents:");
+    if ([runtimeView respondsToSelector:progress])
+        ((void (*)(id, SEL, NSUInteger))objc_msgSend)(runtimeView, progress, visible ? kBrowserFirstVisuallyNonEmptyLayout : 0);
+}
+
+- (void)_webView:(id)webView renderingProgressDidChange:(NSUInteger)events {
+    if (webView == self.runtimeWebView && self.initialWebsiteCommitted && (events & kBrowserFirstVisuallyNonEmptyLayout))
+        [self setInitialPageBackdropVisible:NO];
 }
 
 
@@ -2477,6 +2501,10 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 }
 
 - (void)webView:(id)webView didCommitNavigation:(id)navigation {
+    if (self.waitingForInitialWebsitePaint) {
+        NSString *scheme = self.currentURL.scheme.lowercaseString;
+        self.initialWebsiteCommitted = [scheme isEqualToString:@"https"] || [scheme isEqualToString:@"http"];
+    }
     self.documentGeneration += 1;
     self.adBlockActiveDocumentToken = self.adBlockDocumentToken;
     [self updateAdBlockPreparingBadge];
@@ -2485,6 +2513,9 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 }
 
 - (void)webView:(id)webView didFinishNavigation:(id)navigation {
+    // On builds without the rendering milestone, restore the default canvas
+    // at load completion so background-less pages keep their normal contrast.
+    if (self.initialWebsiteCommitted) [self setInitialPageBackdropVisible:NO];
     self.loading = NO;
     if (self.adBlockRefreshAfterNavigation && [BrowserAdBlockService explicitRebuildReadyToApply])
         [self reloadWithPreparedAdBlock];
@@ -2505,6 +2536,7 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 }
 
 - (void)webView:(id)webView didFailNavigation:(id)navigation withError:(NSError *)error {
+    if (self.initialWebsiteCommitted) [self setInitialPageBackdropVisible:NO];
     self.loading = NO;
     self.adBlockRefreshAfterNavigation = NO;
     if ([self.delegate respondsToSelector:@selector(webView:didFailLoadWithError:)]) {
@@ -2521,6 +2553,7 @@ static void BrowserInstallUserScripts(id configuration, NSString *diagnosticToke
 }
 
 - (void)webViewWebContentProcessDidTerminate:(id)webView {
+    [self setInitialPageBackdropVisible:YES];
     self.documentGeneration += 1;
     self.loading = NO;
     if ([self.delegate respondsToSelector:@selector(webViewWebContentProcessDidTerminate:)]) {

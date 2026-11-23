@@ -2186,3 +2186,21 @@ unchanged. This appearance change has not been observed on tvOS.
 The user closes the 2.22.0 change set with this adjustment. Leave both
 marketing settings at 2.22.0 for this stage and put subsequent changes in
 2.22.1. This version boundary does not establish that a release was published.
+
+## 2026-11-23 — Dark first-page canvas without a loading overlay
+
+The user reports a white screen for a few seconds while the first website
+opens. Do not restore the 2.21.2 preparation backdrop: it sat above the site and
+obscured live content. Instead, make the inner WebKit canvas transparent over a
+neutral dark backing until its first visually nonempty website layout. A
+background drawn by the site is always visible immediately. Restore normal
+WebKit backgrounds at that milestone, with load completion as a fallback for
+runtimes without the callback. Keep filter preparation, media, and navigation
+unchanged. No site-color cache, CSS injection or extra request is used.
+
+The local WebKit reference `8a736192` shows that setting opacity on WKWebView
+itself sets its base page background and that a client-set scroll-view color
+would block WebKit's normal background management. Use that view rather than
+just recoloring its wrapper. The rendering milestone is runtime-checked on
+tvOS. This is the first 2.22.1 change; visual behavior has not been observed on
+tvOS.
