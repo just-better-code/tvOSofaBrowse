@@ -2229,3 +2229,18 @@ VLC output, the same top document and both Keep fullscreen settings. See the
 [experiment evidence](plans/automatic-web-video-vlc.md#teleportal-automatic-next-episode-on-vlc-completion).
 This is a site-specific addition to the consolidated 2.22.1 change set.
 No native focus, dismissal, or Apple TV interaction was verified.
+
+### Filter resting-finger cursor jitter
+
+The user clarified that the cursor moves when their finger is nearly stationary,
+not that continuous movement is uneven. Apply a small radial dead zone in
+cursor coordinates and retain only the unconsumed movement within that radius:
+oscillating samples cancel while slow travel in one direction still moves the
+pointer. Bypass filtering during held Center and reset on touch lifecycle
+boundaries. Use the filtered movement for the native pointer, hover, magnifier
+and existing edge-scroll routing; do not add a timer or inertia.
+
+Firefox TV's `CursorModel` and `CursorView` address a different problem
+(directional-key motion synchronized to drawing). Do not port their frame loop
+for resting-finger noise. This change is part of 2.22.1; the threshold has not
+been tuned or verified on physical hardware.

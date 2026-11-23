@@ -1,6 +1,7 @@
 #import "BrowserPreferencesStore.h"
 #import "BrowserRemoteInputController.h"
 #import "BrowserTorrentLibraryViewController.h"
+#include <math.h>
 
 static UIImage *BrowserDefaultCursor(void) {
     static UIImage *image;
@@ -23,6 +24,7 @@ static UIImage *BrowserPointerCursor(void) {
 static NSTimeInterval const kBrowserCursorIdleDelay = 3.0;
 static NSTimeInterval const kBrowserMagnifierIdleDisableDelay = 30.0;
 static CGFloat const kBrowserMagnifierDiameter = 384.0;
+static CGFloat const kBrowserCursorDeadZoneRadius = 1.5;
 static NSTimeInterval const kBrowserSelectHoldDelay = 0.65;
 static NSTimeInterval const kBrowserVerticalHoldDelay = 0.38;
 static CGFloat const kBrowserVerticalHoldInitialSpeed = 560.0;
@@ -60,6 +62,7 @@ static NSString *BrowserPressPhaseString(UIPressPhase phase) {
 @property (nonatomic, readwrite) UIImageView *cursorView;
 @property (nonatomic, readwrite, getter=isCursorModeEnabled) BOOL cursorModeEnabled;
 @property (nonatomic) CGPoint lastTouchLocation;
+@property (nonatomic) CGPoint cursorMotionRemainder;
 @property (nonatomic, weak) UIScrollView *animatedScrollView;
 @property (nonatomic) CGFloat animatedScrollTargetY;
 @property (nonatomic) CFTimeInterval lastAnimatedScrollPressTimestamp;
@@ -221,11 +224,16 @@ static NSString *BrowserPressPhaseString(UIPressPhase phase) {
     }];
 }
 
+- (void)resetTouchMotion {
+    self.lastTouchLocation = CGPointMake(-1, -1);
+    self.cursorMotionRemainder = CGPointZero;
+}
+
 - (void)setCursorModeEnabled:(BOOL)cursorModeEnabled {
     BOOL wasCursorModeEnabled = self.cursorModeEnabled;
     _cursorModeEnabled = cursorModeEnabled;
     self.hoverGeneration += 1;
-    self.lastTouchLocation = CGPointMake(-1, -1);
+    [self resetTouchMotion];
     [self refreshInteractionState];
     if (cursorModeEnabled) {
         [self noteCursorActivity];
@@ -243,7 +251,7 @@ static NSString *BrowserPressPhaseString(UIPressPhase phase) {
     self.hoverGeneration += 1;
     self.magnifierGeneration += 1;
     self.cursorIdleGeneration += 1;
-    self.lastTouchLocation = CGPointMake(-1, -1);
+    [self resetTouchMotion];
     [self refreshInteractionState];
     if (!cursorSuppressed) [self noteCursorActivity];
 }
@@ -441,7 +449,7 @@ static NSString *BrowserPressPhaseString(UIPressPhase phase) {
 }
 
 - (void)handleSelectPressEnded {
-    self.lastTouchLocation = CGPointMake(-1, -1);
+    [self resetTouchMotion];
 
     if ([self.host browserRemoteInputControllerPresentedViewController] != nil) {
         return;
@@ -765,8 +773,28 @@ static NSString *BrowserPressPhaseString(UIPressPhase phase) {
     self.cursorHiddenForDirectionalNavigation = NO;
     self.cursorIdleHidden = NO;
     [self noteCursorActivity];
-    self.lastTouchLocation = CGPointMake(-1, -1);
+    [self resetTouchMotion];
     return YES;
+}
+
+- (CGPoint)cursorMovementForTouchDelta:(CGPoint)delta {
+    if (self.selectPressPending) {
+        // A held click must still be able to drag a website control precisely.
+        self.cursorMotionRemainder = CGPointZero;
+        return delta;
+    }
+    CGPoint motion = CGPointMake(self.cursorMotionRemainder.x + delta.x, self.cursorMotionRemainder.y + delta.y);
+    CGFloat distance = hypot(motion.x, motion.y);
+    if (distance <= kBrowserCursorDeadZoneRadius) {
+        self.cursorMotionRemainder = motion;
+        return CGPointZero;
+    }
+    // Keep only the part inside the dead zone. Excess moves immediately, so
+    // even very slow deliberate movement gets through without a threshold jump.
+    CGFloat scale = kBrowserCursorDeadZoneRadius / distance;
+    CGPoint remainder = CGPointMake(motion.x * scale, motion.y * scale);
+    self.cursorMotionRemainder = remainder;
+    return CGPointMake(motion.x - remainder.x, motion.y - remainder.y);
 }
 
 - (BOOL)handleTouchesMoved:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
@@ -793,9 +821,12 @@ static NSString *BrowserPressPhaseString(UIPressPhase phase) {
         } else {
             CGFloat xDiff = location.x - self.lastTouchLocation.x;
             CGFloat yDiff = location.y - self.lastTouchLocation.y;
+            self.lastTouchLocation = location;
             CGFloat cursorSensitivity = self.magnifierEnabled ? 0.375 : 0.75;
-            xDiff *= cursorSensitivity;
-            yDiff *= cursorSensitivity;
+            CGPoint movement = [self cursorMovementForTouchDelta:CGPointMake(xDiff * cursorSensitivity, yDiff * cursorSensitivity)];
+            if (CGPointEqualToPoint(movement, CGPointZero)) break;
+            xDiff = movement.x;
+            yDiff = movement.y;
             CGRect rect = self.cursorView.frame;
 
             CGFloat cursorEdgeInset = 1.0;
@@ -840,7 +871,6 @@ static NSString *BrowserPressPhaseString(UIPressPhase phase) {
                 self.newTabKeyboardSelectionActive = NO;
             }
             self.cursorView.frame = rect;
-            self.lastTouchLocation = location;
         }
 
         self.cursorView.image = BrowserDefaultCursor();
@@ -861,7 +891,7 @@ static NSString *BrowserPressPhaseString(UIPressPhase phase) {
 }
 
 - (void)handleTouchesEnded {
-    self.lastTouchLocation = CGPointMake(-1, -1);
+    [self resetTouchMotion];
 }
 
 @end
