@@ -4,6 +4,7 @@
 
 @interface BrowserHistoryButton : UIButton
 @property (nonatomic, strong) UIColor *restingColor;
+@property (nonatomic, strong) UIColor *restingTextColor;
 @end
 
 @implementation BrowserHistoryButton
@@ -11,9 +12,9 @@
        withAnimationCoordinator:(UIFocusAnimationCoordinator *)coordinator {
     [super didUpdateFocusInContext:context withAnimationCoordinator:coordinator];
     [coordinator addCoordinatedAnimations:^{
-        self.backgroundColor = self.isFocused ? BrowserTVFocusedSurfaceColor() : self.restingColor;
+        self.backgroundColor = BrowserTVSystemButtonSurfaceColor(self.isFocused ? BrowserTVFocusedSurfaceColor() : self.restingColor);
         [self setTitleColor:self.isFocused ? BrowserTVFocusedTextColor()
-                                           : UIColor.whiteColor forState:UIControlStateNormal];
+                                           : self.restingTextColor forState:UIControlStateNormal];
     } completion:nil];
 }
 @end
@@ -89,15 +90,15 @@
     return label;
 }
 
-- (UIButton *)button:(NSString *)title color:(UIColor *)color selector:(SEL)selector {
+- (UIButton *)button:(NSString *)title color:(UIColor *)color destructive:(BOOL)destructive selector:(SEL)selector {
     BrowserHistoryButton *button = [BrowserHistoryButton buttonWithType:UIButtonTypeSystem];
     button.translatesAutoresizingMaskIntoConstraints = NO;
     button.restingColor = color;
-    button.backgroundColor = color;
-    button.layer.cornerRadius = 18.0;
+    button.restingTextColor = destructive && BrowserTVUsesNativeButtonSurface() ? UIColor.systemRedColor : UIColor.whiteColor;
+    BrowserTVConfigureSystemButtonSurface(button, color, 18.0);
     button.titleLabel.font = [UIFont systemFontOfSize:27.0 weight:UIFontWeightSemibold];
     [button setTitle:title forState:UIControlStateNormal];
-    [button setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    [button setTitleColor:button.restingTextColor forState:UIControlStateNormal];
     [button addTarget:self action:selector forControlEvents:UIControlEventPrimaryActionTriggered];
     return button;
 }
@@ -154,14 +155,19 @@
     [table addGestureRecognizer:contextPress];
 
     UIButton *selectAll = [self button:@"Select All" color:BrowserTVRestingSurfaceColor()
+                              destructive:NO
                                  selector:@selector(selectAllPressed)];
     UIButton *open = [self button:@"Open" color:BrowserTVRestingSurfaceColor()
+                          destructive:NO
                             selector:@selector(openPressed)];
     UIButton *remove = [self button:@"Delete" color:[UIColor colorWithRed:0.65 green:0.24 blue:0.33 alpha:0.72]
+                            destructive:YES
                               selector:@selector(deletePressed)];
     UIButton *clearAll = [self button:@"Clear All" color:[UIColor colorWithRed:0.65 green:0.24 blue:0.33 alpha:0.72]
+                              destructive:YES
                                 selector:@selector(clearAllPressed)];
     UIButton *done = [self button:@"Done" color:BrowserTVRestingSurfaceColor()
+                          destructive:NO
                             selector:@selector(donePressed)];
     [self.view addSubview:selectAll];
     [self.view addSubview:open];
