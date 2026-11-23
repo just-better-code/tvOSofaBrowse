@@ -1158,3 +1158,29 @@ UAKino playback had an intermittent pre-capture 0.1 s stall in one run; passing
 other episodes does not close that observation. See the development history for
 the exact successful and failed controls. No runtime changes are made by this
 test-only stage, and no new native/device verification is implied.
+
+## Simplify automatic capture around the live video
+
+- With the experiment enabled, offer a visible, eligible source after 0.1 seconds
+  of actual playback. Keep no per-video attempt or unsupported history. Sample
+  from media events and bound unanswered offers; pace retries without remembering
+  the refused source.
+- Before the final transfer, refusal must leave the website playing. During the
+  transfer, pause the exact source once; do not let another offer take its place.
+  If the transfer fails, restore only the same video it paused, once that page
+  is visible and active. Back, explicit episode commands and natural EOF keep
+  their separate return semantics.
+- Stand acceptance: same-source recovery after a modal refusal, a discarded
+  offer reply and an interruption after pause without an extra Play; actual VLC
+  output, ordinary paused Back and real website EOF; no transfer of a replaced
+  source. Native UIKit presentation and Home/window ordering remain distinct.
+
+Stand acceptance on the clean capture-only candidate: `17-54-20.023Z-0c7e2bd0`
+passes the six lifecycle cases; `17-54-19.988Z-59ad41c8` passes paused Back,
+manual replay, Next fallback and natural EOF; `17-54-19.937Z-8cbde2a5` passes
+source-replacement and detached-frame episode guards. On actual UASerials with
+adblock, a modeled modal refusal recovers on the same video without OFF/ON
+or another Play (`17-54-19.973Z-92402016`). A modeled foreground loss after
+the pause also recovers without Play (`17-54-19.906Z-9950f141`). Both report
+actual Linux libVLC displayed frames. No device interaction was performed.
+Native UIKit refusal and WebKit window ordering remain unverified.

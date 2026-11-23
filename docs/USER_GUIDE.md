@@ -134,6 +134,8 @@ When an accessible video in the main page document exposes a direct HTTP(S) medi
 
 **Experimental web capture (2.22.0 development builds):** in the browser menu, set **Settings → VLC** to ON. This direct toggle replaces the Magnifier tile in Debug and develop IPAs named `tvOSofaBrowse Test`; the magnifier remote shortcut remains available. The experiment defaults OFF. Start the website video in the visible active tab. After at least **0.1 seconds of actual playback**, the app pauses that exact video and opens shared VLC immediately. VLC buffers visibly and starts at the website position. Website fullscreen is not required. Media events arm brief checks; the app stops checking the site while VLC owns playback. Native fullscreen controls, audio and subtitles remain in the shared player.
 
+If the app temporarily cannot open VLC, the website can keep playing and capture retries automatically. If the app already paused the video for the transfer but did not open VLC, it resumes that same source once the page is visible and active again. Neither case requires reloading the page or pressing Play again if the website allows playback to continue.
+
 For a recognized Starlight episode, the header follows the episode title in both website and VLC playback. Known Teleportal episodes also update the containing page's title and address without reloading or adding a Back-history entry. Unknown episode addresses are not guessed; other players retain the containing page title.
 
 If the app cannot confirm the handoff after pausing the video, it tries to resume that same video on the still-visible site rather than immediately handing it off again. A manual pause and Play can retry VLC.

@@ -2146,3 +2146,26 @@ or physical-TV work were requested or performed, and no visual fix is claimed
 from source inspection alone. Keep both marketing settings at consolidated
 unreleased 2.22.0. This stage does not change media discovery, capture, episode
 selection, storage or signing.
+
+## 2026-11-23 — Retry automatic VLC capture from live playback
+
+The user wants the active video to determine automatic capture, not attempt
+history. The earlier actual UASerials run `20-10-30.466Z-6c7b2b66` sent one
+offer that the modeled host rejected, then continued website playback with
+no second offer, even after OFF/ON. The bridge deleted the request but kept
+the attempted-source entry.
+
+Remove attempted/unsupported source caches. Actual media progress can re-arm
+capture; unacknowledged offers expire and retries are paced without remembering
+which video was refused. Only final handoff pauses the source. Native serializes
+offers through presentation; a failed transfer resumes the exact source once
+visible, whereas release of successfully opened VLC never acts as rollback.
+Preserve the 0.1-second actual-play threshold, paused Back and genuine website
+EOF for completion. Keep both marketing settings at unreleased 2.22.0.
+
+Clean-source Linux WebKit with production adblock and actual libVLC verified
+same-source retries on actual UASerials after modeled modal refusal and modeled
+Home after pause, without a new Play, plus the controlled [lifecycle and return
+cases](plans/automatic-web-video-vlc.md#simplify-automatic-capture-around-the-live-video).
+These are not device results. The separate in-progress Live Logs changes were
+not included.

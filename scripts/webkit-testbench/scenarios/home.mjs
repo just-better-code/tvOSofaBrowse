@@ -7,8 +7,9 @@ export default async function(lab){
  const receive=native.receive.bind(native),checkpoint=native.checkpoint.bind(native);
  const results=[];
  try{
-  for(const mode of ['healthy','stale-inactive-visible','accepted-ack-home','lost-offer-reply']){
-   let offers=0,firstId,firstURL,interrupted=false,interruptionDone=false;
+   for(const mode of ['healthy','stale-inactive-visible','modal-before-pause','lost-offer-reply','accepted-ack-home','lost-accepted-ack']){
+    let offers=0,firstId,firstURL,interrupted=false;
+    native.overview=mode==='modal-before-pause';
    native.receive=async(frame,handler,body)=>{
     if(handler==='browserFullscreenMedia'&&!frame.parentFrame()&&body?.vlcRequest){offers++;firstId??=body.session;firstURL??=body.url;
      if(mode==='lost-offer-reply'&&offers===1){lab.record('injected-lost-offer-reply',{session:body.session});return}}
@@ -16,8 +17,19 @@ export default async function(lab){
    };
    native.checkpoint=async(session,expected)=>{
     const reply=await checkpoint(session,expected);
-    if(mode==='accepted-ack-home'&&!interrupted&&expected==='accepted'){
-     interrupted=true;await native.setActive(false);await delay(100);await native.setActive(true);interruptionDone=true;
+     if(!interrupted&&expected==='accepted'){
+      if(mode==='accepted-ack-home'){
+       interrupted=true;
+       assert(await leaf.evaluate(()=>document.querySelector('video').paused));
+       await native.setActive(false);
+       await delay(150);
+       assert(await leaf.evaluate(()=>document.querySelector('video').paused),'No rollback playback behind Home');
+       await native.setActive(true);
+      }else if(mode==='lost-accepted-ack'){
+       interrupted=true;
+       assert(await leaf.evaluate(()=>document.querySelector('video').paused));
+       throw Error('injected-lost-accepted-ack');
+      }
     }return reply;
    };
    await lab.page.goto(media.origin+'/top');const leaf=lab.page.frames().find(f=>f.url().endsWith('/leaf'));
@@ -41,15 +53,16 @@ export default async function(lab){
     },null,{timeout:4000});
     assert.equal(offers,0);
     await native.configure();
-   }else if(mode==='lost-offer-reply'){
-    await waitFor(()=>offers===1);await native.setActive(false);await delay(100);await native.setActive(true);await delay(100);
-    await leaf.evaluate(()=>{document.querySelector('video').play().catch(()=>{})});
-   }else if(mode==='accepted-ack-home'){
-    await waitFor(()=>interruptionDone&&native.active&&native.phase==='idle');await delay(100);
-    await leaf.evaluate(()=>{document.querySelector('video').play().catch(()=>{})});
+    }else if(mode==='modal-before-pause'||mode==='lost-offer-reply'){
+     await waitFor(()=>offers===1);
+     await leaf.waitForFunction(()=>{const v=document.querySelector('video');return !v.paused&&v.currentTime>.5});
+     native.overview=false; // No new Play, reload, toggle or permission refresh.
    }
    await waitFor(()=>native.phase==='playing',{describe:()=>JSON.stringify(native.snapshot())});
-   if(mode==='accepted-ack-home'||mode==='lost-offer-reply'){assert(offers>=2);assert.notEqual(native.session.body.session,firstId);assert.equal(native.session.body.url,firstURL)}
+    if(!['healthy','stale-inactive-visible'].includes(mode)){
+     assert.equal(offers,2);assert.notEqual(native.session.body.session,firstId);assert.equal(native.session.body.url,firstURL);
+    }
+    assert((await native.decoder.status()).displayedPictures>0);
    const captured=native.session.body.session;
    await native.setActive(false);await delay(100);await native.setActive(true);await native.close('closed');await delay(100);
    assert(await leaf.evaluate(()=>document.querySelector('video').paused));
@@ -58,6 +71,6 @@ export default async function(lab){
    await waitFor(()=>native.phase==='playing'&&native.session?.body.session!==captured,{describe:()=>JSON.stringify(native.snapshot())});
    results.push({mode,offers,recovered:true,actualVLC:true});await native.close('closed');
   }
-  console.log(JSON.stringify({runDirectory:lab.runDirectory,results,injectedLostReplyCount:1,injectedAckInterruption:true,UIKit:'modeled',TVcause:'not established'}));
+   console.log(JSON.stringify({runDirectory:lab.runDirectory,results,sameSourceWithoutExtraPlay:true,UIKit:'modeled',TVcause:'not established'}));
  }finally{native.receive=receive;native.checkpoint=checkpoint;await native.dispose();await lab.page.goto('about:blank');await media.close()}
 }

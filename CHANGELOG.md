@@ -24,9 +24,8 @@ Published packages are available for [2.21.9](https://github.com/just-better-cod
 - Avoid duplicate backgrounds and clipped system-button shapes in the startup guide, Favorites, History, Torrents, settings and playback controls while retaining older-tvOS styling ([Quick start](docs/USER_GUIDE.md#quick-start), [Interface style](docs/agent/TVOS_STYLE_GUIDE.md)).
 - Capture an already-loaded PlayerJS video after enabling VLC without reloading its page ([Playback controls](docs/USER_GUIDE.md)).
 - Keep recognized episode titles and catalogued Teleportal addresses synchronized during VLC playback without reloading the website or adding history entries ([Playback controls](docs/USER_GUIDE.md), [Unified playback](docs/agent/plans/unified-playback.md)).
-- Let visible website video keep playing when experimental VLC capture is temporarily inactive ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
-- Resume the same foreground web video on the site if VLC cannot confirm the handoff after pausing it, without immediately retrying the transfer ([Playback controls](docs/USER_GUIDE.md)).
-- Retry unanswered automatic VLC offers after returning from Home so a new Play of the same video can capture again ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
+- Retry automatic VLC capture while the same eligible website video is playing after a temporary refusal or unanswered offer, without requiring another Play ([Playback controls](docs/USER_GUIDE.md)).
+- Restore the same website video once visible if an interrupted VLC handoff paused it but never opened the player, while keeping an ordinary Back return paused ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
 - Start web playback at the website position once, avoiding a second seek based on VLC's initially unset time ([Experiment](docs/agent/plans/automatic-web-video-vlc.md)).
 - Keep failed VLC starts visible for Back/retry instead of treating zero decoded output as episode completion ([Playback controls](docs/USER_GUIDE.md)).
 - Pause the bound website source before opening VLC, return mid-video closes to its position paused, and allow a new Play to capture that same source again ([Playback controls](docs/USER_GUIDE.md)).

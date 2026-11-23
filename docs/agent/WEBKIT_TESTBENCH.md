@@ -185,11 +185,11 @@ button actions should fire `video.play().catch(...)` without awaiting that promi
 its completion can be delayed until EOF on this backend. Still require real clock
 advance and decoded main-video identity; never substitute synthetic media events.
 
-`scenarios/home.mjs` exercises foreground cycles before capture, an interruption
-after the accepted source acknowledgement and one deliberately lost native reply.
-It also injects stale inactive capture permission into a visible iframe and checks
-that website playback advances without an offer until permission is restored.
-Recovery requires actual decoder output for the same source.
+`scenarios/home.mjs` exercises foreground cycles, stale inactive permission,
+temporary modal refusal, a lost offer reply, an interruption after the exact
+source has paused, and a dropped pause acknowledgement. It requires same-source
+decoder output without repeat Play for the injected failures. A modeled Home
+interruption must not resume the website until foreground capture permission returns.
 `scenarios/denied-start.mjs` denies the media request after acceptance and checks
 that a zero-output VLC Ended is treated as a failed start, preserving a paused
 website for Back/retry rather than forcing its completion. These injected faults

@@ -60,15 +60,18 @@ export class NativeMediaHost {
   await this.context.exposeBinding('__webkitLabTrace',({frame},documentToken,event)=>this.record('bridge-trace',{frameHost:new URL(frame.url()).hostname,documentToken,...event}));
  }
  async configure(page=this.page){if(!page||page.isClosed())return;await page.evaluate(({enabled,active,suspended})=>{window.__browserTVSetFullscreenMediaSuspended?.(suspended);window.__browserTVSetIframeVLCExperiment?.(enabled,active)},{enabled:this.enabled,active:this.active&&page===this.page&&!this.presented,suspended:this.presented||!this.active||page!==this.page})}
- async setPage(page){const previous=this.page;this.serial++;await this.cancel(false);this.page=page;if(previous&&previous!==page)await this.configure(previous);await this.configure();this.event('active-page')}
- async setActive(active){this.active=!!active;if(!active){if(!this.presented||this.options.invalidateAcceptedOnResign)this.serial++;await this.cancel(false)}await this.configure();this.event('application-active')}
+  async setPage(page){const previous=this.page;this.serial++;this.page=page;if(previous&&previous!==page)await this.configure(previous);await this.cancel(false);await this.configure();this.event('active-page')}
+  async setActive(active){this.active=!!active;if(!active&&(!this.presented||this.options.invalidateAcceptedOnResign))this.serial++;await this.configure();if(!active)await this.cancel(false);this.event('application-active')}
  async evaluate(session,expression,args=[]){
   if(session.frame.isDetached()||session.frame.page().isClosed())throw Error('detached-document');
   return session.frame.evaluate(({expression,args,token})=>{if(window.__webkitLabDocumentToken!==token)throw Error('changed-document');return (0,eval)(expression)(...args)},{expression,args,token:session.documentToken});
  }
  async isActive(session){return !this.disposed&&this.active&&session.frame.page()===this.page&&session.serial===this.serial&&!this.presented&&!this.overview&&this.enabled}
   async response(session,action,time=0,volume=0,muted=false,exitFullscreen=false){
-  if(!this.active||session.frame.page()!==this.page||session.serial!==this.serial)action='cancelled';
+  if(!this.active||session.frame.page()!==this.page||session.serial!==this.serial){
+   if(action==='accepted')return false;
+   if(['closed','ended','next','previous','trackDone','trackEnd'].includes(action))action='released';
+  }
   this.event('response',{action});
    return this.evaluate(session,'window.__browserTVVLCResponse',[session.body.session,action,time,volume,muted,exitFullscreen]);
  }
@@ -84,9 +87,8 @@ export class NativeMediaHost {
   if(body?.vlcConfigRequest){await this.configure(frame.page());return}
   if(!body?.vlcRequest)return;
   const session={body,frame,documentToken:await frame.evaluate(()=>window.__webkitLabDocumentToken),serial:0};
-  if(frame.page()!==this.page||this.presented||!this.active||this.overview){session.serial=this.serial;await this.response(session,'cancelled');this.event('offer-rejected-modal-or-background');return}
+  if(frame.page()!==this.page||this.presented||!this.active||this.overview||this.session){await this.response(session,'cancelled');this.event('offer-rejected-unavailable');return}
   session.serial=++this.serial;
-  await this.cancel(false);
   this.session=session;this.phase='checking';this.event('offer');
   try{
    if(!await this.evaluate(session,'window.__browserTVVLCRequestIsCurrent',[body.session]))throw Error('stale-offer');
@@ -116,7 +118,7 @@ export class NativeMediaHost {
    else if(this.session===session){
     const action=await this.isActive(session)?(this.phase==='accepting'?'aborted':'rejected'):'cancelled';
     await this.cancel(false,action);
-   }else{await session.decoder?.stop();await this.response(session,'rejected').catch(()=>{})}
+    }else{await session.decoder?.stop();await this.response(session,'cancelled').catch(()=>{})}
   }
  }
  async cancel(resume=true,action=resume?'rejected':'cancelled'){

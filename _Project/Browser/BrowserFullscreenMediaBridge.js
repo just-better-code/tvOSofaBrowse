@@ -14,16 +14,15 @@ var mediaVolumeReady = false;
 var mediaVolumeVideos = new WeakMap();
 var mediaVLCRequests = Object.create(null);
 var mediaVLCSerial = 0;
-var mediaVLCAttempted = false;
 // Configuration comes from native at document start and follows the real frame tree.
 var mediaVLCIframeCapture = false;
 var mediaVLCCaptureActive = false;
 var mediaVLCFrameVisible = false;
-var mediaVLCAutoAttempts = new WeakMap();
 var mediaVLCWatched = new Map();
 var mediaVLCWatchTimer = null;
 var mediaVLCResourceObserver = null;
-var mediaVLCUnsupportedVideos = new WeakSet();
+var mediaVLCNextOfferAt = 0;
+var mediaVLCWebsiteEnds = new WeakMap();
 var mediaVLCPlayerJSInstances = [];
 var mediaVLCPlayerJSFactories = new WeakSet();
 var mediaAcceptedEpisode = null;
@@ -88,6 +87,7 @@ window.__browserTVSetIframeVLCExperiment = function(enabled, active, visible) {
         discardUnacceptedVLCRequests();
     }
     observeVLCResources();
+    resumeAbortedVLCVideos();
     if (mediaVLCIframeCapture) scanAutomaticVLCVideos();
 };
 window.addEventListener('message', function(event) {
@@ -193,37 +193,35 @@ function visibleVLCCandidate(element) {
     return rect.width >= 40 && rect.height >= 30 && rect.right > 0 && rect.bottom > 0 &&
         rect.left < innerWidth && rect.top < innerHeight && style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) !== 0;
 }
-function requestVLCVideo(video, automatic, explicit) {
+function hasPendingVLCOffer() {
+    return Object.keys(mediaVLCRequests).some(function(id) {
+        var request = mediaVLCRequests[id];
+        return !!request.video && !request.trackCommand && !request.resumeWhenVisible;
+    });
+}
+function saveVLCOffer(id, request) {
+    mediaVLCRequests[id] = request;
+    // Only an unanswered offer expires. Once pause is submitted, native must
+    // explicitly return or abort this source; never expire VLC ownership.
+    setTimeout(function() {
+        if (mediaVLCRequests[id] === request && !request.handoff && !request.resumeWhenVisible)
+            delete mediaVLCRequests[id];
+    }, 6000);
+}
+function requestVLCVideo(video, automatic) {
     if ((window !== window.top && !mediaVLCIframeCapture) || !video) return false;
-    if (automatic && (!mediaVLCIframeCapture || !mediaVLCCaptureActive || !mediaVLCFrameVisible ||
-        document.visibilityState === 'hidden' || !visibleVLCCandidate(video))) return false;
+    if (hasPendingVLCOffer() || (automatic &&
+        (!canWatchVLCVideo(video) || performance.now() < mediaVLCNextOfferAt))) return false;
     var source = vlcVideoSource(video);
-    if (!source || video.mediaKeys) {
-        if (/^blob:/.test(video.currentSrc || video.src || '') && !starlightVideoEngine(video) && !playerJSVideoBinding(video))
-            mediaVLCUnsupportedVideos.add(video);
-        return false;
-    }
-    if (automatic && !explicit && mediaVLCUnsupportedVideos.has(video)) return false;
-    if (explicit) mediaVLCUnsupportedVideos.delete(video);
+    if (!source) return false;
     var playerBinding = playerJSVideoBinding(video), playlistID;
     if (playerBinding) { try { playlistID = playerBinding.player.api('playlist_id'); } catch (error) { return false; } }
     var engine = starlightVideoEngine(video);
-    var ids = Object.keys(mediaVLCRequests);
-    for (var i = 0; i < ids.length; i++) {
-        var pending = mediaVLCRequests[ids[i]];
-        if (pending.video !== video || pending.trackCommand) continue;
-        if (pending.url === source && pending.engineSource === (engine && engine.source) && pending.playlistID === playlistID) return true;
-        delete mediaVLCRequests[ids[i]];
-    }
-    var previous = mediaVLCAutoAttempts.get(video);
-    if (automatic && !explicit && previous && previous.url === source &&
-        previous.engineSource === (engine && engine.source) && previous.playlistID === playlistID) return false;
-    mediaVLCAutoAttempts.set(video, {url:source, engineSource:engine && engine.source, playlistID:playlistID});
-    mediaVLCAttempted = true;
+    if (automatic) mediaVLCNextOfferAt = performance.now() + 1000;
     var id = secret + ':' + Date.now() + ':vlc:' + (++mediaVLCSerial);
-    mediaVLCRequests[id] = {video:video, url:source, automatic:!!automatic, explicit:!!explicit,
+    saveVLCOffer(id, {video:video, url:source, automatic:!!automatic,
         engineSource:engine && engine.source, player:playerBinding && playerBinding.player,
-        hls:playerBinding && playerBinding.hls, playlistID:playlistID};
+        hls:playerBinding && playerBinding.hls, playlistID:playlistID});
     publishVLCRequest(id, {url:source, title:document.title.slice(0,512), automatic:!!automatic,
         currentTime:Number.isFinite(video.currentTime) ? video.currentTime : 0,
         volume:video.volume, muted:video.muted, documentURL:location.href,
@@ -240,11 +238,8 @@ function stopVLCWatch(video) {
 function discardUnacceptedVLCRequests() {
     Object.keys(mediaVLCRequests).forEach(function(id) {
         var request = mediaVLCRequests[id];
-        // Keep ownership while native VLC is presented or its pause ACK is in
-        // flight. An unanswered offer must not block a new Play after Home.
-        if (!request.automatic || request.accepted ||
-            (request.handoff && (request.handoff.pending || request.handoff.accepted))) return;
-        if (request.video) mediaVLCAutoAttempts.delete(request.video);
+        // Keep the final transfer, not an offer that hasn't paused anything.
+        if (!request.automatic || request.handoff || request.resumeWhenVisible) return;
         delete mediaVLCRequests[id];
     });
 }
@@ -254,23 +249,12 @@ function ownsVLCVideo(video) {
         return request.video === video && request.accepted && vlcRequestSourceIsCurrent(request);
     });
 }
-function holdVLCOriginal(video) {
-    if (!video || !mediaVLCIframeCapture) return false;
-    // Capture permission can lag after Home or a modal transition. It must not
-    // pause playback on a visible page unless VLC actually owns this source.
-    if (ownsVLCVideo(video) || (!mediaVLCCaptureActive && document.visibilityState === 'hidden')) {
-        if (!video.paused) video.pause();
-        stopVLCWatch(video);
-        return true;
-    }
+function completingVLCWebsiteEnd(video) {
+    var ending = mediaVLCWebsiteEnds.get(video);
+    if (!ending) return false;
+    if (performance.now() < ending.until && vlcRequestSourceIsCurrent(ending.request)) return true;
+    mediaVLCWebsiteEnds.delete(video);
     return false;
-}
-function attemptedVLCVideo(video, source) {
-    var previous = mediaVLCAutoAttempts.get(video);
-    if (!previous || previous.url !== source) return false;
-    var engine = starlightVideoEngine(video), binding = playerJSVideoBinding(video), playlistID;
-    try { if (binding) playlistID = binding.player.api('playlist_id'); } catch (error) { return true; }
-    return previous.engineSource === (engine && engine.source) && previous.playlistID === playlistID;
 }
 function canWatchVLCVideo(video) {
     return mediaVLCIframeCapture && mediaVLCCaptureActive && mediaVLCFrameVisible &&
@@ -278,22 +262,31 @@ function canWatchVLCVideo(video) {
         !video.error && !video.mediaKeys && visibleVLCCandidate(video);
 }
 function automaticVLCVideo(video) {
-    if (holdVLCOriginal(video) || !canWatchVLCVideo(video)) { stopVLCWatch(video); return; }
+    // Only the final handoff may hold website playback, even if capture was
+    // disabled or the app went inactive while VLC was already using this source.
+    if (ownsVLCVideo(video)) {
+        if (!video.paused) video.pause();
+        stopVLCWatch(video);
+        return;
+    }
+    if (!canWatchVLCVideo(video) || hasPendingVLCOffer() ||
+        performance.now() < mediaVLCNextOfferAt || completingVLCWebsiteEnd(video)) { stopVLCWatch(video); return; }
     var source = vlcVideoSource(video);
-    if (!source || attemptedVLCVideo(video, source)) { stopVLCWatch(video); return; }
+    if (!source) { stopVLCWatch(video); return; }
     if (!mediaVLCWatched.has(video))
         mediaVLCWatched.set(video, {url:source, time:video.currentTime, wall:performance.now(), played:0});
     if (mediaVLCWatchTimer) return;
     mediaVLCWatchTimer = setInterval(function() {
         mediaVLCWatched.forEach(function(sample, current) {
-            if (holdVLCOriginal(current) || !canWatchVLCVideo(current)) { stopVLCWatch(current); return; }
+            if (!canWatchVLCVideo(current) || hasPendingVLCOffer() ||
+                completingVLCWebsiteEnd(current)) { stopVLCWatch(current); return; }
             var url = vlcVideoSource(current), now = performance.now();
-            if (!url || attemptedVLCVideo(current, url)) { stopVLCWatch(current); return; }
+            if (!url) { stopVLCWatch(current); return; }
             var wall = (now - sample.wall) / 1000, advance = current.currentTime - sample.time;
             if (url !== sample.url || wall > 1.5 || advance < 0 || advance > wall + 0.5) sample.played = 0;
             else if (current.readyState >= 2) sample.played += Math.min(advance, wall);
             sample.url = url; sample.wall = now; sample.time = current.currentTime;
-            if (sample.played >= 0.1 && requestVLCVideo(current, true, false)) stopVLCWatch(current);
+            if (sample.played >= 0.1 && requestVLCVideo(current, true)) stopVLCWatch(current);
         });
         if (!mediaVLCWatched.size) stopVLCWatch();
     }, 50);
@@ -321,28 +314,15 @@ function observeVLCResources() {
         mediaVLCResourceObserver.observe({entryTypes:['resource']});
     } catch (error) { mediaVLCResourceObserver = null; }
 }
-function deferVLCFullscreen(element) {
-    if (!mediaVLCIframeCapture || !mediaVLCCaptureActive || !mediaVLCFrameVisible || !element) return false;
-    var videos = element.tagName === 'VIDEO' ? [element] : Array.prototype.slice.call(element.querySelectorAll('video'));
-    var video = videos.find(function(v) { return !v.paused && !v.ended; }) || videos[0];
-    if (!video || !vlcVideoSource(video)) return false;
-    mediaVLCAutoAttempts.delete(video);
-    if (video.paused) { var play = video.play(); if (play && play.catch) play.catch(function() {}); }
-    automaticVLCVideo(video);
-    return true;
-}
 function requestVLCFullscreen(element) {
     if (mediaVLCIframeCapture) {
         var candidate = element.tagName === 'VIDEO' ? element : element.querySelector('video');
         if (candidate) automaticVLCVideo(candidate);
         return;
     }
-    if (mediaVLCAttempted) return;
     var videos = element.tagName === 'VIDEO' ? [element] : Array.prototype.slice.call(element.querySelectorAll('video'));
     var video = videos.find(function(v) { return !v.paused && !v.ended; }) || videos[0];
-    if (!video) return;
-    if (!requestVLCVideo(video, false, true) && !starlightVideoEngine(video) && !playerJSVideoBinding(video) &&
-        (video.mediaKeys || video.currentSrc || video.src || video.querySelector('source[src]'))) mediaVLCAttempted = true;
+    requestVLCVideo(video, false);
 }
 document.addEventListener('play', function(event) {
     if (event.target && event.target.tagName === 'VIDEO') automaticVLCVideo(event.target);
@@ -350,15 +330,25 @@ document.addEventListener('play', function(event) {
 document.addEventListener('playing', function(event) {
     if (event.target && event.target.tagName === 'VIDEO') automaticVLCVideo(event.target);
 }, true);
+// Real progress re-arms a refused/expired offer or a source that became
+// eligible after Play. No source is remembered as tried or unsupported.
+document.addEventListener('timeupdate', function(event) {
+    var video = event.target;
+    if (video && video.tagName === 'VIDEO' && !mediaVLCWatched.has(video)) automaticVLCVideo(video);
+}, true);
 document.addEventListener('pause', function(event) {
     var video = event.target;
     if (!video || video.tagName !== 'VIDEO') return;
     stopVLCWatch(video);
-    if (video.paused && !ownsVLCVideo(video)) mediaVLCAutoAttempts.delete(video);
 }, true);
-document.addEventListener('ended', function(event) { if (event.target && event.target.tagName === 'VIDEO') stopVLCWatch(event.target); }, true);
+document.addEventListener('ended', function(event) {
+    if (!event.target || event.target.tagName !== 'VIDEO') return;
+    mediaVLCWebsiteEnds.delete(event.target);
+    stopVLCWatch(event.target);
+}, true);
 document.addEventListener('visibilitychange', function() {
-    if (document.visibilityState === 'hidden') stopVLCWatch(); else scanAutomaticVLCVideos();
+    if (document.visibilityState === 'hidden') stopVLCWatch();
+    else { resumeAbortedVLCVideos(); scanAutomaticVLCVideos(); }
 });
 window.__browserTVVLCRequestTime = function(id) {
     var request = mediaVLCRequests[id];
@@ -380,8 +370,7 @@ window.__browserTVVLCRequestIsCurrent = function(id) {
         request.frame.contentWindow === request.source && (request.automatic
             ? mediaVLCCaptureActive && mediaVLCFrameVisible && visibleVLCCandidate(request.frame) : mediaFrame() === request.frame);
     return vlcRequestSourceIsCurrent(request) && (request.automatic
-        ? mediaVLCCaptureActive && mediaVLCFrameVisible && visibleVLCCandidate(request.video) &&
-          (request.accepted || request.explicit || !request.video.paused)
+        ? canWatchVLCVideo(request.video)
         : !!(fullscreenTarget || fullscreenFrame));
 };
 
@@ -477,16 +466,18 @@ function restoreVLCVideo(request, time, volume, muted) {
 function playVLCWebsiteEnd(request) {
     var video = request.video;
     if (!Number.isFinite(video.duration) || video.duration <= 0) return;
-    var attempt = {url:request.url, engineSource:request.engineSource, playlistID:request.playlistID};
-    mediaVLCAutoAttempts.set(video, attempt);
-    function allowRetry() {
-        if (mediaVLCAutoAttempts.get(video) === attempt) mediaVLCAutoAttempts.delete(video);
+    // The return transaction gets a short window to deliver a genuine EOF.
+    // A new source on the same element is not part of that transaction.
+    var ending = {request:request, until:performance.now() + 5000};
+    mediaVLCWebsiteEnds.set(video, ending);
+    function clearEnding() {
+        if (mediaVLCWebsiteEnds.get(video) === ending) mediaVLCWebsiteEnds.delete(video);
     }
     try {
         video.currentTime = Math.max(0, video.duration - 0.1);
         var play = video.play();
-        if (play && play.catch) play.catch(allowRetry);
-    } catch (error) { allowRetry(); }
+        if (play && play.catch) play.catch(clearEnding);
+    } catch (error) { clearEnding(); }
 }
 function setVLCTrackCommand(id, request, action) {
     if (request.trackCommand) return false;
@@ -501,7 +492,8 @@ window.__browserTVVLCResponse = function(id, action, time, volume, muted, exitFu
     var track = action === 'next' || action === 'previous';
     var trackRelease = action === 'trackDone' || action === 'trackEnd';
     if (!request || (!track && !trackRelease &&
-        ['accepted','closed','ended','rejected','cancelled','deferred','aborted'].indexOf(action) < 0)) return false;
+        ['accepted','closed','ended','rejected','cancelled','deferred','aborted','released'].indexOf(action) < 0)) return false;
+    if (action === 'accepted' && request.accepted) return true;
     if (action === 'accepted' && !window.__browserTVVLCRequestIsCurrent(id)) return false;
     if (track && !setVLCTrackCommand(id, request, action)) return false;
     if (trackRelease && !request.trackCommand) return false;
@@ -519,11 +511,7 @@ window.__browserTVVLCResponse = function(id, action, time, volume, muted, exitFu
             document.visibilityState !== 'hidden' && vlcRequestSourceIsCurrent(request);
         request.accepted = false;
         request.handoff = {track:'stale'};
-        if (!valid) {
-            if (video.paused && !ownsVLCVideo(video)) mediaVLCAutoAttempts.delete(video);
-            return true;
-        }
-        mediaVLCAutoAttempts.delete(video);
+        if (!valid) return true;
         request.renderer = 'vlc';
         var route = episodeTrackRoute(request, action);
         if (route && route.run) {
@@ -551,32 +539,23 @@ window.__browserTVVLCResponse = function(id, action, time, volume, muted, exitFu
         }
         return true;
     }
-    if (action === 'deferred') mediaVLCAutoAttempts.delete(video);
     if (action === 'accepted') {
-        request.accepted = true;
-        request.resumeOnAbort = request.automatic && !video.paused;
         stopVLCWatch(video);
         video.pause();
+        if (!video.paused) return false;
+        request.accepted = true;
         request.handoff = {accepted:true, time:window.__browserTVVLCRequestTime(id), episode:episodeMetadata(video)};
         if (window === window.top) acceptEpisodeMetadata(id, request.handoff.episode);
         if (window === window.top && !request.automatic) window.__browserTVExitFullscreen();
         return true;
     }
-    if (action === 'aborted') {
-        delete mediaVLCRequests[id];
-        if (request.resumeOnAbort && video.paused && canResumeAbortedVLCRequest(request)) {
-            // Keep this attempt suppressed while the site plays. A later manual
-            // pause/Play may retry VLC without bouncing straight into another handoff.
-            var attempt = {url:request.url, engineSource:request.engineSource, playlistID:request.playlistID};
-            mediaVLCAutoAttempts.set(video, attempt);
-            var allowRetry = function() {
-                if (mediaVLCAutoAttempts.get(video) === attempt) mediaVLCAutoAttempts.delete(video);
-            };
-            try {
-                var playback = video.play();
-                if (playback && playback.catch) playback.catch(allowRetry);
-            } catch (error) { allowRetry(); }
-        } else if (video.paused && !ownsVLCVideo(video)) mediaVLCAutoAttempts.delete(video);
+    var rollback = action === 'aborted' || action === 'cancelled' || action === 'rejected';
+    if (rollback && request.automatic && (request.accepted || request.resumeWhenVisible)) {
+        // Only this transaction paused the video. Never resume another source,
+        // or resume this one behind Home or in a parked tab.
+        request.accepted = false;
+        request.resumeWhenVisible = true;
+        resumeAbortedVLCVideos();
         return true;
     }
     if ((action === 'closed' || action === 'ended') && request.accepted && vlcRequestSourceIsCurrent(request)) {
@@ -585,22 +564,33 @@ window.__browserTVVLCResponse = function(id, action, time, volume, muted, exitFu
         var finish = experimental && Number.isFinite(duration) && duration > 0 &&
             (action === 'ended' || (Number.isFinite(time) && duration - time <= 2));
         restoreVLCVideo(request, finish ? duration - 0.1 : time, volume, muted);
-        if (!finish) mediaVLCAutoAttempts.delete(video);
         // Remove ownership before Play; its real ended event owns episode advance.
         delete mediaVLCRequests[id];
         if (experimental && ((!finish && action === 'closed') || exitFullscreen === true)) exitVLCWebsiteFullscreen(video);
         if (finish && mediaVLCCaptureActive) playVLCWebsiteEnd(request);
     }
-    if ((action === 'cancelled' || action === 'rejected') && video && !request.trackCommand && (request.accepted || video.paused))
-        mediaVLCAutoAttempts.delete(video);
     delete mediaVLCRequests[id];
     return true;
 };
-function canResumeAbortedVLCRequest(request) {
-    var video = request.video;
-    return mediaVLCIframeCapture && mediaVLCCaptureActive && mediaVLCFrameVisible &&
-        document.visibilityState !== 'hidden' && !video.ended && !video.error &&
-        visibleVLCCandidate(video) && vlcRequestSourceIsCurrent(request) && !ownsVLCVideo(video);
+function resumeAbortedVLCVideos() {
+    Object.keys(mediaVLCRequests).forEach(function(id) {
+        var request = mediaVLCRequests[id];
+        if (!request.resumeWhenVisible) return;
+        var video = request.video;
+        if (!video.paused || video.ended || video.error || !vlcRequestSourceIsCurrent(request) || ownsVLCVideo(video)) {
+            delete mediaVLCRequests[id];
+            return;
+        }
+        if (!mediaVLCCaptureActive || !mediaVLCFrameVisible || document.visibilityState === 'hidden' ||
+            !visibleVLCCandidate(video)) return;
+        delete mediaVLCRequests[id];
+        // Rate-limit a persistent pause/abort cycle; do not blacklist this video.
+        mediaVLCNextOfferAt = performance.now() + 2000;
+        try {
+            var play = video.play();
+            if (play && play.catch) play.catch(function() {});
+        } catch (error) {}
+    });
 }
 // Native always talks to the main document. Replies follow the selected frame
 // chain and acceptance is acknowledged only after the original video is paused.
@@ -631,7 +621,8 @@ window.addEventListener('message', function(event) {
             event.source.postMessage({browserTVVLCResponse:secret, id:data.id, action:'deferred'}, '*');
             return;
         }
-        mediaVLCRequests[data.id] = {frame:frame, source:event.source, automatic:automatic};
+        if (mediaVLCRequests[data.id]) return;
+        saveVLCOffer(data.id, {frame:frame, source:event.source, automatic:automatic});
         publishVLCRequest(data.id, Object.assign({}, info, {iframeRelay:true}));
     } else if (data.browserTVVLCResponse === secret && window !== window.top && event.source === window.parent) {
         var track = data.action === 'next' || data.action === 'previous';
