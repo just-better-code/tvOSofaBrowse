@@ -277,11 +277,13 @@
 
     UIButton *continueButton = [UIButton buttonWithType:UIButtonTypeSystem];
     continueButton.translatesAutoresizingMaskIntoConstraints = NO;
-    continueButton.backgroundColor = UIColor.whiteColor;
-    continueButton.layer.cornerRadius = 18.0;
+    BrowserTVConfigureSystemButtonSurface(continueButton, UIColor.whiteColor, 18.0);
     continueButton.titleLabel.font = [UIFont systemFontOfSize:29.0 weight:UIFontWeightSemibold];
     [continueButton setTitle:@"Start Browsing" forState:UIControlStateNormal];
-    [continueButton setTitleColor:[UIColor colorWithRed:0.07 green:0.10 blue:0.16 alpha:1.0] forState:UIControlStateNormal];
+    UIColor *continueText = BrowserTVUsesNativeButtonSurface() ? UIColor.whiteColor :
+        [UIColor colorWithRed:0.07 green:0.10 blue:0.16 alpha:1.0];
+    [continueButton setTitleColor:continueText forState:UIControlStateNormal];
+    [continueButton setTitleColor:BrowserTVFocusedTextColor() forState:UIControlStateFocused];
     [continueButton addTarget:self action:@selector(dismissGuide) forControlEvents:UIControlEventPrimaryActionTriggered];
     [content addSubview:continueButton];
     self.continueButton = continueButton;
