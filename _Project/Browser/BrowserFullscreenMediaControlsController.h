@@ -1,8 +1,9 @@
 #import <UIKit/UIKit.h>
+#import "BrowserPlaybackSession.h"
 
 NS_ASSUME_NONNULL_BEGIN
 @interface BrowserFullscreenMediaControlsController : UIViewController
-@property (nonatomic, copy) void (^sendCommand)(NSString *command, double value);
+@property (nonatomic) BrowserPlaybackSession *playbackSession;
 @property (nonatomic, readonly) BOOL controlsVisible;
 @property (nonatomic) BOOL cursorVisible;
 - (void)updateMediaState:(NSDictionary *)state;

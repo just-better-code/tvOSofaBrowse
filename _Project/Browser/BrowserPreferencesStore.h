@@ -8,6 +8,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (NSString *)mobileUserAgent;
 + (BOOL)websiteLoggingEnabled;
 + (BOOL)debugEnabled;
++ (BOOL)iframeVLCExperimentAvailable;
++ (BOOL)iframeVLCExperimentEnabled;
 
 @property (nonatomic, copy) NSString *userAgent;
 @property (nonatomic) BOOL mobileModeEnabled;
@@ -20,6 +22,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setPlayerVolume:(double)volume forURL:(nullable NSURL *)URL;
 // nil clears the per-site preferences for every host.
 - (void)clearSitePreferencesForURL:(nullable NSURL *)URL;
+// Experimental web completion exits website fullscreen by default, per page host.
+- (BOOL)automaticallyExitIframeFullscreenForURL:(nullable NSURL *)URL;
+- (void)setAutomaticallyExitIframeFullscreen:(BOOL)enabled forURL:(nullable NSURL *)URL;
 @property (nonatomic) BOOL adBlockEnabled;
 @property (nonatomic) BOOL cursorMagnifierEnabled;
 @property (nonatomic) BOOL dontShowHintsOnLaunch;
