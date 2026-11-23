@@ -2213,8 +2213,9 @@ completed, so ordinary UIKit focus reevaluation could select it again. Limit
 that preference to the reveal, preserve a still-available focused button on
 reevaluation, and avoid transient enablement changes during transport refresh
 or global focus requests when track-button visibility changes. Do not change
-remote actions or the auto-hide timer. Keep this in 2.22.1; native verification
-of the correction remains pending.
+remote actions or the auto-hide timer. The user confirms the focus fix in
+the Build 40.1 check. This is user-observed acceptance, not a test of every
+button or renderer, and does not verify Teleportal auto-advance.
 
 ### Opt in Teleportal to automatic Next at natural VLC EOF
 
