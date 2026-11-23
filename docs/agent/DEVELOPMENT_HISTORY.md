@@ -2204,3 +2204,14 @@ would block WebKit's normal background management. Use that view rather than
 just recoloring its wrapper. The rendering milestone is runtime-checked on
 tvOS. This is the first 2.22.1 change; visual behavior has not been observed on
 tvOS.
+
+### Preserve playback focus after button activation
+
+The user reports that activating a playback control jumps focus back to
+Play/Pause. The panel kept advertising Play/Pause after its reveal request
+completed, so ordinary UIKit focus reevaluation could select it again. Limit
+that preference to the reveal, preserve a still-available focused button on
+reevaluation, and avoid transient enablement changes during transport refresh
+or global focus requests when track-button visibility changes. Do not change
+remote actions or the auto-hide timer. Keep this in 2.22.1; native verification
+of the correction remains pending.

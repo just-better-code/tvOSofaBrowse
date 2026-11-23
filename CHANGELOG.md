@@ -6,6 +6,7 @@ Published packages are available for [2.21.9](https://github.com/just-better-cod
 
 ### Fixed
 
+- Keep focus on the activated playback control while the panel stays open; start on Play/Pause only when the panel appears ([Playback controls](docs/USER_GUIDE.md)).
 - Use a dark canvas while the first website opens, letting the site's own background appear as soon as it is drawn without a loading overlay ([Interface style](docs/agent/TVOS_STYLE_GUIDE.md)).
 
 ## 2.22.0 - 2026-11-15

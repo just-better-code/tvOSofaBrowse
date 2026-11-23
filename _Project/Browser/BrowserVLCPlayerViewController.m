@@ -443,11 +443,8 @@
         if (trackIndex == selectedIndex) selection = trackIndex < 0 ? @"Off" : names[i];
     }
     BOOL relevant = button == self.audioTrackButton ? realTrackCount > 1 : realTrackCount > 0;
-    button.enabled = relevant;
-    if (button.hidden != !relevant) {
-        button.hidden = !relevant;
-        [self setNeedsFocusUpdate];
-    }
+    if (button.enabled != relevant) button.enabled = relevant;
+    if (button.hidden == relevant) button.hidden = !relevant;
     button.accessibilityLabel = prefix;
     button.accessibilityValue = relevant ? selection : @"Unavailable";
     if (@available(tvOS 17.0, *)) {

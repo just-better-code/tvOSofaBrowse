@@ -33,6 +33,7 @@ static void BrowserPlaybackFill(UIView *view, UIView *container) {
 @property (nonatomic) NSArray<UIButton *> *accessories;
 @property (nonatomic) BOOL detailedHeader;
 @property (nonatomic) BOOL needsRevealFocus;
+@property (nonatomic) BOOL revealFocusScheduled;
 @end
 
 @implementation BrowserPlaybackPanel
@@ -206,23 +207,37 @@ static void BrowserPlaybackFill(UIView *view, UIView *container) {
     [self requestRevealFocusIfReady];
 }
 - (NSArray<id<UIFocusEnvironment>> *)preferredFocusEnvironments {
+    if (self.controls.hidden) return @[];
     UIButton *playPause = self.buttons[4];
-    return !self.controls.hidden && playPause.enabled ? @[playPause] : @[];
+    if (self.needsRevealFocus && playPause.enabled) return @[playPause];
+    // UIKit can reevaluate preferred focus after a control action or layout
+    // change. Keep the current control during that reevaluation.
+    for (UIButton *button in [self.buttons arrayByAddingObjectsFromArray:self.accessories]) {
+        if (button.focused && button.enabled && !button.hidden) return @[button];
+    }
+    return @[];
 }
 - (void)didMoveToWindow {
     [super didMoveToWindow];
     [self requestRevealFocusIfReady];
 }
 - (void)requestRevealFocusIfReady {
-    UIViewController *controller = self.focusController;
-    if (!self.needsRevealFocus || !self.window || !self.buttons[4].enabled ||
-        !controller || controller.presentedViewController) return;
-    // Ask the owner to reevaluate its preferred focus on the next UIKit cycle.
-    // The request is only for a reveal, not for transport updates or navigation.
-    UIFocusSystem *focusSystem = [UIFocusSystem focusSystemForEnvironment:controller];
-    if (!focusSystem) return;
-    self.needsRevealFocus = NO;
-    [focusSystem requestFocusUpdateToEnvironment:controller];
+    if (!self.needsRevealFocus || self.revealFocusScheduled || !self.window || !self.buttons[4].enabled) return;
+    self.revealFocusScheduled = YES;
+    __weak typeof(self) weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        BrowserPlaybackPanel *panel = weakSelf;
+        panel.revealFocusScheduled = NO;
+        UIViewController *controller = panel.focusController;
+        if (!panel.needsRevealFocus || !panel.window || !panel.buttons[4].enabled ||
+            !controller || controller.presentedViewController) return;
+        UIFocusSystem *focusSystem = [UIFocusSystem focusSystemForEnvironment:controller];
+        // With no focused item, UIKit's initial focus search uses the preference.
+        if (!focusSystem.focusedItem) return;
+        [focusSystem requestFocusUpdateToEnvironment:controller];
+        [focusSystem updateFocusIfNeeded];
+        panel.needsRevealFocus = NO;
+    });
 }
 - (void)updateState:(NSDictionary *)state {
     NSString *title = [state[@"pageTitle"] isKindOfClass:NSString.class] ? state[@"pageTitle"] : @"";
@@ -238,15 +253,19 @@ static void BrowserPlaybackFill(UIView *view, UIView *container) {
     }
     NSArray *keys = @[@"active",@"canRestart",@"canSeekBack",@"canSeekBack",@"available",@"canSeekForward",
         @"canSeekForward",@"active",@"canEnd",@"canMute",@"canVolume",@"canVolume"];
-    for (NSUInteger i=0; i<self.buttons.count; i++) self.buttons[i].enabled = [state[keys[i]] boolValue];
-    for (NSNumber *index in @[@2,@6]) self.buttons[index.unsignedIntegerValue].enabled =
-        self.buttons[index.unsignedIntegerValue].enabled && isfinite(duration) && duration > 0;
-    self.buttons[0].enabled = current <= 5 ? [state[state[@"canRequestPrevious"] ? @"canRequestPrevious" : @"active"] boolValue] :
-        [state[@"canRestart"] boolValue];
+    for (NSUInteger i = 0; i < self.buttons.count; i++) {
+        NSString *key = keys[i];
+        if (i == 0) key = current > 5 ? @"canRestart" : (state[@"canRequestPrevious"] ? @"canRequestPrevious" : @"active");
+        if (i == 7 && state[@"canRequestNext"]) key = @"canRequestNext";
+        BOOL enabled = [state[key] boolValue];
+        if (i == 2 || i == 6) enabled = enabled && isfinite(duration) && duration > 0;
+        UIButton *button = self.buttons[i];
+        if (button.enabled != enabled) button.enabled = enabled;
+        CGFloat alpha = enabled ? 1 : 0.35;
+        if (button.alpha != alpha) button.alpha = alpha;
+    }
     self.buttons[0].accessibilityLabel = current <= 5 ? (state[@"previousLabel"] ?: @"Previous media") : @"Go to beginning";
     self.buttons[7].accessibilityLabel = state[@"nextLabel"] ?: @"Go to end and next media";
-    if (state[@"canRequestNext"]) self.buttons[7].enabled = [state[@"canRequestNext"] boolValue];
-    for (UIButton *button in self.buttons) button.alpha = button.enabled ? 1 : 0.35;
     self.buttons[4].accessibilityLabel = [state[@"paused"] boolValue] ? @"Play" : @"Pause";
     BOOL muted = [state[@"muted"] boolValue];
     ((UIImageView *)[self.buttons[9] viewWithTag:BrowserPlaybackPanelIconTag]).image =
@@ -260,6 +279,9 @@ static void BrowserPlaybackFill(UIView *view, UIView *container) {
 }
 - (void)updateFocusInContext:(UIFocusUpdateContext *)context coordinator:(UIFocusAnimationCoordinator *)coordinator {
     NSArray *all = [self.buttons arrayByAddingObjectsFromArray:self.accessories];
+    UIView *next = context.nextFocusedView;
+    if (next == self.buttons[4] || (context.focusHeading != UIFocusHeadingNone && next && [all containsObject:next]))
+        self.needsRevealFocus = NO;
     for (UIView *view in @[context.previouslyFocusedView ?: [UIView new],context.nextFocusedView ?: [UIView new]]) {
         if (![all containsObject:view]) continue;
         BOOL focused = view == context.nextFocusedView;
