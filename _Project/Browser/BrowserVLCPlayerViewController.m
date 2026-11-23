@@ -33,7 +33,6 @@
 @property (nonatomic) BrowserPlaybackPanel *playbackPanel;
 @property (nonatomic) UILabel *titleLabel;
 @property (nonatomic) UIView *controlsView;
-@property (nonatomic) UIButton *playButton;
 @property (nonatomic) UIButton *audioTrackButton;
 @property (nonatomic) UIButton *subtitleTrackButton;
 @property (nonatomic) UIButton *keepFullscreenButton;
@@ -97,7 +96,10 @@
         BrowserVLCPlayerViewController *player = weakPlayer;
         if (!player.isViewLoaded) return;
         [player.playbackPanel setControlsVisible:visible];
-        [player setNeedsFocusUpdate]; [player updateFocusIfNeeded];
+        if (!visible) {
+            [player setNeedsFocusUpdate];
+            [player updateFocusIfNeeded];
+        }
     };
     self.view.backgroundColor = UIColor.blackColor;
     UIView *videoView = [UIView new];
@@ -119,6 +121,7 @@
     BrowserPlaybackPanel *panel = [[BrowserPlaybackPanel alloc] initWithPlayerIcon:BrowserPlaybackControlImage(@"browser.vlc")
         accessoryButtons:@[audioTrack, subtitleTrack, keepFullscreen]];
     panel.translatesAutoresizingMaskIntoConstraints = NO;
+    panel.focusController = self;
     self.playbackPanel = panel; [self.view addSubview:panel];
     [NSLayoutConstraint activateConstraints:@[
         [panel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
@@ -131,12 +134,11 @@
     self.titleLabel.text = self.mediaTitle ?: @"";
     self.statusLabel.text = self.webVideoURL ? @"Preparing video…" : @"Preparing torrent playback…";
     NSArray<UIButton *> *buttons = panel.buttons;
-    UIButton *backPercent = buttons[2], *back = buttons[3], *play = buttons[4], *forward = buttons[5], *forwardPercent = buttons[6];
+    UIButton *backPercent = buttons[2], *back = buttons[3], *forward = buttons[5], *forwardPercent = buttons[6];
     backPercent.tag = -2;
     back.tag = -1;
     forward.tag = 1;
     forwardPercent.tag = 2;
-    self.playButton = play;
     self.keepFullscreenButton = keepFullscreen;
     UILabel *keepFullscreenBadge = [UILabel new];
     keepFullscreenBadge.tag = BrowserPlaybackPanelToggleBadgeTag;
@@ -185,6 +187,7 @@
                                                  name:UIApplicationWillResignActiveNotification
                                                object:nil];
 
+    [panel setControlsVisible:self.playbackSession.controlsVisible];
     [self prepareCurrentMedia];
 }
 
@@ -409,7 +412,7 @@
 - (BOOL)canBecomeFirstResponder { return YES; }
 
 - (NSArray<id<UIFocusEnvironment>> *)preferredFocusEnvironments {
-    return self.controlsView.hidden ? @[] : @[self.playButton];
+    return self.playbackPanel.preferredFocusEnvironments ?: @[];
 }
 
 - (UIButton *)controlButtonWithSymbol:(NSString *)symbol label:(NSString *)label action:(SEL)action {
@@ -623,7 +626,6 @@
 }
 
 - (void)showControls {
-    [self.playbackPanel setControlsVisible:YES];
     self.playbackSession.controlsPinned = self.presentedViewController != nil || self.seekHoldKind != 0;
     [self.playbackSession showControls];
 }
@@ -892,8 +894,6 @@
     }
     if (type == UIPressTypeSelect && self.controlsView.hidden) {
         [self showControls];
-        [self setNeedsFocusUpdate];
-        [self updateFocusIfNeeded];
         return;
     }
     if (type == UIPressTypeSelect) {

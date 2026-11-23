@@ -91,13 +91,13 @@
 }
 - (BOOL)controlsVisible { return self.isViewLoaded && !self.panel.hidden; }
 - (NSArray<id<UIFocusEnvironment>> *)preferredFocusEnvironments {
-    return self.controlsVisible ? @[self.buttons[4].enabled ? self.buttons[4] : self.buttons[0]] : @[];
+    return self.playbackPanel.preferredFocusEnvironments ?: @[];
 }
 - (void)updateMediaState:(NSDictionary *)state {
     [self loadViewIfNeeded];
     self.mediaState = state;
-    [self.playbackSession updateState:state];
     [self.playbackPanel updateState:state];
+    [self.playbackSession updateState:state];
     double duration = [state[@"duration"] doubleValue];
     if (self.seekTimer && ![state[self.seekStep < 0 ? @"canSeekBack" : @"canSeekForward"] boolValue]) [self stopSeeking];
     if (self.seekTimer && ((labs(self.seekStep) == 2 && duration <= 0) ||
@@ -109,12 +109,13 @@
     [self refreshVisibility];
 }
 - (void)refreshVisibility {
-    if (!self.isViewLoaded) return;
+    if (!self.isViewLoaded || !self.mediaState) return;
     self.playbackSession.controlsPinned = self.cursorVisible || self.seekStep != 0;
     BOOL visible = self.playbackSession.controlsVisible;
-    BOOL changed = self.panel.hidden == visible;
+    BOOL hiding = !visible && !self.panel.hidden;
+    self.playbackPanel.focusController = self.parentViewController;
     [self.playbackPanel setControlsVisible:visible];
-    if (changed) {
+    if (hiding) {
         [self.parentViewController setNeedsFocusUpdate];
         [self.parentViewController updateFocusIfNeeded];
     }

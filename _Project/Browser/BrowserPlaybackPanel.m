@@ -32,6 +32,7 @@ static void BrowserPlaybackFill(UIView *view, UIView *container) {
 @property (nonatomic, readwrite) NSArray<UIButton *> *buttons;
 @property (nonatomic) NSArray<UIButton *> *accessories;
 @property (nonatomic) BOOL detailedHeader;
+@property (nonatomic) BOOL needsRevealFocus;
 @end
 
 @implementation BrowserPlaybackPanel
@@ -43,6 +44,7 @@ static void BrowserPlaybackFill(UIView *view, UIView *container) {
     self.accessories = accessories;
     self.header = [UIView new]; self.header.translatesAutoresizingMaskIntoConstraints = NO;
     self.controls = [UIView new]; self.controls.translatesAutoresizingMaskIntoConstraints = NO;
+    self.header.hidden = YES; self.controls.hidden = YES;
     [self addSubview:self.header]; [self addSubview:self.controls];
     for (UIView *container in @[self.header, self.controls]) {
         UIVisualEffectView *glass = BrowserPlaybackGlass();
@@ -170,8 +172,30 @@ static void BrowserPlaybackFill(UIView *view, UIView *container) {
     return button;
 }
 - (void)setControlsVisible:(BOOL)visible {
+    if (!visible) self.needsRevealFocus = NO;
+    else if (self.controls.hidden) self.needsRevealFocus = YES;
     self.controls.hidden = !visible;
     self.header.hidden = !visible || (!self.detailedHeader && !self.titleLabel.text.length);
+    [self requestRevealFocusIfReady];
+}
+- (NSArray<id<UIFocusEnvironment>> *)preferredFocusEnvironments {
+    UIButton *playPause = self.buttons[4];
+    return !self.controls.hidden && playPause.enabled ? @[playPause] : @[];
+}
+- (void)didMoveToWindow {
+    [super didMoveToWindow];
+    [self requestRevealFocusIfReady];
+}
+- (void)requestRevealFocusIfReady {
+    UIViewController *controller = self.focusController;
+    if (!self.needsRevealFocus || !self.window || !self.buttons[4].enabled ||
+        !controller || controller.presentedViewController) return;
+    // Ask the owner to reevaluate its preferred focus on the next UIKit cycle.
+    // The request is only for a reveal, not for transport updates or navigation.
+    UIFocusSystem *focusSystem = [UIFocusSystem focusSystemForEnvironment:controller];
+    if (!focusSystem) return;
+    self.needsRevealFocus = NO;
+    [focusSystem requestFocusUpdateToEnvironment:controller];
 }
 - (void)updateState:(NSDictionary *)state {
     NSString *title = [state[@"pageTitle"] isKindOfClass:NSString.class] ? state[@"pageTitle"] : @"";
@@ -201,6 +225,7 @@ static void BrowserPlaybackFill(UIView *view, UIView *container) {
     ((UIImageView *)[self.buttons[9] viewWithTag:BrowserPlaybackPanelIconTag]).image =
         BrowserPlaybackControlImage(muted ? @"speaker.slash.fill" : @"speaker.wave.2.fill");
     self.buttons[9].accessibilityLabel = muted ? @"Unmute" : @"Mute";
+    [self requestRevealFocusIfReady];
 }
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
     UIView *hit = [super hitTest:point withEvent:event];

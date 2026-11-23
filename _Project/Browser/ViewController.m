@@ -244,7 +244,8 @@ static UIColor *kTextColor(void) {
     if ([self fullscreenMediaInputActive]) {
         if (self.fullscreenMediaControls.controlsVisible) return;
         if (self.remoteInputController.cursorView.hidden) {
-            [self.fullscreenMediaControls showControls]; [self setNeedsFocusUpdate]; [self updateFocusIfNeeded]; return;
+            [self.fullscreenMediaControls showControls];
+            return;
         }
     }
     [self.remoteInputController handleGlobalSelectPressEndedNotification];
@@ -934,7 +935,6 @@ static UIColor *kTextColor(void) {
         self.remoteInputController.cursorSuppressed = YES;
         controls.cursorVisible = NO;
         [controls updateMediaState:state]; [controls showControls];
-        [self setNeedsFocusUpdate]; [self updateFocusIfNeeded];
     } else [self.fullscreenMediaControls updateMediaState:state];
 }
 
@@ -1387,7 +1387,7 @@ static UIColor *kTextColor(void) {
             (press.type == UIPressTypeSelect || press.type == UIPressTypeUpArrow || press.type == UIPressTypeDownArrow ||
              press.type == UIPressTypeLeftArrow || press.type == UIPressTypeRightArrow)) {
             self.mediaRevealPress = YES; [self.fullscreenMediaControls showControls];
-            [self setNeedsFocusUpdate]; [self updateFocusIfNeeded]; return;
+            return;
         }
         if (self.fullscreenMediaControls.controlsVisible) { [super pressesBegan:presses withEvent:event]; return; }
     }

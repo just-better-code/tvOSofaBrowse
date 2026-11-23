@@ -13,6 +13,7 @@ enum { BrowserPlaybackPanelIconTag = 9797, BrowserPlaybackPanelToggleBadgeTag = 
 @property (nonatomic, readonly) UILabel *timeLabel;
 @property (nonatomic, readonly) UIProgressView *progress;
 @property (nonatomic, readonly) NSArray<UIButton *> *buttons;
+@property (nonatomic, weak, nullable) UIViewController *focusController;
 + (UIButton *)buttonWithSymbol:(NSString *)symbol label:(NSString *)label target:(nullable id)target action:(SEL _Nullable)action;
 - (void)setControlsVisible:(BOOL)visible;
 - (void)updateState:(NSDictionary *)state;
