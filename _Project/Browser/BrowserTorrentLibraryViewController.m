@@ -93,8 +93,7 @@ completionHandler:(void (^)(NSURLRequest *))completionHandler {
 - (UIButton *)button:(NSString *)title action:(SEL)action {
     UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
     button.translatesAutoresizingMaskIntoConstraints = NO;
-    button.backgroundColor = BrowserTVRestingSurfaceColor();
-    button.layer.cornerRadius = 18;
+    BrowserTVConfigureSystemButtonSurface(button, BrowserTVRestingSurfaceColor(), 18);
     button.titleLabel.font = [UIFont systemFontOfSize:25 weight:UIFontWeightSemibold];
     [button setTitle:title forState:UIControlStateNormal];
     [button setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
@@ -414,8 +413,7 @@ completionHandler:(void (^)(NSURLRequest *))completionHandler {
                                      action:(SEL)action row:(NSInteger)row {
     UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
     button.translatesAutoresizingMaskIntoConstraints = NO;
-    button.backgroundColor = [UIColor colorWithWhite:0.18 alpha:0.85];
-    button.layer.cornerRadius = 18;
+    BrowserTVConfigureSystemButtonSurface(button, [UIColor colorWithWhite:0.18 alpha:0.85], 18);
     button.accessibilityLabel = label;
     button.tag = row;
     UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:32 weight:UIImageSymbolWeightSemibold];
@@ -759,9 +757,10 @@ completionHandler:(void (^)(NSURLRequest *))completionHandler {
             if (focused) focusedCell = cell;
         } else if ([view isKindOfClass:UIButton.class]) {
             UIButton *button = (UIButton *)view;
-            button.backgroundColor = focused ? BrowserTVFocusedSurfaceColor()
+            UIColor *surface = focused ? BrowserTVFocusedSurfaceColor()
                 : ([button isDescendantOfView:self.actionsPanel] || [button isDescendantOfView:self.fileActionsPanel])
                     ? [UIColor colorWithWhite:0.18 alpha:0.85] : BrowserTVRestingSurfaceColor();
+            button.backgroundColor = BrowserTVSystemButtonSurfaceColor(surface);
             [button setTitleColor:focused ? BrowserTVFocusedTextColor() : UIColor.whiteColor forState:UIControlStateNormal];
             UIImageView *icon = (UIImageView *)[button viewWithTag:kTorrentRowActionIconTag];
             icon.tintColor = focused ? BrowserTVFocusedTextColor() : UIColor.whiteColor;
