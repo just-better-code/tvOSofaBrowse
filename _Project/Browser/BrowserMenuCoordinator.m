@@ -1018,16 +1018,14 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
     UIButton *done = [UIButton buttonWithType:UIButtonTypeSystem];
     done.translatesAutoresizingMaskIntoConstraints = NO;
     done.contentEdgeInsets = UIEdgeInsetsMake(0, 12, 0, 12);
-    done.backgroundColor = BrowserTVRestingSurfaceColor();
-    done.layer.cornerRadius = 14;
+    BrowserTVConfigureSystemButtonSurface(done, BrowserTVRestingSurfaceColor(), 14);
     [done setTitle:@"Done" forState:UIControlStateNormal];
     [done setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     [done setTitleColor:BrowserTVFocusedTextColor() forState:UIControlStateFocused];
     [done addTarget:self action:@selector(close) forControlEvents:UIControlEventPrimaryActionTriggered];
     UIButton *rebuild = [UIButton buttonWithType:UIButtonTypeSystem];
     rebuild.translatesAutoresizingMaskIntoConstraints = NO;
-    rebuild.backgroundColor = BrowserTVRestingSurfaceColor();
-    rebuild.layer.cornerRadius = 14;
+    BrowserTVConfigureSystemButtonSurface(rebuild, BrowserTVRestingSurfaceColor(), 14);
     [rebuild setTitle:@"Rebuild Filters" forState:UIControlStateNormal];
     [rebuild setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     [rebuild setTitleColor:BrowserTVFocusedTextColor() forState:UIControlStateFocused];
@@ -1198,8 +1196,7 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
 
     UIButton *updateButton = [UIButton buttonWithType:UIButtonTypeSystem];
     updateButton.translatesAutoresizingMaskIntoConstraints = NO;
-    updateButton.backgroundColor = BrowserTVRestingSurfaceColor();
-    updateButton.layer.cornerRadius = 14.0;
+    BrowserTVConfigureSystemButtonSurface(updateButton, BrowserTVRestingSurfaceColor(), 14.0);
     updateButton.titleLabel.font = [UIFont systemFontOfSize:21.0 weight:UIFontWeightMedium];
     [updateButton setTitle:self.secondaryActionTitle forState:UIControlStateNormal];
     [updateButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
@@ -1208,8 +1205,7 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
 
     UIButton *doneButton = [UIButton buttonWithType:UIButtonTypeSystem];
     doneButton.translatesAutoresizingMaskIntoConstraints = NO;
-    doneButton.backgroundColor = BrowserTVRestingSurfaceColor();
-    doneButton.layer.cornerRadius = 14.0;
+    BrowserTVConfigureSystemButtonSurface(doneButton, BrowserTVRestingSurfaceColor(), 14.0);
     doneButton.titleLabel.font = [UIFont systemFontOfSize:24.0 weight:UIFontWeightMedium];
     [doneButton setTitle:@"Done" forState:UIControlStateNormal];
     [doneButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
@@ -1654,7 +1650,7 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
     NSString *message = hasSite
         ? [NSString stringWithFormat:@"Choose this site (%@) or all sites.%@", pageURL.host,
            [kind isEqualToString:@"History"] ? @" Favorites stay saved." :
-           [kind isEqualToString:@"Cache"] ? @" Also reset saved volume, zoom and tab previews." : @""]
+            [kind isEqualToString:@"Cache"] ? @" Also reset saved volume, zoom, fullscreen preferences and tab previews." : @""]
         : @"Open a website to use This Site.";
     UIAlertController *alert = [self browserAlertControllerWithTitle:title message:message];
     __weak typeof(self) weakSelf = self;
@@ -2057,6 +2053,18 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
     [self.host browserPresentViewController:settings];
 }
 
+- (BrowserAdvancedMenuItem *)iframeVLCToggleMenuItem {
+    BrowserAdvancedMenuItem *item = [self advancedMenuItemWithTitle:@"Web Video in VLC"
+        style:UIAlertActionStyleDefault handler:^{
+            [NSUserDefaults.standardUserDefaults setBool:!BrowserPreferencesStore.iframeVLCExperimentEnabled
+                forKey:@"BrowserIframeVLCExperiment"];
+            BrowserWebView *webView = self.host.browserWebView;
+            [webView setFullscreenMediaControlsSuspended:webView.fullscreenMediaSuspended];
+        }];
+    item.toggleStateProvider = ^BOOL { return BrowserPreferencesStore.iframeVLCExperimentEnabled; };
+    return item;
+}
+
 - (void)presentDebugReport:(NSUInteger)index {
     switch (index) {
     case 0: {
@@ -2186,7 +2194,9 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
         [BrowserAdvancedMenuSection sectionWithTitle:@"Settings"
                                                items:@[
             [self tileItem:[self adBlockToggleMenuItem] title:@"Ad Block" symbol:@"hand.raised.fill"],
-            [self tileItem:[self cursorMagnifierToggleMenuItem] title:@"Magnifier" symbol:@"magnifyingglass"],
+            (BrowserPreferencesStore.iframeVLCExperimentAvailable
+                ? [self tileItem:[self iframeVLCToggleMenuItem] title:@"VLC" symbol:@"play.rectangle.fill"]
+                : [self tileItem:[self cursorMagnifierToggleMenuItem] title:@"Magnifier" symbol:@"magnifyingglass"]),
             [self tileItem:[self torrentKeepAliveToggleMenuItem] title:@"Keep Alive" symbol:@"waveform"],
             [self tileItem:[self userAgentModeMenuItem] title:@"Mobile Site" symbol:@"iphone"],
         ]],
@@ -2204,12 +2214,20 @@ typedef NSString * (^BrowserAdvancedMenuTitleProvider)(void);
 - (NSString *)advancedMenuFooterText {
     NSDictionary *infoDictionary = NSBundle.mainBundle.infoDictionary;
     NSString *version = infoDictionary[@"CFBundleShortVersionString"];
-    BOOL hasVersion = [self stringHasVisibleContent:version];
-
-    if (hasVersion) {
-        return [NSString stringWithFormat:@"Version %@", version];
-    }
-    return @"";
+    if (![self stringHasVisibleContent:version]) return @"";
+    BOOL beta = [infoDictionary[@"CFBundleDisplayName"] isEqual:@"tvOSofaBrowse Test"];
+    NSMutableArray<NSString *> *parts = [NSMutableArray arrayWithObject:
+        [NSString stringWithFormat:@"%@ %@", beta ? @"Beta" : @"Version", version]];
+    NSString *build = infoDictionary[@"CFBundleVersion"];
+    if ([self stringHasVisibleContent:build])
+        [parts addObject:[NSString stringWithFormat:@"Build %@", build]];
+    NSURL *revisionURL = [NSBundle.mainBundle URLForResource:@"BuildRevision" withExtension:@"txt"];
+    NSString *revision = revisionURL ? [[NSString stringWithContentsOfURL:revisionURL encoding:NSUTF8StringEncoding error:nil]
+        stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] : nil;
+    NSCharacterSet *nonHex = [[NSCharacterSet characterSetWithCharactersInString:@"0123456789abcdefABCDEF"] invertedSet];
+    if (revision.length == 40 && [revision rangeOfCharacterFromSet:nonHex].location == NSNotFound)
+        [parts addObject:[revision substringToIndex:7]];
+    return [parts componentsJoinedByString:@" · "];
 }
 
 @end
