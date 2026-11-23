@@ -2215,3 +2215,16 @@ reevaluation, and avoid transient enablement changes during transport refresh
 or global focus requests when track-button visibility changes. Do not change
 remote actions or the auto-hide timer. Keep this in 2.22.1; native verification
 of the correction remains pending.
+
+### Opt in Teleportal to automatic Next at natural VLC EOF
+
+The user explicitly requests Teleportal auto-advance after the earlier
+website-only completion stopped on episode 92. Reuse the existing bound
+Starlight SkipNext control once after natural VLC completion, scoped to the
+top-level Teleportal site. Retain the old website EOF path if the control is
+unavailable; do not also send it after a submission. Keep manual Next, Back
+and other sites separate. Actual Teleportal 92 → 93 passed with decoded Linux
+VLC output, the same top document and both Keep fullscreen settings. See the
+[experiment evidence](plans/automatic-web-video-vlc.md#teleportal-automatic-next-episode-on-vlc-completion).
+This is a site-specific addition to the consolidated 2.22.1 change set.
+No native focus, dismissal, or Apple TV interaction was verified.

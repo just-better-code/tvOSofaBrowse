@@ -1184,3 +1184,26 @@ or another Play (`17-54-19.973Z-92402016`). A modeled foreground loss after
 the pause also recovers without Play (`17-54-19.906Z-9950f141`). Both report
 actual Linux libVLC displayed frames. No device interaction was performed.
 Native UIKit refusal and WebKit window ordering remain unverified.
+
+## Teleportal automatic next episode on VLC completion
+
+The user now requests an explicit Teleportal exception to the previously
+site-owned natural completion policy. On actual VLC EOF only, the top-level
+`teleportal.ua` document may invoke the accepted video's existing Starlight
+SkipNext adapter after dismissal. Do not deliver both the adapter command and
+a website EOF; keep the existing website-EOF path when no adapter is
+available. Back (including near the end), failed starts, manual Next and
+non-Teleportal websites keep their existing behavior.
+
+Acceptance: the real Teleportal episode advances exactly once after genuine
+Linux libVLC EOF, the new source displays decoded frames, and the top document
+updates its catalogued episode URL without reloading. Cover both Keep fullscreen
+preferences and the existing generic completion path; native TV is separate.
+
+Passed on the public Teleportal page with production scripts, adblock and actual
+Linux libVLC: Keep fullscreen ON `18-52-17.833Z-8f0cbe3d`, OFF
+`18-52-20.446Z-cb72f8df`. Each observed one decoder EOF, one site Next click,
+no second completion of the original HTML video, and decoded episode 93 with
+the same document, video node and history length. Generic actual EOF/Back
+(`18-51-36.157Z-4f3147ee`) and failed-start HTTP403
+(`18-51-36.120Z-cb88dc04`) also passed. UIKit was modeled; no TV work was performed.

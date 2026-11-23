@@ -489,10 +489,14 @@ function setVLCTrackCommand(id, request, action) {
 }
 window.__browserTVVLCResponse = function(id, action, time, volume, muted, exitFullscreen) {
     var request = mediaVLCRequests[id];
+    // Only the top-level Teleportal site opts into automatic Starlight Next.
+    // Carry the decision down the existing accepted-source frame chain.
+    if (action === 'ended' && window === window.top && location.hostname === 'teleportal.ua')
+        action = 'teleportalEnded';
     var track = action === 'next' || action === 'previous';
     var trackRelease = action === 'trackDone' || action === 'trackEnd';
     if (!request || (!track && !trackRelease &&
-        ['accepted','closed','ended','rejected','cancelled','deferred','aborted','released'].indexOf(action) < 0)) return false;
+        ['accepted','closed','ended','teleportalEnded','rejected','cancelled','deferred','aborted','released'].indexOf(action) < 0)) return false;
     if (action === 'accepted' && request.accepted) return true;
     if (action === 'accepted' && !window.__browserTVVLCRequestIsCurrent(id)) return false;
     if (track && !setVLCTrackCommand(id, request, action)) return false;
@@ -558,11 +562,27 @@ window.__browserTVVLCResponse = function(id, action, time, volume, muted, exitFu
         resumeAbortedVLCVideos();
         return true;
     }
-    if ((action === 'closed' || action === 'ended') && request.accepted && vlcRequestSourceIsCurrent(request)) {
+    var completed = action === 'ended' || action === 'teleportalEnded';
+    if ((action === 'closed' || completed) && request.accepted && vlcRequestSourceIsCurrent(request)) {
         var duration = video.duration;
         var experimental = request.automatic || window !== window.top;
+        var autoNext = experimental && action === 'teleportalEnded' && mediaVLCIframeCapture &&
+            mediaVLCCaptureActive && mediaVLCFrameVisible && document.visibilityState !== 'hidden' &&
+            visibleVLCCandidate(video) && starlightNextTrackRoute(request, 'next');
         var finish = experimental && Number.isFinite(duration) && duration > 0 &&
-            (action === 'ended' || (Number.isFinite(time) && duration - time <= 2));
+            (completed || (Number.isFinite(time) && duration - time <= 2));
+        if (autoNext) {
+            // Use exactly one site command instead of also running HTML EOF.
+            // Release the old source first so the incoming episode can capture.
+            delete mediaVLCRequests[id];
+            try {
+                if (Number.isFinite(volume)) video.volume = Math.max(0, Math.min(1, volume));
+                video.muted = !!muted;
+            } catch (error) {}
+            if (exitFullscreen === true) exitVLCWebsiteFullscreen(video);
+            submitEpisodeRoute(autoNext);
+            return true;
+        }
         restoreVLCVideo(request, finish ? duration - 0.1 : time, volume, muted);
         // Remove ownership before Play; its real ended event owns episode advance.
         delete mediaVLCRequests[id];

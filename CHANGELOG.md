@@ -4,6 +4,10 @@ Published packages are available for [2.21.9](https://github.com/just-better-cod
 
 ## 2.22.1 - 2026-11-23
 
+### Added
+
+- Start the next Teleportal episode automatically when the current episode finishes in experimental VLC playback ([Playback controls](docs/USER_GUIDE.md)).
+
 ### Fixed
 
 - Keep focus on the activated playback control while the panel stays open; start on Play/Pause only when the panel appears ([Playback controls](docs/USER_GUIDE.md)).

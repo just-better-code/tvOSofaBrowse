@@ -207,6 +207,12 @@ be a preroll. Earlier UAKino adblock-OFF trials captured a second video without
 establishing main identity; those are not main-video success evidence. Prefer the
 actual episode's duration/title/source binding and an advancing clock.
 
+`scenarios/teleportal-auto-next.mjs` checks a genuine Linux libVLC EOF on the
+public Teleportal page, one Starlight Next submission, new decoded output, and
+the updated episode URL without a page reload. Run with `--app --headless
+--ephemeral`, the stand Firefox 128 UA, and `KEEP_FULLSCREEN=on` or `off`.
+UIKit and native dismissal remain modeled.
+
 Useful terminal commands:
 
 - `center X Y` uses the production website click path. It refuses to click a hidden
