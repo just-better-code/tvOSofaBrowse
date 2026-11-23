@@ -161,15 +161,42 @@ static void BrowserPlaybackFill(UIView *view, UIView *container) {
     image.tag = BrowserPlaybackPanelIconTag; image.translatesAutoresizingMaskIntoConstraints = NO;
     image.tintColor = UIColor.whiteColor; image.contentMode = UIViewContentModeScaleAspectFit; image.userInteractionEnabled = NO;
     [button addSubview:image];
-    BOOL toggle = [symbol isEqualToString:@"arrow.up.left.and.arrow.down.right"];
-    CGFloat size = toggle ? 30 : large ? 45.6 : 38;
+    CGFloat size = [symbol isEqualToString:@"arrow.up.left.and.arrow.down.right"] ? 30 : large ? 45.6 : 38;
     [NSLayoutConstraint activateConstraints:@[
         [image.widthAnchor constraintEqualToConstant:size], [image.heightAnchor constraintEqualToConstant:size],
         [image.centerXAnchor constraintEqualToAnchor:button.centerXAnchor],
-        [image.centerYAnchor constraintEqualToAnchor:button.centerYAnchor constant:toggle ? -10 : 0],
+        [image.centerYAnchor constraintEqualToAnchor:button.centerYAnchor],
     ]];
     if (target && action) [button addTarget:target action:action forControlEvents:UIControlEventPrimaryActionTriggered];
     return button;
+}
+- (void)setSelected:(BOOL)selected forAccessoryButton:(UIButton *)button {
+    if (button.selected == selected) return;
+    button.selected = selected;
+    if (@available(tvOS 26.0, *)) {
+        if (selected) {
+            UIButtonConfiguration *configuration = [UIButtonConfiguration prominentGlassButtonConfiguration];
+            configuration.baseBackgroundColor = BrowserTVFocusedSurfaceColor();
+            configuration.cornerStyle = UIButtonConfigurationCornerStyleCapsule;
+            button.configuration = configuration;
+        } else {
+            button.configuration = nil;
+        }
+    }
+    [self updateButtonAppearance:button focused:button.focused];
+}
+- (void)updateButtonAppearance:(UIButton *)button focused:(BOOL)focused {
+    BOOL selected = button.selected;
+    BOOL native = BrowserTVUsesNativeButtonSurface();
+    UIColor *legacyColor = focused ? BrowserTVFocusedSurfaceColor() : selected ? BrowserTVRestingSurfaceColor() : UIColor.clearColor;
+    button.backgroundColor = BrowserTVSystemButtonSurfaceColor(legacyColor);
+    if (!native) {
+        button.layer.borderWidth = selected ? 2 : 0;
+        UIColor *outline = focused ? BrowserTVFocusedTextColor() : [UIColor colorWithWhite:1 alpha:0.65];
+        button.layer.borderColor = outline.CGColor;
+    }
+    UIImageView *image = (UIImageView *)[button viewWithTag:BrowserPlaybackPanelIconTag];
+    image.tintColor = (focused || (native && selected)) ? BrowserTVFocusedTextColor() : UIColor.whiteColor;
 }
 - (void)setControlsVisible:(BOOL)visible {
     if (!visible) self.needsRevealFocus = NO;
@@ -237,11 +264,7 @@ static void BrowserPlaybackFill(UIView *view, UIView *container) {
         if (![all containsObject:view]) continue;
         BOOL focused = view == context.nextFocusedView;
         [coordinator addCoordinatedAnimations:^{
-            view.backgroundColor = BrowserTVSystemButtonSurfaceColor(focused ? BrowserTVFocusedSurfaceColor() : UIColor.clearColor);
-            UIImageView *image = (UIImageView *)[view viewWithTag:BrowserPlaybackPanelIconTag];
-            BOOL toggle = [view viewWithTag:BrowserPlaybackPanelToggleBadgeTag] != nil;
-            image.tintColor = toggle ? BrowserTVToggleBadgeColor(((UIButton *)view).selected) :
-                (focused ? BrowserTVFocusedTextColor() : UIColor.whiteColor);
+            [self updateButtonAppearance:(UIButton *)view focused:focused];
         } completion:nil];
     }
 }

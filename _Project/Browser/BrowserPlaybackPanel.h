@@ -1,7 +1,7 @@
 #import <UIKit/UIKit.h>
 
 NS_ASSUME_NONNULL_BEGIN
-enum { BrowserPlaybackPanelIconTag = 9797, BrowserPlaybackPanelToggleBadgeTag = 9798 };
+enum { BrowserPlaybackPanelIconTag = 9797 };
 
 // Shared app-owned chrome; renderers keep their video surfaces and transport.
 @interface BrowserPlaybackPanel : UIView
@@ -16,6 +16,7 @@ enum { BrowserPlaybackPanelIconTag = 9797, BrowserPlaybackPanelToggleBadgeTag = 
 @property (nonatomic, weak, nullable) UIViewController *focusController;
 + (UIButton *)buttonWithSymbol:(NSString *)symbol label:(NSString *)label target:(nullable id)target action:(SEL _Nullable)action;
 - (void)setControlsVisible:(BOOL)visible;
+- (void)setSelected:(BOOL)selected forAccessoryButton:(UIButton *)button;
 - (void)updateState:(NSDictionary *)state;
 - (void)updateFocusInContext:(UIFocusUpdateContext *)context coordinator:(UIFocusAnimationCoordinator *)coordinator;
 @end

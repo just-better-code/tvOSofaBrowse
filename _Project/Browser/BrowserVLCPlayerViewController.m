@@ -36,7 +36,6 @@
 @property (nonatomic) UIButton *audioTrackButton;
 @property (nonatomic) UIButton *subtitleTrackButton;
 @property (nonatomic) UIButton *keepFullscreenButton;
-@property (nonatomic) UILabel *keepFullscreenBadge;
 @property (nonatomic, copy) NSString *audioMenuKey;
 @property (nonatomic, copy) NSString *subtitleMenuKey;
 @property (nonatomic) NSTimer *progressTimer;
@@ -140,18 +139,6 @@
     forward.tag = 1;
     forwardPercent.tag = 2;
     self.keepFullscreenButton = keepFullscreen;
-    UILabel *keepFullscreenBadge = [UILabel new];
-    keepFullscreenBadge.tag = BrowserPlaybackPanelToggleBadgeTag;
-    keepFullscreenBadge.translatesAutoresizingMaskIntoConstraints = NO;
-    keepFullscreenBadge.isAccessibilityElement = NO;
-    [keepFullscreen addSubview:keepFullscreenBadge];
-    [NSLayoutConstraint activateConstraints:@[
-        [keepFullscreenBadge.centerXAnchor constraintEqualToAnchor:keepFullscreen.centerXAnchor],
-        [keepFullscreenBadge.bottomAnchor constraintEqualToAnchor:keepFullscreen.bottomAnchor constant:-5],
-        [keepFullscreenBadge.widthAnchor constraintEqualToConstant:42],
-        [keepFullscreenBadge.heightAnchor constraintEqualToConstant:22],
-    ]];
-    self.keepFullscreenBadge = keepFullscreenBadge;
     keepFullscreen.hidden = !self.returnWebVideoOnEnd;
     [self refreshKeepFullscreenControl];
     self.audioTrackButton = audioTrack;
@@ -423,9 +410,8 @@
     // Preserve existing site preferences: keeping fullscreen is the inverse
     // presentation of the stored exit setting, not a change to playback.
     BOOL enabled = ![[BrowserPreferencesStore new] automaticallyExitIframeFullscreenForURL:self.webPageURL];
-    self.keepFullscreenButton.selected = enabled;
+    [self.playbackPanel setSelected:enabled forAccessoryButton:self.keepFullscreenButton];
     self.keepFullscreenButton.accessibilityValue = enabled ? @"ON" : @"OFF";
-    BrowserTVConfigureToggleBadge(self.keepFullscreenBadge, enabled);
 }
 
 - (void)toggleKeepFullscreen {

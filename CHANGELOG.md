@@ -9,7 +9,7 @@ Published packages are available for [2.21.9](https://github.com/just-better-cod
 - Share website episode adapters, the native playback panel, command mapping and control visibility between website fullscreen and VLC while retaining renderer-specific playback ([Playback controls](docs/USER_GUIDE.md), [Unified playback](docs/agent/plans/unified-playback.md)).
 - Switch experimental VLC web episodes through PlayerJS or Starlight's Next control, then system media controls, with real website completion as a Next-only fallback ([Playback controls](docs/USER_GUIDE.md)).
 - Move the experimental web VLC toggle directly into the main Settings tile formerly used by Magnifier, retaining the magnifier remote shortcut ([Main menu](docs/USER_GUIDE.md#main-menu)).
-- Replace VLC track labels with contextual Audio and Subtitles icons and add a per-site Keep fullscreen toggle for episode transitions ([Playback controls](docs/USER_GUIDE.md)).
+- Replace VLC track labels with contextual Audio and Subtitles icons and add a per-site Keep fullscreen button that stays pressed when enabled ([Playback controls](docs/USER_GUIDE.md)).
 - Show the containing page's title beside the original monochrome cone icon in the shared VLC player header, retaining file names for torrents ([Playback controls](docs/USER_GUIDE.md)).
 - Show the installed build number and available CI revision beside the application version so test updates can be identified in the menu ([Main menu](docs/USER_GUIDE.md#main-menu)).
 - Distinguish develop installations with a purple compass icon and a BETA badge ([Develop setup](docs/DEPLOYMENT.md#automatic-test-app-alongside-stable)).

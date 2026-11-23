@@ -2169,3 +2169,20 @@ Home after pause, without a new Play, plus the controlled [lifecycle and return
 cases](plans/automatic-web-video-vlc.md#simplify-automatic-capture-around-the-live-video).
 These are not device results. The separate in-progress Live Logs changes were
 not included.
+
+### User confirmation and Keep fullscreen appearance
+
+The user confirms that playback works and separately reports that the
+Play/Pause focus change works. The exact installed build, full site coverage
+and Teleportal episode restoration after a full browser restart were not
+confirmed in this check.
+
+At the user's request, show Keep fullscreen as an icon-only button that stays
+pressed when enabled and looks ordinary when disabled. Use a native prominent
+glass button surface on modern tvOS, with the existing panel palette on older
+tvOS. The per-site setting, focus navigation and episode/Back behavior are
+unchanged. This appearance change has not been observed on tvOS.
+
+The user closes the 2.22.0 change set with this adjustment. Leave both
+marketing settings at 2.22.0 for this stage and put subsequent changes in
+2.22.1. This version boundary does not establish that a release was published.
