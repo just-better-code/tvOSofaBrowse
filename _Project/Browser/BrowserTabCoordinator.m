@@ -235,7 +235,6 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
     webView.delegate = self.webViewDelegate;
     webView.layoutMargins = UIEdgeInsetsZero;
     webView.opaque = NO;
-    webView.backgroundColor = UIColor.blackColor;
 
     UIScrollView *scrollView = webView.scrollView;
     scrollView.layoutMargins = UIEdgeInsetsZero;
@@ -243,7 +242,6 @@ static NSTimeInterval const kWebContentProcessCrashQuietInterval = 60.0;
     scrollView.contentOffset = CGPointZero;
     scrollView.contentInset = UIEdgeInsetsZero;
     scrollView.clipsToBounds = NO;
-    scrollView.backgroundColor = UIColor.blackColor;
     scrollView.bounces = self.scrollViewAllowBounces;
     [scrollView.panGestureRecognizer addTarget:self action:@selector(handleWebViewPanGesture:)];
     scrollView.scrollEnabled = NO;
